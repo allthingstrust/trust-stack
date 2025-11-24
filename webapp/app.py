@@ -2290,8 +2290,6 @@ def main():
 
     # Sidebar navigation
     with st.sidebar:
-        st.markdown("### Navigation")
-
         if st.button("🏠 Home", width='stretch'):
             st.session_state['page'] = 'home'
             st.rerun()
