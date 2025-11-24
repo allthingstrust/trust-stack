@@ -217,6 +217,7 @@ def get_remedy_for_issue(issue_type: str, dimension: str, issue_items: List[Dict
 
     # Extract LLM suggestions from issue_items
     llm_suggestions = []
+    added_urls = set()  # Track URLs that were successfully added as LLM suggestions
     if issue_items:
         for item in issue_items:
             # Check if this item has a suggestion field (from LLM)
@@ -359,14 +360,18 @@ def get_remedy_for_issue(issue_type: str, dimension: str, issue_items: List[Dict
                         # Don't filter, but log for monitoring
             
             if quote_validated:
+                item_url = item.get('url', '')
                 llm_suggestions.append({
                     'suggestion': suggestion,
                     'title': item.get('title', ''),
-                    'url': item.get('url', ''),
+                    'url': item_url,
                     'evidence': item.get('evidence', ''),
                     'language': item.get('language', 'en'),
                     'confidence': confidence
                 })
+                # Track this URL as successfully added
+                if item_url:
+                    added_urls.add(item_url)
 
     # Build the response
     response_parts = []
@@ -432,13 +437,14 @@ def get_remedy_for_issue(issue_type: str, dimension: str, issue_items: List[Dict
             max_examples = len(issue_items) if is_structural else 3
             
             for idx, item in enumerate(issue_items, 1):
-                # Skip if we already tried to show this as an LLM suggestion
-                if item.get('suggestion'):
+                url = item.get('url', '').strip()
+                
+                # Skip if this URL was already successfully added as an LLM suggestion
+                if url and url in added_urls:
                     continue
                 
                 evidence = item.get('evidence', '').strip()
                 title = item.get('title', '').strip()
-                url = item.get('url', '').strip()
                 
                 # For structural issues, create a simple format: • url - description
                 # For other issues, use numbered format with evidence

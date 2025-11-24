@@ -432,7 +432,7 @@ def search_brave(query: str, size: int = 10) -> List[Dict[str, str]]:
             )
             if not a:
                 continue
-            title = a.get_text(strip=True)
+            title = a.get_text(separator=" ", strip=True)
             url = a.get("href")
 
             # Try alternate attributes that some search UIs use to store real target
@@ -451,7 +451,7 @@ def search_brave(query: str, size: int = 10) -> List[Dict[str, str]]:
 
             # Normalize relative URLs
             snippet_el = item.select_one("p.snippet") or item.select_one("div.result__snippet")
-            snippet = snippet_el.get_text(strip=True) if snippet_el else ""
+            snippet = snippet_el.get_text(separator=" ", strip=True) if snippet_el else ""
 
             # Resolve relative URLs against Brave search base
             if url and url.startswith("/"):
@@ -481,7 +481,7 @@ def search_brave(query: str, size: int = 10) -> List[Dict[str, str]]:
                 href = urljoin(BRAVE_SEARCH_URL, href)
             if not href.startswith("http"):
                 continue
-            title = a.get_text(strip=True) or href
+            title = a.get_text(separator=" ", strip=True) or href
             results.append({"title": title, "url": href, "snippet": ""})
 
     # If still no results, dump a short snippet of HTML into the logs to help debugging
@@ -636,11 +636,11 @@ def _format_product_grid(cards: list) -> str:
         try:
             # Extract product name (h2, h3, h4, strong, or class with "name"/"title")
             name = card.select_one('h1, h2, h3, h4, h5, strong, .product-name, .title, [class*="name"], [class*="title"]')
-            name_text = name.get_text(strip=True) if name else ""
+            name_text = name.get_text(separator=" ", strip=True) if name else ""
             
             # Extract price
             price = card.select_one('[class*="price"], .price, [class*="cost"]')
-            price_text = price.get_text(strip=True) if price else ""
+            price_text = price.get_text(separator=" ", strip=True) if price else ""
             
             # Build item text
             if name_text:
@@ -666,7 +666,7 @@ def _format_html_lists(soup: BeautifulSoup) -> str:
         for ul in soup.find_all(['ul', 'ol']):
             items = []
             for li in ul.find_all('li', recursive=False):
-                item_text = li.get_text(strip=True)
+                item_text = li.get_text(separator=" ", strip=True)
                 if item_text and len(item_text) > 5:  # Skip very short items
                     items.append(f"- {item_text}")
             
@@ -691,7 +691,7 @@ def _format_tables(soup: BeautifulSoup) -> str:
         for table in soup.find_all('table'):
             rows = []
             for tr in table.find_all('tr'):
-                cells = [td.get_text(strip=True) for td in tr.find_all(['td', 'th'])]
+                cells = [td.get_text(separator=" ", strip=True) for td in tr.find_all(['td', 'th'])]
                 cells = [c for c in cells if c]  # Remove empty cells
                 if cells:
                     rows.append(" | ".join(cells))
@@ -777,7 +777,7 @@ def _extract_body_text(soup: BeautifulSoup) -> str:
     # Strategy 4: Try all <p> tags combined
     paragraphs = soup.find_all("p")
     if paragraphs:
-        body = "\n\n".join(p.get_text(strip=True) for p in paragraphs if p.get_text(strip=True))
+        body = "\n\n".join(p.get_text(separator=" ", strip=True) for p in paragraphs if p.get_text(separator=" ", strip=True))
         if body and len(body) >= 100:
             return body
 
