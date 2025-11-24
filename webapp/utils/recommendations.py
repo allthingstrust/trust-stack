@@ -69,6 +69,14 @@ def extract_issues_from_items(items: List[Dict[str, Any]]) -> Dict[str, List[Dic
         'resonance': []
     }
 
+    # Define passing thresholds for specific attributes
+    # Default is 10.0 (perfect score required)
+    PASSING_THRESHOLDS = {
+        # Author attribution is considered "present" and acceptable at 6.0+
+        # (6.0 = footer attribution, 7.0 = meta tag, 8.0 = byline)
+        'author_brand_identity_verified': 6.0,
+    }
+
     for item in items:
         meta = item.get('meta')
         
@@ -97,9 +105,13 @@ def extract_issues_from_items(items: List[Dict[str, Any]]) -> Dict[str, List[Dic
             evidence = attr.get('evidence', '')
             label = attr.get('label', '')
             suggestion = attr.get('suggestion')  # Extract LLM suggestion
+            attr_id = attr.get('attribute_id', '')
 
-            # Report any non-perfect attributes (value < 10 indicates room for improvement)
-            if dimension in dimension_issues and value < 10:
+            # Determine passing threshold for this attribute
+            passing_threshold = PASSING_THRESHOLDS.get(attr_id, 10.0)
+
+            # Report if value is below the passing threshold
+            if dimension in dimension_issues and value < passing_threshold:
                 issue_dict = {
                     'title': title,
                     'url': url,
