@@ -403,7 +403,8 @@ def get_remedy_for_issue(issue_type: str, dimension: str, issue_items: List[Dict
             recommendation_items.append("\n".join(item_lines))
         
         # Join all recommendation items with blank lines between them
-        response_parts.append("\n\n".join(recommendation_items))
+        # Add a newline before the first item to separate from "Recommended Fix:"
+        response_parts.append("\n" + "\n\n".join(recommendation_items))
                 
         # Add contextual General Best Practice at the end
         # Generate context-specific best practice based on the suggestions
@@ -415,9 +416,22 @@ def get_remedy_for_issue(issue_type: str, dimension: str, issue_items: List[Dict
         # Add fallback: show specific issues with evidence (non-LLM suggestions)
         if issue_items and len(issue_items) > 0:
             example_items = []
-            max_examples = 3
             
-            for idx, item in enumerate(issue_items[:max_examples], 1):
+            # Define structural issues that should show all URLs (not just max 3)
+            structural_issues = [
+                'missing_privacy_policy',
+                'missing_data_source_citations',
+                'no_ai_disclosure',
+                'unclear_authorship',
+                'missing_metadata',
+                'no_schema_markup'
+            ]
+            
+            # Check if this is a structural issue
+            is_structural = any(pattern in issue_type.lower().replace(' ', '_') for pattern in structural_issues)
+            max_examples = len(issue_items) if is_structural else 3
+            
+            for idx, item in enumerate(issue_items, 1):
                 # Skip if we already tried to show this as an LLM suggestion
                 if item.get('suggestion'):
                     continue
@@ -426,37 +440,59 @@ def get_remedy_for_issue(issue_type: str, dimension: str, issue_items: List[Dict
                 title = item.get('title', '').strip()
                 url = item.get('url', '').strip()
                 
-                # Format similar to LLM suggestions: number. 🔗 url evidence
-                if url and evidence and 'LLM:' not in evidence:
+                # For structural issues, create a simple format: • url - description
+                # For other issues, use numbered format with evidence
+                if url:
                     lang_indicator = ""
                     if item.get('language', 'en') != 'en':
                         lang_code = item.get('language', '').upper()
                         lang_indicator = f" (🌐 Translated from {lang_code})"
                     
-                    # Build each example as a multi-line item
-                    item_lines = []
-                    item_lines.append(f"{idx}. 🔗 {url} {evidence}{lang_indicator}")
-                    
-                    if title:
-                        truncated_title = title[:60] + "..." if len(title) > 60 else title
-                        item_lines.append(f"    * From: {truncated_title}")
-                    
-                    # Join the lines for this item and add to list
-                    example_items.append("\n".join(item_lines))
+                    if is_structural:
+                        # Simple bullet format for structural issues
+                        # Create a concise description based on issue type
+                        if 'privacy' in issue_type.lower():
+                            description = "No privacy policy"
+                        elif 'data source' in issue_type.lower() or 'citation' in issue_type.lower():
+                            description = "No data source citations"
+                        elif 'ai disclosure' in issue_type.lower() or 'ai-generated' in issue_type.lower():
+                            description = "No AI disclosure"
+                        elif 'author' in issue_type.lower():
+                            description = "No author attribution"
+                        elif 'metadata' in issue_type.lower():
+                            description = "Missing metadata"
+                        elif 'schema' in issue_type.lower():
+                            description = "No schema markup"
+                        else:
+                            description = evidence if evidence and 'LLM:' not in evidence else "Issue detected"
+                        
+                        example_items.append(f"• {url}{lang_indicator}\n  - {description}")
+                    else:
+                        # Numbered format with evidence for non-structural issues
+                        if evidence and 'LLM:' not in evidence:
+                            item_lines = []
+                            item_lines.append(f"{idx}. 🔗 {url} {evidence}{lang_indicator}")
+                            
+                            if title:
+                                truncated_title = title[:60] + "..." if len(title) > 60 else title
+                                item_lines.append(f"    * From: {truncated_title}")
+                            
+                            example_items.append("\n".join(item_lines))
             
             if example_items:
-                # If we have examples but no LLM suggestions, list them with blank lines between
-                example_text = "\n\n".join(example_items)
-                
-                total_count = len([i for i in issue_items if not i.get('suggestion')])
-                if total_count > max_examples:
-                    example_text += f"\n\n*...and {total_count - max_examples} more instance{'s' if total_count - max_examples > 1 else ''}*"
+                # Add a newline before the first item to separate from "Recommended Fix:"
+                if is_structural:
+                    # For structural issues, join with single newlines
+                    example_text = "\n" + "\n".join(example_items)
+                else:
+                    # For other issues, join with blank lines between items
+                    example_text = "\n" + "\n\n".join(example_items)
                 
                 response_parts.append(example_text)
             else:
-                response_parts.append("Review content for this issue.")
+                response_parts.append("\nReview content for this issue.")
         else:
-             response_parts.append("Review content for this issue.")
+             response_parts.append("\nReview content for this issue.")
 
         # Add General Best Practice (Generic) at the end
         response_parts.append(f"\n💡 **General Best Practice:** {base_remedy}")

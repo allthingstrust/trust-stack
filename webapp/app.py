@@ -66,6 +66,15 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
+# Trust Stack Dimension Colors (based on AllThingsTrust visual model)
+DIMENSION_COLORS = {
+    'verification': '#D4A574',      # Golden/mustard yellow (outer ring, top)
+    'coherence': '#4A7C7E',          # Teal/dark cyan (middle ring)
+    'provenance': '#C5D5C0',         # Light sage green (center)
+    'resonance': '#D17B58',          # Burnt orange/terracotta (middle ring, bottom)
+    'transparency': '#E8E4DC'        # Light beige/cream (outer ring, bottom)
+}
+
 # Helper Functions
 def infer_brand_domains(brand_id: str) -> Dict[str, List[str]]:
     """
@@ -826,13 +835,6 @@ st.markdown("""
         color: white !important;
         background: transparent !important;
         font-family: monospace !important;
-    }
-
-    /* Style expanded remedy sections with white background at 80% opacity */
-    [data-testid="stExpander"] [data-testid="stExpanderDetails"] {
-        background: rgba(255, 255, 255, 0.8) !important;
-        padding: 1rem;
-        border-radius: 0.5rem;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -1825,26 +1827,38 @@ def show_results_page():
     col1, col2 = st.columns([2, 1])
 
     with col1:
-        # Radar Chart
+        # Radar Chart with dimension-specific colors
         dimensions = ['Provenance', 'Verification', 'Transparency', 'Coherence', 'Resonance']
         dimension_keys = ['provenance', 'verification', 'transparency', 'coherence', 'resonance']
 
         scores = [dimension_breakdown.get(key, {}).get('average', 0) for key in dimension_keys]
 
+        # Create individual bar chart for each dimension with its color
         fig_radar = go.Figure()
+        
         fig_radar.add_trace(go.Scatterpolar(
             r=scores,
             theta=dimensions,
             fill='toself',
-            name='Current Scores',
-            line_color='#3498db'
+            name='Trust Dimensions',
+            line=dict(color='#667eea', width=2),
+            fillcolor='rgba(102, 126, 234, 0.3)',
+            marker=dict(
+                size=8,
+                color=[DIMENSION_COLORS.get(key, '#3498db') for key in dimension_keys],
+                line=dict(color='white', width=2)
+            )
         ))
 
         fig_radar.update_layout(
             polar=dict(
                 radialaxis=dict(
                     visible=True,
-                    range=[0, 1]
+                    range=[0, 1],
+                    tickfont=dict(size=10, color='#333333')
+                ),
+                angularaxis=dict(
+                    tickfont=dict(size=11, color='white')
                 )
             ),
             showlegend=False,
@@ -1859,8 +1873,11 @@ def show_results_page():
         for dim_name, dim_key in zip(dimensions, dimension_keys):
             dim_data = dimension_breakdown.get(dim_key, {})
             avg_score = dim_data.get('average', 0)
+            
+            # Get dimension-specific color
+            dim_color = DIMENSION_COLORS.get(dim_key, '#3498db')
 
-            # Status indicator
+            # Status indicator based on score
             if avg_score >= 0.8:
                 status = "🟢"
             elif avg_score >= 0.6:
@@ -1870,7 +1887,8 @@ def show_results_page():
             else:
                 status = "🔴"
 
-            st.markdown(f"**{status} {dim_name}**")
+            # Display with dimension color
+            st.markdown(f"**{status} <span style='color: {dim_color}'>{dim_name}</span>**", unsafe_allow_html=True)
             st.progress(avg_score)
             st.caption(f"Score: {avg_score*100:.1f}/100 | Range: {dim_data.get('min', 0)*100:.1f} - {dim_data.get('max', 0)*100:.1f}")
 
