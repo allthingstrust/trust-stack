@@ -57,6 +57,10 @@ class NormalizedContent:
     
     # Language detection
     language: str = "en"  # Detected language code (e.g., 'en', 'fr', 'es')
+    
+    # Structure-aware text extraction for improved tone shift detection
+    structured_body: Optional[List[Dict[str, str]]] = None  # HTML structure metadata
+    # Format: [{"text": "...", "element_type": "h1", "semantic_role": "headline"}, ...]
 
     def __post_init__(self):
         if self.meta is None:

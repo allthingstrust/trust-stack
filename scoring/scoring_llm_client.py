@@ -175,12 +175,21 @@ class LLMScoringClient:
             5. Only report issues you can support with specific text FROM THE CONTENT PROVIDED
             6. If you cannot find a specific quote in the content, DO NOT make up suggestions
             
+            IMPORTANT - Visual Hierarchy & Structure Awareness:
+            If the content includes element markers like [HEADLINE], [SUBHEADLINE], [BODY_TEXT], [PRODUCT_LISTING]:
+            - Different capitalization between HEADLINE and other elements is INTENTIONAL design
+            - Only flag tone shifts WITHIN the same semantic element type
+            - Headlines naturally use ALL CAPS or Title Case - this is NOT a tone shift
+            - Product listings may have repeated similar text - this is INTENTIONAL structure
+            - Footer text often has different tone than body - this is EXPECTED
+            
             EXAMPLE GOOD SUGGESTION:
             "Change 'Find the right type of Mastercard payment card for you' → 'Discover the perfect Mastercard for your needs'. This improves coherence by using more consistent, engaging brand voice."
             
             EXAMPLE BAD SUGGESTION (DO NOT DO THIS):
             "Improve the wording" or "Make it more professional" (too vague, no concrete rewrite)
             Suggesting changes to text that doesn't appear in the content provided
+            Flagging capitalization differences between [HEADLINE] and [BODY_TEXT] as tone shifts
             """
         else:
             # High score (0.9-1.0): Suggestions are optional, especially for very high scores

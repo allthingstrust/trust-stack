@@ -709,6 +709,229 @@ def _format_tables(soup: BeautifulSoup) -> str:
     return ""
 
 
+def _infer_semantic_role(element, element_type: str) -> str:
+    """
+    Infer semantic role of an HTML element based on its type and context.
+    
+    Args:
+        element: BeautifulSoup element
+        element_type: HTML tag name (h1, p, div, etc.)
+    
+    Returns:
+        Semantic role string (headline, subheadline, body_text, etc.)
+    """
+    # Heading hierarchy
+    if element_type in ['h1', 'h2']:
+        return 'headline'
+    elif element_type in ['h3', 'h4']:
+        return 'subheadline'
+    elif element_type in ['h5', 'h6']:
+        return 'minor_heading'
+    
+    # Check for common class patterns
+    if hasattr(element, 'get'):
+        classes = element.get('class', [])
+        class_str = ' '.join(classes).lower() if classes else ''
+        
+        # Product/pricing related
+        if any(term in class_str for term in ['price', 'product', 'item', 'card']):
+            return 'product_info'
+        
+        # Hero/banner content
+        if any(term in class_str for term in ['hero', 'banner', 'jumbotron', 'headline']):
+            return 'headline'
+        
+        # Subtext/tagline
+        if any(term in class_str for term in ['subtext', 'tagline', 'subtitle', 'subheading']):
+            return 'subheadline'
+        
+        # Footer content
+        if any(term in class_str for term in ['footer', 'copyright', 'legal']):
+            return 'footer_text'
+    
+    # List items
+    if element_type == 'li':
+        return 'list_item'
+    
+    # Paragraphs and divs default to body text
+    if element_type in ['p', 'div', 'span']:
+        return 'body_text'
+    
+    return 'body_text'
+
+
+def _extract_structured_body_text(soup: BeautifulSoup) -> List[Dict[str, str]]:
+    """
+    Extract body text with HTML structure metadata preserved.
+    
+    Returns list of text segments with metadata:
+    [
+        {
+            "text": "UP TO 70% OFF",
+            "element_type": "h1",
+            "semantic_role": "headline"
+        },
+        {
+            "text": "Plus, buy two and get an extra 10% off!",
+            "element_type": "p",
+            "semantic_role": "subheadline"
+        }
+    ]
+    
+    This enables structure-aware scoring that can distinguish intentional
+    visual hierarchy from actual tone inconsistencies.
+    """
+    structured_segments = []
+    
+    # Strategy 0: Check for product grids first
+    try:
+        product_cards = _detect_product_grid(soup)
+        if product_cards:
+            for card in product_cards[:20]:  # Limit to 20 products
+                # Extract product name
+                name = card.select_one('h1, h2, h3, h4, h5, strong, .product-name, .title, [class*="name"], [class*="title"]')
+                name_text = name.get_text(separator=" ", strip=True) if name else ""
+                
+                # Extract price
+                price = card.select_one('[class*="price"], .price, [class*="cost"]')
+                price_text = price.get_text(separator=" ", strip=True) if price else ""
+                
+                if name_text:
+                    product_text = name_text
+                    if price_text:
+                        product_text += f" ({price_text})"
+                    
+                    structured_segments.append({
+                        "text": product_text,
+                        "element_type": "product_card",
+                        "semantic_role": "product_listing"
+                    })
+            
+            if structured_segments:
+                logger.debug(f"Extracted {len(structured_segments)} product cards with structure")
+                return structured_segments
+    except Exception as e:
+        logger.debug(f"Structured product extraction failed: {e}")
+    
+    # Strategy 1: Try <article> tag
+    article = soup.find("article")
+    if article:
+        segments = _extract_elements_with_structure(article)
+        if segments and len(''.join(s['text'] for s in segments)) >= 100:
+            logger.debug(f"Extracted {len(segments)} segments from <article>")
+            return segments
+    
+    # Strategy 2: Try <main> tag or [role="main"]
+    main = soup.find("main") or soup.select_one('[role="main"]')
+    if main:
+        segments = _extract_elements_with_structure(main)
+        if segments and len(''.join(s['text'] for s in segments)) >= 100:
+            logger.debug(f"Extracted {len(segments)} segments from <main>")
+            return segments
+    
+    # Strategy 3: Try <div> with content-related class names
+    content_class_patterns = [
+        'content', 'post-content', 'article-body', 'article', 'entry',
+        'post', 'body-text', 'post-body', 'main-content', 'page-content',
+        'story-body', 'article-text', 'article-content', 'text-content'
+    ]
+    for pattern in content_class_patterns:
+        divs = soup.find_all('div', class_=lambda x: x and pattern in x.lower())
+        for div in divs:
+            segments = _extract_elements_with_structure(div)
+            if segments and len(''.join(s['text'] for s in segments)) >= 150:
+                logger.debug(f"Extracted {len(segments)} segments from content div")
+                return segments
+    
+    # Strategy 4: Try all <p> tags combined
+    paragraphs = soup.find_all("p")
+    if paragraphs:
+        segments = []
+        for p in paragraphs:
+            text = p.get_text(separator=" ", strip=True)
+            if text:
+                segments.append({
+                    "text": text,
+                    "element_type": "p",
+                    "semantic_role": "body_text"
+                })
+        if segments and len(''.join(s['text'] for s in segments)) >= 100:
+            logger.debug(f"Extracted {len(segments)} paragraph segments")
+            return segments
+    
+    # Strategy 5: Find longest <div> by text length
+    divs = soup.find_all('div')
+    longest_div = None
+    longest_length = 0
+    for div in divs:
+        # Skip divs that are likely navigation or headers
+        div_class = div.get('class', [])
+        div_id = div.get('id', '')
+        if any(skip in str(div_class).lower() + div_id.lower()
+               for skip in ['nav', 'header', 'footer', 'menu', 'sidebar', 'widget', 'ad']):
+            continue
+        text = div.get_text(separator=" \n ", strip=True)
+        if len(text) > longest_length:
+            longest_length = len(text)
+            longest_div = div
+    
+    if longest_div and longest_length >= 100:
+        segments = _extract_elements_with_structure(longest_div)
+        if segments:
+            logger.debug(f"Extracted {len(segments)} segments from longest div")
+            return segments
+    
+    # Strategy 6: Fall back to entire body
+    if soup.body:
+        segments = _extract_elements_with_structure(soup.body)
+        if segments:
+            logger.debug(f"Extracted {len(segments)} segments from <body>")
+            return segments
+    
+    return []
+
+
+def _extract_elements_with_structure(container) -> List[Dict[str, str]]:
+    """
+    Extract text elements from a container while preserving structure.
+    
+    Args:
+        container: BeautifulSoup element to extract from
+    
+    Returns:
+        List of structured text segments
+    """
+    segments = []
+    
+    # Extract headings and paragraphs with their types
+    for element in container.find_all(['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'li']):
+        text = element.get_text(separator=" ", strip=True)
+        if text and len(text) > 5:  # Skip very short text
+            element_type = element.name
+            semantic_role = _infer_semantic_role(element, element_type)
+            
+            segments.append({
+                "text": text,
+                "element_type": element_type,
+                "semantic_role": semantic_role
+            })
+    
+    # If no structured elements found, try divs with meaningful classes
+    if not segments:
+        for div in container.find_all('div', recursive=False):
+            text = div.get_text(separator=" ", strip=True)
+            if text and len(text) > 10:
+                semantic_role = _infer_semantic_role(div, 'div')
+                segments.append({
+                    "text": text,
+                    "element_type": "div",
+                    "semantic_role": semantic_role
+                })
+    
+    return segments
+
+
+
 def _extract_body_text(soup: BeautifulSoup) -> str:
     """Extract body text using multiple strategies in order of preference.
     
@@ -954,8 +1177,11 @@ def fetch_page(url: str, timeout: int = 10) -> Dict[str, str]:
             if og_title and og_title.get('content'):
                 title = og_title.get('content').strip()
 
-        # Extract body using multiple strategies
+        # Extract body using multiple strategies (plain text for backward compatibility)
         body = _extract_body_text(soup)
+        
+        # Also extract structured body text with HTML metadata
+        structured_body = _extract_structured_body_text(soup)
 
         # If body or title are thin, try OG/Twitter description and dump for debugging
         if (not body or len(body) < 200) and soup.select_one('meta[property="og:description"]'):
@@ -1052,7 +1278,14 @@ def fetch_page(url: str, timeout: int = 10) -> Dict[str, str]:
             links = _extract_footer_links(getattr(resp, 'text', '') or '', url)
         except Exception:
             links = {"terms": "", "privacy": ""}
-        return {"title": title, "body": body, "url": url, "terms": links.get("terms", ""), "privacy": links.get("privacy", "")}
+        return {
+            "title": title, 
+            "body": body, 
+            "structured_body": structured_body,
+            "url": url, 
+            "terms": links.get("terms", ""), 
+            "privacy": links.get("privacy", "")
+        }
     except Exception as e:
         logger.error("Error fetching page %s: %s", url, e)
         # Attempt to dump whatever we have for debugging

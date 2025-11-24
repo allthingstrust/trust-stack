@@ -175,7 +175,8 @@ def run_analysis(brand_id: str, keywords: List[str], sources: List[str], max_ite
                     channel='web',
                     platform_type='web',
                     source_type=c.get('source_type', 'unknown'),
-                    source_tier=c.get('source_tier', 'unknown')
+                    source_tier=c.get('source_tier', 'unknown'),
+                    structured_body=c.get('structured_body')  # Include HTML structure metadata
                 )
                 all_content.append(nc)
 

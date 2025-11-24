@@ -356,6 +356,23 @@ class ContentScorer:
             Apply standard coherence criteria when providing feedback.
             """ + deterministic_context
         
+        # Format body text with structure markers if available
+        if hasattr(content, 'structured_body') and content.structured_body:
+            # Format structured body with element markers
+            formatted_body_parts = []
+            for segment in content.structured_body[:50]:  # Limit to first 50 segments
+                role = segment.get('semantic_role', 'text').upper()
+                text = segment.get('text', '')
+                formatted_body_parts.append(f"[{role}] {text}")
+            
+            formatted_body = "\n".join(formatted_body_parts)
+            body_preview = formatted_body[:2000]
+            structure_note = "\n\nNOTE: Content includes structure markers like [HEADLINE], [SUBHEADLINE], [BODY_TEXT] to indicate HTML element types."
+        else:
+            # Fall back to plain text
+            body_preview = content.body[:2000]
+            structure_note = ""
+        
         # Step 1: Simple scoring prompt
         score_prompt = f"""
         Score the COHERENCE of this content on a scale of 0.0 to 1.0.
@@ -364,8 +381,8 @@ class ContentScorer:
         
         Content:
         Title: {content.title}
-        Body: {content.body[:2000]}
-        Source: {content.src}
+        Body: {body_preview}
+        Source: {content.src}{structure_note}
         
         Brand Context: {brand_context.get('keywords', [])}
         
