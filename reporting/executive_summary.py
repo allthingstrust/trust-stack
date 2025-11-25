@@ -141,6 +141,24 @@ STRONGEST AREAS (Maintain these):
     for i, (dim, score) in enumerate(strongest_2, 1):
         prompt += f"  {i}. {dim.title()}: {score:.1f}/100\n"
 
+    # Calculate issue counts per dimension to ensure LLM has accurate data
+    # (Avoids "3 out of 4" errors when some items with issues aren't in the low_scoring_items list)
+    from webapp.utils.recommendations import extract_issues_from_items
+    dimension_issues = extract_issues_from_items(items)
+    
+    prompt += f"""
+DIMENSION ISSUE COUNTS (Items with specific defects):
+"""
+    for dim in dimension_keys:
+        issues = dimension_issues.get(dim, [])
+        # Count unique URLs with issues in this dimension
+        unique_urls_with_issues = len(set(i['url'] for i in issues))
+        total_issues_count = len(issues)
+        
+        if total_issues_count > 0:
+            prompt += f"  - {dim.title()}: {total_issues_count} specific issues found across {unique_urls_with_issues} items\n"
+
+
     # Add specific problematic content examples
     if low_scoring_items:
         prompt += f"""
