@@ -147,9 +147,9 @@ class TestReadabilityDetection:
         content = _make_content(body=text)
         result = detector._detect_readability(content)
 
-        # Should either return None (no sentences) or treat as one long sentence
-        # Either way, should not crash
-        assert result is None or result.evidence is not None
+        # Should flag run-on sentences as difficult (this is legitimate prose, just poorly written)
+        assert result is not None
+        assert "Difficult" in result.evidence or result.value < 7.0
 
     def test_filters_short_fragments(self, detector):
         """Test that short fragments (< 10 chars) are filtered out"""
@@ -175,6 +175,52 @@ class TestReadabilityDetection:
         evidence_parts = result.evidence.split()
         words_per_sent = float(evidence_parts[1])
         assert words_per_sent < 50, f"Words per sentence should be reasonable, got {words_per_sent}"
+
+    def test_product_page_lists(self, detector):
+        """Test product page with list items (reproduces the 159-271 words/sentence bug)"""
+        # Simulate a product page with many short list items and no periods
+        product_page = """
+        Shop Whitestrips, Toothpaste & Mouthwash
+        Crest 3D White Whitestrips
+        Professional Effects
+        Glamorous White
+        Gentle Routine
+        Crest Pro-Health Toothpaste
+        Advanced Deep Clean
+        Gum Detoxify
+        Sensitive Shield
+        Crest Complete Whitening
+        Scope Mouthwash
+        Outlast
+        Classic
+        """
+        content = _make_content(body=product_page)
+        result = detector._detect_readability(content)
+
+        # Should return None for list-like content (not prose)
+        assert result is None
+
+    def test_mixed_prose_and_lists(self, detector):
+        """Test content with both prose sentences and list items"""
+        mixed_content = """
+        Welcome to our product catalog. We offer a wide range of dental care products.
+        
+        Featured Products:
+        Crest 3D White Whitestrips
+        Professional Effects
+        Glamorous White
+        
+        Our products are designed to give you the best smile possible. Shop now for great deals.
+        """
+        content = _make_content(body=mixed_content)
+        result = detector._detect_readability(content)
+
+        # Should handle mixed content gracefully
+        # Either returns None or reasonable words/sentence (< 50)
+        if result is not None:
+            evidence_parts = result.evidence.split()
+            words_per_sent = float(evidence_parts[1])
+            assert words_per_sent < 50, f"Words per sentence should be reasonable, got {words_per_sent}"
 
 
 class TestAuthorIdentityDetection:

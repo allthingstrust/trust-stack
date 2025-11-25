@@ -743,17 +743,58 @@ class TrustStackAttributeDetector:
         if not text or len(text) < 50:
             return None
 
-        # Split into sentences using positive lookbehind (split after punctuation + whitespace)
-        # This avoids the off-by-one error from re.split()
+        # Count total words
+        words = len(text.split())
+        
+        # First, try traditional sentence splitting (periods, exclamation, question marks)
         sentence_list = re.split(r'(?<=[\.\!\?])\s+', text)
-        # Filter out very short fragments (< 10 chars) that aren't real sentences
         sentence_list = [s.strip() for s in sentence_list if len(s.strip()) > 10]
+
+        # If we have very few sentences for the amount of text, try splitting on newlines too
+        # This handles product pages, navigation, lists, etc.
+        if len(sentence_list) < 3 and words > 100:
+            # Try splitting on newlines as well
+            line_list = [line.strip() for line in text.split('\n') if len(line.strip()) > 10]
+            
+            # Check if this looks like list/navigation content (many short lines)
+            if len(line_list) > 3:  # Lowered from 5 to catch more list cases
+                avg_line_length = sum(len(line.split()) for line in line_list) / len(line_list)
+                
+                # If average line is very short (< 10 words), this is likely navigation/lists, not prose
+                if avg_line_length < 10:
+                    return None  # Skip readability analysis for non-prose content
+            
+            # Use lines as sentences if we have more lines than traditional sentences
+            if len(line_list) > len(sentence_list):
+                sentence_list = line_list
+        
+        # Additional check: if we have very few sentences but the text has many newlines,
+        # it's likely list/navigation content even if it doesn't meet the > 100 words threshold
+        if len(sentence_list) <= 1 and words > 20:
+            newline_count = text.count('\n')
+            # If there are many newlines relative to the text (> 1 newline per 10 words), skip
+            if newline_count > words / 10:
+                return None
 
         if len(sentence_list) == 0:
             return None
 
-        words = len(text.split())
-        words_per_sentence = words / len(sentence_list)
+        # Calculate words per sentence for each sentence
+        sentence_word_counts = [len(s.split()) for s in sentence_list]
+        
+        # Use median instead of mean to be robust against outliers
+        sentence_word_counts.sort()
+        n = len(sentence_word_counts)
+        if n % 2 == 0:
+            median_words = (sentence_word_counts[n//2 - 1] + sentence_word_counts[n//2]) / 2
+        else:
+            median_words = sentence_word_counts[n//2]
+        
+        # Also calculate mean for comparison
+        mean_words = sum(sentence_word_counts) / len(sentence_word_counts)
+        
+        # Use median as the primary metric (more robust)
+        words_per_sentence = median_words
 
         # Target: 15-20 words per sentence (grade 8-10)
         if 12 <= words_per_sentence <= 22:
