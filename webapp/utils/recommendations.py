@@ -264,6 +264,25 @@ def get_remedy_for_issue(issue_type: str, dimension: str, issue_items: List[Dict
                 logger.debug(f"Filtering low-confidence suggestion (confidence={confidence:.2f}, threshold={min_confidence}): {suggestion[:100]}")
                 continue
             
+            # Filter out hallucinations: LLM quoting the prompt text instead of content
+            prompt_phrases = [
+                "why didn't i get 100%",
+                "what specific thing could make this even better",
+                "what is one small thing i could do to make this perfect",
+                "the client wants to know"
+            ]
+            
+            is_hallucination = False
+            suggestion_lower = suggestion.lower()
+            for phrase in prompt_phrases:
+                if phrase in suggestion_lower:
+                    logger.warning(f"Filtering hallucination - LLM quoted prompt text: {suggestion[:100]}")
+                    is_hallucination = True
+                    break
+            
+            if is_hallucination:
+                continue
+            
             # Filter out placeholder/template suggestions from the LLM
             evidence_text = item.get('evidence', '')
             
@@ -277,7 +296,6 @@ def get_remedy_for_issue(issue_type: str, dimension: str, issue_items: List[Dict
             ]
             
             is_placeholder = False
-            suggestion_lower = suggestion.lower()
             evidence_lower = evidence_text.lower()
             
             # Only flag as placeholder if it contains the phrase AND lacks concrete content
@@ -305,9 +323,6 @@ def get_remedy_for_issue(issue_type: str, dimension: str, issue_items: List[Dict
                 'poor readability',
                 'inappropriate tone',
                 
-                # High-score optimizations
-                'improvement_opportunity',
-                
                 # Transparency structural issues (missing elements)
                 'missing_privacy_policy',
                 'no_ai_disclosure',
@@ -326,6 +341,29 @@ def get_remedy_for_issue(issue_type: str, dimension: str, issue_items: List[Dict
             # Check if this issue type allows general guidance
             issue_type_lower = issue_type_val.lower()
             allows_general_guidance = any(pattern in issue_type_lower for pattern in GENERAL_GUIDANCE_ISSUES)
+            
+            # For improvement opportunities, require aspect context
+            is_improvement_opportunity = 'improvement' in issue_type_lower or 'opportunity' in issue_type_lower
+            
+            if is_improvement_opportunity:
+                # Check if suggestion has aspect prefix (format: "Aspect Name: explanation...")
+                has_aspect_prefix = ':' in suggestion and suggestion.index(':') < 60
+                
+                # Also check if it's just a bare quote without explanation
+                is_bare_quote = (
+                    not has_aspect_prefix and 
+                    "Change '" not in suggestion and
+                    len(suggestion) < 100 and
+                    "EXACT QUOTE" not in suggestion
+                )
+                
+                if is_bare_quote:
+                    logger.warning(f"Filtering improvement opportunity without aspect context (bare quote): {suggestion[:100]}")
+                    continue
+                
+                if not has_aspect_prefix and "Change '" not in suggestion:
+                    logger.warning(f"Filtering improvement opportunity without aspect prefix or concrete rewrite: {suggestion[:100]}")
+                    continue
             
             # Validate that the suggestion contains an actual concrete rewrite (unless general guidance is allowed)
             has_concrete_rewrite = ("Change '" in suggestion and ("→" in suggestion or "->" in suggestion))
@@ -540,12 +578,54 @@ def get_remedy_for_issue(issue_type: str, dimension: str, issue_items: List[Dict
             # Check if this is a structural issue
             is_structural = any(pattern in issue_type.lower().replace(' ', '_') for pattern in structural_issues)
             
+            # Check if this is an improvement opportunity
+            is_improvement_opportunity = 'improvement' in issue_type.lower() or 'opportunity' in issue_type.lower()
+            
             for idx, item in enumerate(issue_items, 1):
                 url = item.get('url', '').strip()
                 
                 # Skip if this URL was already successfully added as an LLM suggestion
                 if url and url in added_urls:
                     continue
+                
+                # For improvement opportunities, apply the same validation as above
+                # Don't show items in fallback that were filtered out
+                if is_improvement_opportunity:
+                    suggestion = item.get('suggestion', '')
+                    
+                    # Skip if no suggestion
+                    if not suggestion:
+                        continue
+                    
+                    # Check for hallucinations
+                    prompt_phrases = [
+                        "why didn't i get 100%",
+                        "what specific thing could make this even better",
+                        "what is one small thing i could do to make this perfect",
+                        "the client wants to know"
+                    ]
+                    
+                    is_hallucination = any(phrase in suggestion.lower() for phrase in prompt_phrases)
+                    if is_hallucination:
+                        continue
+                    
+                    # Check for aspect prefix or concrete rewrite
+                    has_aspect_prefix = ':' in suggestion and suggestion.index(':') < 60
+                    has_concrete_rewrite = "Change '" in suggestion
+                    
+                    # Check if it's a bare quote
+                    is_bare_quote = (
+                        not has_aspect_prefix and 
+                        not has_concrete_rewrite and
+                        len(suggestion) < 100
+                    )
+                    
+                    if is_bare_quote:
+                        continue
+                    
+                    # If no aspect prefix and no concrete rewrite, skip
+                    if not has_aspect_prefix and not has_concrete_rewrite:
+                        continue
                 
                 evidence = item.get('evidence', '').strip()
                 title = item.get('title', '').strip()

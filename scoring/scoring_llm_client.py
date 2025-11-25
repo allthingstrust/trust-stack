@@ -219,9 +219,7 @@ class LLMScoringClient:
                 
                 {context_guidance}
                 
-                Even excellent content can be optimized. The client wants to know: "What is one small thing I could do to make this perfect?"
-                
-                Provide ONE minor, specific optimization tip with a CONCRETE REWRITE.
+                Even excellent content can be optimized. Provide ONE minor, specific optimization tip with a CONCRETE REWRITE.
                 
                 Content:
                 Title: {content.title}
@@ -230,10 +228,12 @@ class LLMScoringClient:
                 CRITICAL REQUIREMENTS:
                 1. Provide exactly ONE optimization tip
                 2. Use the issue type "improvement_opportunity"
-                3. The quoted text MUST appear in the content above
+                3. The quoted text MUST appear in the content above - DO NOT make up quotes or quote from this prompt
                 4. Show CONCRETE REWRITE using format: "Change 'X' → 'Y'"
                 5. Explain WHY this small change improves the content
-                6. SPECIFY which aspect of {dimension} you're addressing (e.g., for Coherence: "Brand voice consistency", "CTA clarity", "Tone optimization", "Vocabulary refinement")
+                6. **REQUIRED**: Start suggestion with a specific aspect prefix (e.g., "Brand Voice Consistency:", "CTA Clarity:", "Tone Optimization:")
+                7. DO NOT quote any text from this prompt itself (e.g., do not quote "What is one small thing I could do to make this perfect?")
+                8. If you cannot find specific text to improve, return an empty issues array
                 
                 Respond with JSON in this exact format:
                 {{
@@ -242,17 +242,28 @@ class LLMScoringClient:
                             "type": "improvement_opportunity",
                             "confidence": 0.7,
                             "severity": "low",
-                            "evidence": "EXACT QUOTE: 'the actual text'",
-                            "suggestion": "[Specific Aspect]: [Brief explanation of current state and why it could be better]. Change 'the actual text' → 'the optimized text'. This enhances [specific benefit]."
+                            "evidence": "EXACT QUOTE: 'the actual text from content'",
+                            "suggestion": "[Specific Aspect]: [Brief explanation of current state and why it could be better]. Change 'the actual text from content' → 'the optimized text'. This enhances [specific benefit]."
                         }}
                     ]
                 }}
+                
+                REQUIRED FORMAT FOR SUGGESTION:
+                - MUST start with aspect prefix followed by colon (e.g., "Call-to-Action Clarity:")
+                - MUST include explanation of why current text could be better
+                - MUST include concrete rewrite with "Change 'X' → 'Y'" format
+                - MUST explain the benefit of the change
                 
                 EXAMPLE FOR COHERENCE:
                 "suggestion": "Call-to-Action Clarity: The phrase uses generic all-caps text that could be more specific and engaging. Change 'Explore ALL PRODUCTS' → 'Discover Our Complete Oral Care Collection'. This enhances coherence by using descriptive, brand-aligned language instead of generic CTAs."
                 
                 EXAMPLE FOR TRANSPARENCY:
                 "suggestion": "Timestamp Specificity: The vague time reference reduces transparency. Change 'Posted recently' → 'Published on January 15, 2024'. This enhances transparency by providing specific, verifiable dates."
+                
+                INVALID EXAMPLES (DO NOT DO THIS):
+                - "Change 'text' → 'better text'" (missing aspect prefix)
+                - Quoting text from this prompt instead of from the content
+                - "Teeth Whitening Remove surface stains..." (just quoting content without aspect or explanation)
                 """
             else:
                 # High score (0.9-0.95): Ask for improvement suggestions with concrete rewrites
@@ -260,8 +271,6 @@ class LLMScoringClient:
                 You scored this content's {dimension} as {score:.1f} out of 1.0 - this is good!
                 
                 {context_guidance}
-                
-                The client wants to know: "Why didn't I get 100%? What specific thing could make this even better?"
                 
                 Provide at least ONE specific, actionable improvement with a CONCRETE REWRITE that would move the score closer to 100%.
                 
@@ -271,11 +280,13 @@ class LLMScoringClient:
                 
                 CRITICAL REQUIREMENTS:
                 1. Provide at least ONE improvement if possible
-                2. The quoted text MUST appear in the content above - do NOT make up quotes
+                2. The quoted text MUST appear in the content above - DO NOT make up quotes or quote from this prompt
                 3. Provide a SINGLE exact quote showing what could be improved
                 4. Show CONCRETE REWRITE using format: "Change 'X' → 'Y'"
                 5. Explain WHY this change would improve the score
-                6. If you cannot find specific text to quote, return an empty issues array
+                6. **REQUIRED**: Start suggestion with a specific aspect prefix (e.g., "Brand Voice Consistency:", "CTA Clarity:", "Tone Optimization:")
+                7. DO NOT quote any text from this prompt itself (e.g., do not quote "Why didn't I get 100%?")
+                8. If you cannot find specific text to quote, return an empty issues array
                 
                 Respond with JSON in this exact format:
                 {{
@@ -285,19 +296,27 @@ class LLMScoringClient:
                             "confidence": 0.75,
                             "severity": "low",
                             "evidence": "EXACT QUOTE: 'the actual text from content'",
-                            "suggestion": "Change 'the actual text from content' → 'the enhanced text'. This would improve {dimension} by [reason]."
+                            "suggestion": "[Specific Aspect]: [Brief explanation]. Change 'the actual text from content' → 'the enhanced text'. This would improve {dimension} by [reason]."
                         }}
                     ]
                 }}
                 
-                EXAMPLES OF GOOD SUGGESTIONS WITH CONCRETE REWRITES:
-                - "Change 'Click here to learn more' → 'Explore our complete product guide'. This improves coherence by providing specific, descriptive CTAs."
-                - "Change 'Posted recently' → 'Published on January 15, 2024'. This improves transparency by adding specific timestamps."
+                REQUIRED FORMAT FOR SUGGESTION:
+                - MUST start with aspect prefix followed by colon (e.g., "Call-to-Action Clarity:")
+                - MUST include explanation of why current text could be better
+                - MUST include concrete rewrite with "Change 'X' → 'Y'" format
+                - MUST explain the benefit of the change
                 
-                EXAMPLES OF BAD SUGGESTIONS (DO NOT DO THIS):
+                EXAMPLES OF GOOD SUGGESTIONS WITH CONCRETE REWRITES:
+                - "Call-to-Action Clarity: Generic wording could be more specific. Change 'Click here to learn more' → 'Explore our complete product guide'. This improves coherence by providing specific, descriptive CTAs."
+                - "Timestamp Specificity: Vague time reference reduces transparency. Change 'Posted recently' → 'Published on January 15, 2024'. This improves transparency by adding specific timestamps."
+                
+                INVALID EXAMPLES (DO NOT DO THIS):
+                - "Change 'text' → 'better text'" (missing aspect prefix and explanation)
                 - "Add a call-to-action" (no concrete rewrite shown)
                 - "Improve the wording" (too vague)
-                - Suggesting changes to text that doesn't appear in the content provided
+                - Quoting text from this prompt instead of from the content
+                - "Explore ALL PRODUCTS" (just a quote without aspect or explanation)
                 """
         
         # Get feedback from LLM
