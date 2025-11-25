@@ -29,6 +29,10 @@ class StreamlitLogHandler(logging.Handler):
         Args:
             record: LogRecord to emit
         """
+        # Don't emit if animator is cleared/inactive
+        if not self.progress_animator or not self.progress_animator.container:
+            return
+
         try:
             # Format the log message
             msg = self.format(record)
@@ -93,6 +97,9 @@ class ProgressAnimator:
 
     def _render(self):
         """Internal method to render the current state."""
+        if not self.container:
+            return
+
         # Build URL display if provided
         url_html = ""
         if hasattr(self, 'current_url') and self.current_url:
@@ -196,8 +203,13 @@ class ProgressAnimator:
             return log_message
 
     def clear(self):
-        """Clear the progress display."""
-        self.container.empty()
+        """Clear the progress display and deactivate the animator."""
+        if self.container:
+            self.container.empty()
+        self.container = None
         self.current_message = None
         self.current_emoji = None
         self.logs = []
+
+
+

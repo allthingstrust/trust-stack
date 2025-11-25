@@ -297,8 +297,12 @@ def run_analysis(brand_id: str, keywords: List[str], sources: List[str], max_ite
     finally:
         # Clean up log handler
         try:
-            if log_handler and root_logger:
-                root_logger.removeHandler(log_handler)
+            if root_logger:
+                # Remove ALL StreamlitLogHandlers to be safe
+                handlers_to_remove = [h for h in root_logger.handlers if isinstance(h, StreamlitLogHandler)]
+                for h in handlers_to_remove:
+                    root_logger.removeHandler(h)
+                
                 if original_level is not None:
                     root_logger.setLevel(original_level)
         except:

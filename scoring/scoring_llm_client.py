@@ -264,6 +264,7 @@ class LLMScoringClient:
                 - "Change 'text' → 'better text'" (missing aspect prefix)
                 - Quoting text from this prompt instead of from the content
                 - "Teeth Whitening Remove surface stains..." (just quoting content without aspect or explanation)
+                - "EXACT QUOTE: 'some text'" (just providing the quote without any suggestion)
                 """
             else:
                 # High score (0.9-0.95): Ask for improvement suggestions with concrete rewrites
@@ -317,6 +318,7 @@ class LLMScoringClient:
                 - "Improve the wording" (too vague)
                 - Quoting text from this prompt instead of from the content
                 - "Explore ALL PRODUCTS" (just a quote without aspect or explanation)
+                - "EXACT QUOTE: 'some text'" (just providing the quote without any suggestion)
                 """
         
         # Get feedback from LLM

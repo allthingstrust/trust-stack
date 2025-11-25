@@ -407,12 +407,13 @@ API Key set: {'Yes' if os.getenv('SERPER_API_KEY') else 'No'}
                 st.session_state['progress_container_placeholder'] = None
 
             # Clean up log handler if it was created
-            if log_handler and search_logger:
-                try:
-                    search_logger.removeHandler(log_handler)
-                    if original_level is not None:
-                        search_logger.setLevel(original_level)
-                except:
-                    pass
+            if search_logger:
+                # Remove ALL StreamlitLogHandlers to be safe
+                handlers_to_remove = [h for h in search_logger.handlers if isinstance(h, StreamlitLogHandler)]
+                for h in handlers_to_remove:
+                    search_logger.removeHandler(h)
+                
+                if original_level is not None:
+                    search_logger.setLevel(original_level)
         except:
             pass

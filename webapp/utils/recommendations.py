@@ -347,14 +347,20 @@ def get_remedy_for_issue(issue_type: str, dimension: str, issue_items: List[Dict
             
             if is_improvement_opportunity:
                 # Check if suggestion has aspect prefix (format: "Aspect Name: explanation...")
-                has_aspect_prefix = ':' in suggestion and suggestion.index(':') < 60
+                # Ensure "EXACT QUOTE" is not treated as an aspect prefix
+                has_aspect_prefix = (
+                    ':' in suggestion and 
+                    suggestion.index(':') < 60 and 
+                    not suggestion.strip().startswith("EXACT QUOTE")
+                )
                 
                 # Also check if it's just a bare quote without explanation
+                # This catches: "EXACT QUOTE: 'some text'" with nothing else
                 is_bare_quote = (
                     not has_aspect_prefix and 
                     "Change '" not in suggestion and
-                    len(suggestion) < 100 and
-                    "EXACT QUOTE" not in suggestion
+                    (len(suggestion) < 100 or "EXACT QUOTE:" in suggestion) and
+                    (suggestion.strip().startswith("EXACT QUOTE:") or suggestion.strip().startswith("'"))
                 )
                 
                 if is_bare_quote:
@@ -610,16 +616,21 @@ def get_remedy_for_issue(issue_type: str, dimension: str, issue_items: List[Dict
                         continue
                     
                     # Check for aspect prefix or concrete rewrite
-                    has_aspect_prefix = ':' in suggestion and suggestion.index(':') < 60
+                    # Ensure "EXACT QUOTE" is not treated as an aspect prefix
+                    has_aspect_prefix = (
+                        ':' in suggestion and 
+                        suggestion.index(':') < 60 and 
+                        not suggestion.strip().startswith("EXACT QUOTE")
+                    )
                     has_concrete_rewrite = "Change '" in suggestion
                     
                     # Check if it's a bare quote
                     is_bare_quote = (
                         not has_aspect_prefix and 
                         not has_concrete_rewrite and
-                        len(suggestion) < 100
+                        (len(suggestion) < 100 or "EXACT QUOTE:" in suggestion) and
+                        (suggestion.strip().startswith("EXACT QUOTE:") or suggestion.strip().startswith("'"))
                     )
-                    
                     if is_bare_quote:
                         continue
                     
