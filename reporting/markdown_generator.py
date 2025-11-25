@@ -1780,7 +1780,8 @@ Trust performance analysis across different platforms and channel types.
 
         # Use comprehensive remedy database from webapp.utils.recommendations
         # This has detailed remedies for ALL dimensions including coherence and verification
-        remedy_text = get_remedy_for_issue(label, dimension, issue_items=None)
+        remedy_data = get_remedy_for_issue(label, dimension, issue_items=None)
+        remedy_text = remedy_data.get('general_best_practice', '')
 
         # Enhanced remediation metadata based on dimension and attribute characteristics
         # This provides structured metadata for timeline, difficulty, tools, etc.

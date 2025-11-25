@@ -80,13 +80,13 @@ class TestScoringFixes(unittest.TestCase):
         output = get_remedy_for_issue(issue_type, dimension, issue_items)
         
         # Check for key elements in the output
-        self.assertIn("1. 🔗 http://example.com/page1", output)
-        self.assertIn("Change 'bad' -> 'good'", output)
-        self.assertIn("* From: Page 1", output)
-        self.assertIn("2. 🔗 http://example.com/page2", output)
+        self.assertIn("🔗 http://example.com/page1", output['recommended_fix'])
+        self.assertIn("Change 'bad' -> 'good'", output['recommended_fix'])
+        self.assertIn("* From: Page 1", output['recommended_fix'])
+        self.assertIn("🔗 http://example.com/page2", output['recommended_fix'])
         
         # Check that general best practice is at the top
-        self.assertIn("Audit content across all pages to ensure consistency", output)
+        self.assertIn("Audit content across all pages to ensure consistency", output['general_best_practice'])
 
 if __name__ == '__main__':
     unittest.main()

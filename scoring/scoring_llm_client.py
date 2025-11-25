@@ -174,6 +174,11 @@ class LLMScoringClient:
             4. Include brief explanation of WHY the change improves {dimension}
             5. Only report issues you can support with specific text FROM THE CONTENT PROVIDED
             6. If you cannot find a specific quote in the content, DO NOT make up suggestions
+            7. For the following issue types, explicitly state the specific issue (e.g., "run-on sentence", "missing citation", "passive voice") in the suggestion:
+               - inconsistent_voice, tone_shift, vocabulary, contradictory_claims
+               - unverified_claims, fake_engagement, unlabeled_ads
+               - hidden_sponsored_content, missing_data_source_citations
+               - poor_readability, inappropriate_tone
             
             IMPORTANT - Visual Hierarchy & Structure Awareness:
             If the content includes element markers like [HEADLINE], [SUBHEADLINE], [BODY_TEXT], [PRODUCT_LISTING]:

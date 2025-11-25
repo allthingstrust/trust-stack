@@ -48,7 +48,8 @@ def test_recommendation_filtering():
         
     print("\n--- Generated Output ---")
     output = get_remedy_for_issue('Coherence', 'coherence', issue_items)
-    print(output)
+    print(f"Recommended Fix:\n{output['recommended_fix']}")
+    print(f"\nGeneral Best Practice:\n{output['general_best_practice']}")
 
 if __name__ == "__main__":
     test_recommendation_filtering()

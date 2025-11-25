@@ -29,11 +29,11 @@ def test_coherence_remedies():
         }
     ]
     
-    remedy = get_remedy_for_issue('Inconsistent Voice', 'coherence', issue_items)
-    print(remedy)
+    remedy_data = get_remedy_for_issue('Inconsistent Voice', 'coherence', issue_items)
+    print(remedy_data)
     
     # Check that both the LLM suggestion AND the predefined remedy are shown
-    if remedy and 'Maintain consistent brand voice' in remedy and 'General Best Practice' in remedy:
+    if remedy_data and 'Maintain consistent brand voice' in remedy_data['recommended_fix'] and remedy_data['general_best_practice']:
         print("\n✅ PASS: Remedy displayed for general guidance")
     else:
         print("\n❌ FAIL: No remedy or wrong remedy")
@@ -43,10 +43,10 @@ def test_coherence_remedies():
     print("\n\n2. Testing 'Tone Shift' predefined remedy:")
     print("-" * 80)
     
-    remedy = get_remedy_for_issue('Tone Shift', 'coherence', issue_items=[])
-    print(remedy)
+    remedy_data = get_remedy_for_issue('Tone Shift', 'coherence', issue_items=[])
+    print(remedy_data)
     
-    if remedy and 'Review content for abrupt changes in tone' in remedy:
+    if remedy_data and 'Review content for abrupt changes in tone' in remedy_data['general_best_practice']:
         print("\n✅ PASS: Predefined remedy displayed")
     else:
         print("\n❌ FAIL: No predefined remedy")
@@ -67,10 +67,10 @@ def test_coherence_remedies():
         }
     ]
     
-    remedy = get_remedy_for_issue('Brand Voice Consistency Score', 'coherence', issue_items)
-    print(remedy)
+    remedy_data = get_remedy_for_issue('Brand Voice Consistency Score', 'coherence', issue_items)
+    print(remedy_data)
     
-    if remedy and "Change 'click here'" in remedy:
+    if remedy_data and "Change 'click here'" in remedy_data['recommended_fix']:
         print("\n✅ PASS: Concrete rewrite still works")
     else:
         print("\n❌ FAIL: Concrete rewrite broken")

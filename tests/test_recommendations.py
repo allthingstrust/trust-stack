@@ -24,11 +24,11 @@ def test_get_remedy_for_issue_no_truncation():
     # Assertions
     # 1. Check that all 5 URLs are present in the output
     for i in range(5):
-        assert f'https://example.com/{i}' in result, f"URL {i} missing from result"
+        assert f'https://example.com/{i}' in result['recommended_fix'], f"URL {i} missing from result"
         
     # 2. Check that the truncation message is NOT present
-    assert "...and" not in result
-    assert "more instance" not in result
+    assert "...and" not in result['recommended_fix']
+    assert "more instance" not in result['recommended_fix']
 
 
 def test_filtered_suggestions_show_urls():
@@ -65,8 +65,8 @@ def test_filtered_suggestions_show_urls():
     
     # Assertions
     # Even though suggestions were filtered, URLs should still appear
-    assert 'https://example.com/page1' in result, "URL 1 missing from result"
-    assert 'https://example.com/page2' in result, "URL 2 missing from result"
+    assert 'https://example.com/page1' in result['recommended_fix'], "URL 1 missing from result"
+    assert 'https://example.com/page2' in result['recommended_fix'], "URL 2 missing from result"
     
     # Should NOT show the generic fallback
-    assert "Review content for this issue" not in result
+    assert "Review content for this issue" not in result['recommended_fix']

@@ -29,11 +29,11 @@ def test_structural_issue_remedies():
         }
     ]
     
-    remedy = get_remedy_for_issue('missing_privacy_policy', 'transparency', issue_items)
-    print(remedy)
+    remedy_data = get_remedy_for_issue('missing_privacy_policy', 'transparency', issue_items)
+    print(remedy_data)
     
     # Check that both the LLM suggestion AND the predefined remedy are shown
-    if remedy and 'privacy policy' in remedy.lower() and 'General Best Practice' in remedy:
+    if remedy_data and 'privacy policy' in remedy_data['recommended_fix'].lower() and remedy_data['general_best_practice']:
         print("\n✅ PASS: Structural transparency issue shows remedy")
     else:
         print("\n❌ FAIL: No remedy shown")
@@ -54,10 +54,10 @@ def test_structural_issue_remedies():
         }
     ]
     
-    remedy = get_remedy_for_issue('unclear_authorship', 'provenance', issue_items)
-    print(remedy)
+    remedy_data = get_remedy_for_issue('unclear_authorship', 'provenance', issue_items)
+    print(remedy_data)
     
-    if remedy and 'author' in remedy.lower() and 'General Best Practice' in remedy:
+    if remedy_data and 'author' in remedy_data['recommended_fix'].lower() and remedy_data['general_best_practice']:
         print("\n✅ PASS: Structural provenance issue shows remedy")
     else:
         print("\n❌ FAIL: No remedy shown")
@@ -67,10 +67,10 @@ def test_structural_issue_remedies():
     print("\n\n3. Testing predefined remedy fallback (no LLM suggestions):")
     print("-" * 80)
     
-    remedy = get_remedy_for_issue('no_schema_markup', 'provenance', issue_items=[])
-    print(remedy)
+    remedy_data = get_remedy_for_issue('no_schema_markup', 'provenance', issue_items=[])
+    print(remedy_data)
     
-    if remedy and 'schema' in remedy.lower() and 'General Best Practice' in remedy:
+    if remedy_data and 'schema' in remedy_data['general_best_practice'].lower():
         print("\n✅ PASS: Predefined remedy displayed")
     else:
         print("\n❌ FAIL: No predefined remedy")
@@ -91,10 +91,10 @@ def test_structural_issue_remedies():
         }
     ]
     
-    remedy = get_remedy_for_issue('fake_engagement', 'verification', issue_items)
-    print(remedy)
+    remedy_data = get_remedy_for_issue('fake_engagement', 'verification', issue_items)
+    print(remedy_data)
     
-    if remedy and 'monitor' in remedy.lower() or 'engagement' in remedy.lower():
+    if remedy_data and ('monitor' in remedy_data['recommended_fix'].lower() or 'engagement' in remedy_data['recommended_fix'].lower()):
         print("\n✅ PASS: Pattern analysis issue shows remedy")
     else:
         print("\n❌ FAIL: No remedy shown")

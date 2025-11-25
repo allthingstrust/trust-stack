@@ -75,6 +75,8 @@ def extract_issues_from_items(items: List[Dict[str, Any]]) -> Dict[str, List[Dic
         # Author attribution is considered "present" and acceptable at 6.0+
         # (6.0 = footer attribution, 7.0 = meta tag, 8.0 = byline)
         'author_brand_identity_verified': 6.0,
+        # Readability "Acceptable" (7.0) should be considered passing
+        'readability_grade_level_fit': 7.0,
     }
 
     for item in items:
@@ -105,7 +107,7 @@ def extract_issues_from_items(items: List[Dict[str, Any]]) -> Dict[str, List[Dic
             evidence = attr.get('evidence', '')
             label = attr.get('label', '')
             suggestion = attr.get('suggestion')  # Extract LLM suggestion
-            attr_id = attr.get('attribute_id', '')
+            attr_id = attr.get('attribute_id') or attr.get('id', '')
 
             # Determine passing threshold for this attribute
             passing_threshold = PASSING_THRESHOLDS.get(attr_id, 10.0)
@@ -153,7 +155,7 @@ def extract_issues_from_items(items: List[Dict[str, Any]]) -> Dict[str, List[Dic
     return dimension_issues
 
 
-def get_remedy_for_issue(issue_type: str, dimension: str, issue_items: List[Dict[str, Any]] = None) -> str:
+def get_remedy_for_issue(issue_type: str, dimension: str, issue_items: List[Dict[str, Any]] = None) -> Dict[str, str]:
     """
     Get specific remedy recommendation for a detected issue type with contextual examples.
 
@@ -163,7 +165,9 @@ def get_remedy_for_issue(issue_type: str, dimension: str, issue_items: List[Dict
         issue_items: Optional list of specific issue instances with evidence
 
     Returns:
-        Specific actionable remedy recommendation with concrete examples and LLM suggestions
+        Dictionary with:
+        - 'recommended_fix': Specific actionable remedy with concrete examples
+        - 'general_best_practice': General guidance for this issue type
     """
     # Map specific issues to remedies
     remedies = {
@@ -385,8 +389,8 @@ def get_remedy_for_issue(issue_type: str, dimension: str, issue_items: List[Dict
                 if item_url:
                     added_urls.add(item_url)
 
-    # Build the response
-    response_parts = []
+    # Build the recommended fix string
+    recommended_fix = ""
     
     # If we have LLM suggestions, show them in numbered list
     if llm_suggestions:
@@ -395,8 +399,9 @@ def get_remedy_for_issue(issue_type: str, dimension: str, issue_items: List[Dict
             suggestion_text = llm_sug['suggestion']
             url = llm_sug.get('url', '')
             title = llm_sug.get('title', '')
+            evidence = llm_sug.get('evidence', '')
             
-            # Format the suggestion with URL and text on same line
+            # Format the suggestion with URL and text
             lang_indicator = ""
             if llm_sug.get('language', 'en') != 'en':
                 lang_code = llm_sug.get('language', '').upper()
@@ -404,29 +409,59 @@ def get_remedy_for_issue(issue_type: str, dimension: str, issue_items: List[Dict
             
             # Build each recommendation as a multi-line item
             item_lines = []
-            # Format: {number}. 🔗 {url} {suggestion_text}
-            if url:
-                item_lines.append(f"{idx}. 🔗 {url} {suggestion_text}{lang_indicator}")
-            else:
-                item_lines.append(f"{idx}. {suggestion_text}{lang_indicator}")
+            # Format:
+            # 1. {Issue Description}:
+            # EXACT QUOTE: '{quote}'
+            # 🔗 {url}
+            #     * From: {title}
             
-            # Add page title as sub-bullet if available
+            # Extract issue description from suggestion (first sentence or part before "Change")
+            issue_desc = suggestion_text
+            rewrite_part = ""
+            
+            if "Change '" in suggestion_text:
+                parts = suggestion_text.split("Change '")
+                if parts[0].strip():
+                    issue_desc = parts[0].strip()
+                    if issue_desc.endswith('.'):
+                        issue_desc = issue_desc[:-1]
+                else:
+                    issue_desc = "Suggested rewrite"
+                
+                rewrite_part = "Change '" + parts[1]
+            elif "." in suggestion_text:
+                issue_desc = suggestion_text.split(".")[0].strip()
+            
+            item_lines.append(f"{idx}. {issue_desc}:{lang_indicator}")
+            
+            if rewrite_part:
+                item_lines.append(rewrite_part)
+            
+            # Extract quote from evidence or suggestion
+            quote = ""
+            if "EXACT QUOTE:" in evidence:
+                quote = evidence.split("EXACT QUOTE:")[1].strip()
+            elif "Change '" in suggestion_text:
+                # Try to extract from suggestion: Change 'X' -> 'Y'
+                parts = suggestion_text.split("Change '")
+                if len(parts) > 1:
+                    quote_part = parts[1]
+                    if "'" in quote_part:
+                        quote = "'" + quote_part.split("'")[0] + "'"
+            
+            if quote:
+                item_lines.append(f"EXACT QUOTE: {quote}")
+            
+            if url:
+                item_lines.append(f"🔗 {url}")
+            
             if title:
-                # Truncate title to ~60 chars
                 truncated_title = title[:60] + "..." if len(title) > 60 else title
                 item_lines.append(f"    * From: {truncated_title}")
             
-            # Join the lines for this item and add to list
             recommendation_items.append("\n".join(item_lines))
         
-        # Join all recommendation items with blank lines between them
-        # Add a newline before the first item to separate from "Recommended Fix:"
-        response_parts.append("\n" + "\n\n".join(recommendation_items))
-                
-        # Add contextual General Best Practice at the end
-        # Generate context-specific best practice based on the suggestions
-        contextual_remedy = _generate_contextual_remedy(issue_type, dimension, llm_suggestions, base_remedy)
-        response_parts.append(f"\n💡 **General Best Practice:** {contextual_remedy}")
+        recommended_fix = "\n\n".join(recommendation_items)
         
     else:
         # No valid LLM suggestions (filtered out or none provided)
@@ -446,7 +481,6 @@ def get_remedy_for_issue(issue_type: str, dimension: str, issue_items: List[Dict
             
             # Check if this is a structural issue
             is_structural = any(pattern in issue_type.lower().replace(' ', '_') for pattern in structural_issues)
-            max_examples = len(issue_items) if is_structural else 3
             
             for idx, item in enumerate(issue_items, 1):
                 url = item.get('url', '').strip()
@@ -489,7 +523,8 @@ def get_remedy_for_issue(issue_type: str, dimension: str, issue_items: List[Dict
                         # Numbered format with evidence for non-structural issues
                         if evidence and 'LLM:' not in evidence:
                             item_lines = []
-                            item_lines.append(f"{idx}. 🔗 {url} {evidence}{lang_indicator}")
+                            item_lines.append(f"{idx}. {evidence}{lang_indicator}")
+                            item_lines.append(f"🔗 {url}")
                             
                             if title:
                                 truncated_title = title[:60] + "..." if len(title) > 60 else title
@@ -498,24 +533,22 @@ def get_remedy_for_issue(issue_type: str, dimension: str, issue_items: List[Dict
                             example_items.append("\n".join(item_lines))
             
             if example_items:
-                # Add a newline before the first item to separate from "Recommended Fix:"
                 if is_structural:
-                    # For structural issues, join with single newlines
-                    example_text = "\n" + "\n".join(example_items)
+                    recommended_fix = "\n".join(example_items)
                 else:
-                    # For other issues, join with blank lines between items
-                    example_text = "\n" + "\n\n".join(example_items)
-                
-                response_parts.append(example_text)
+                    recommended_fix = "\n\n".join(example_items)
             else:
-                response_parts.append("\nReview content for this issue.")
+                recommended_fix = "Review content for this issue."
         else:
-             response_parts.append("\nReview content for this issue.")
+             recommended_fix = "Review content for this issue."
 
-        # Add General Best Practice (Generic) at the end
-        response_parts.append(f"\n💡 **General Best Practice:** {base_remedy}")
+    # Generate context-specific best practice based on the suggestions
+    contextual_remedy = _generate_contextual_remedy(issue_type, dimension, llm_suggestions, base_remedy)
     
-    return "\n".join(response_parts)
+    return {
+        'recommended_fix': recommended_fix,
+        'general_best_practice': contextual_remedy
+    }
 
 
 def generate_rating_recommendation(avg_rating: float, dimension_breakdown: Dict[str, Any], items: List[Dict[str, Any]]) -> str:

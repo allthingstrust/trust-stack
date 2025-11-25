@@ -1809,9 +1809,23 @@ def show_results_page():
                     st.markdown(f"**⚠️ {issue_type}** ({len(type_issues)} occurrence{'s' if len(type_issues) > 1 else ''})")
 
                     # Show remedy recommendation with specific examples from detected issues
-                    remedy = get_remedy_for_issue(issue_type, dimension_key, issue_items=type_issues)
-                    if remedy:
-                        st.info(f"**💡 Recommended Fix:** {remedy}")
+                    remedy_data = get_remedy_for_issue(issue_type, dimension_key, issue_items=type_issues)
+                    if remedy_data:
+                        # Display specific fix in a white box
+                        recommended_fix = remedy_data.get('recommended_fix', '')
+                        if recommended_fix:
+                            st.markdown(f"""
+                            <div style="background-color: white; color: #333333; padding: 1rem; border-radius: 0.5rem; border: 1px solid #e0e0e0; margin-bottom: 1rem;">
+                                <strong>💡 Recommended Fix:</strong><br><br>
+                                {recommended_fix.replace(chr(10), '<br>')}
+                            </div>
+                            """, unsafe_allow_html=True)
+
+                        # Display general best practice in a dropdown
+                        general_practice = remedy_data.get('general_best_practice', '')
+                        if general_practice:
+                            with st.expander(f"💡 General Best Practice for {issue_type.lower()}"):
+                                st.info(general_practice)
 
                     st.markdown("")  # Spacing
     else:
