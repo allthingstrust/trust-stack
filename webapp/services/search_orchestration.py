@@ -28,13 +28,16 @@ def search_for_urls(brand_id: str, keywords: List[str], sources: List[str], web_
     search_logger = None
     original_level = None
 
-    # Reuse existing progress container if available, otherwise create new one
-    if 'progress_container' in st.session_state and st.session_state['progress_container'] is not None:
-        progress_animator = ProgressAnimator(container=st.session_state['progress_container'])
+    # Use the pre-created progress container placeholder from the main page
+    # This ensures the progress indicator appears in the correct location (below URLs)
+    if 'progress_container_placeholder' in st.session_state and st.session_state['progress_container_placeholder'] is not None:
+        progress_container = st.session_state['progress_container_placeholder']
     else:
+        # Fallback: create a new container if placeholder doesn't exist
         progress_container = st.empty()
-        progress_animator = ProgressAnimator(container=progress_container)
-        st.session_state['progress_container'] = progress_container
+    
+    progress_animator = ProgressAnimator(container=progress_container)
+    st.session_state['progress_container'] = progress_container
     
     progress_bar = st.progress(0)
 

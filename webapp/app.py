@@ -1329,6 +1329,11 @@ def show_analyze_page():
                     del st.session_state['llm_search_fallback_count']
                 st.rerun()
 
+    # Create progress container placeholder immediately after buttons (Below CTA)
+    # This ensures progress appears here, and not below the URLs
+    if 'progress_container_placeholder' not in st.session_state or st.session_state.get('progress_container_placeholder') is None:
+        st.session_state['progress_container_placeholder'] = st.empty()
+
     # Handle URL search
     if search_urls:
         # Validate inputs
@@ -1482,7 +1487,7 @@ def show_analyze_page():
                         st.caption(f"🔗 {url_data['url']} — HTTP {status}")
                     else:
                         st.caption(f"🔗 {url_data['url']}")
-
+    
     if submit:
         # Validate inputs
         if not brand_id or not keywords:
