@@ -419,7 +419,48 @@ def get_remedy_for_issue(issue_type: str, dimension: str, issue_items: List[Dict
             issue_desc = suggestion_text
             rewrite_part = ""
             
-            if "Change '" in suggestion_text:
+            # Check if this is an improvement opportunity with aspect prefix (e.g., "Brand Voice: explanation. Change...")
+            # Format: "[Aspect]: [Explanation]. Change 'X' → 'Y'. [Benefit]"
+            if ":" in suggestion_text and "Change '" in suggestion_text:
+                # Try to extract the aspect (text before first colon)
+                parts_by_colon = suggestion_text.split(":", 1)
+                potential_aspect = parts_by_colon[0].strip()
+                
+                # Check if this looks like an aspect (short, title-case, not a sentence)
+                # Common aspects: "Brand Voice Consistency", "CTA Clarity", "Tone Optimization", etc.
+                if len(potential_aspect) < 50 and not potential_aspect.endswith('.'):
+                    # This is likely an aspect prefix
+                    # Extract everything between the colon and "Change" as the explanation
+                    rest = parts_by_colon[1]
+                    if "Change '" in rest:
+                        explanation_and_rewrite = rest.split("Change '", 1)
+                        explanation = explanation_and_rewrite[0].strip()
+                        # Remove leading/trailing periods from explanation
+                        if explanation.endswith('.'):
+                            explanation = explanation[:-1]
+                        
+                        # Format: Aspect: Explanation
+                        issue_desc = f"{potential_aspect}: {explanation}"
+                        rewrite_part = "Change '" + explanation_and_rewrite[1]
+                    else:
+                        # No "Change" found, use the whole thing as description
+                        issue_desc = suggestion_text
+                else:
+                    # Not an aspect prefix, fall through to normal logic
+                    pass
+            
+            # Fallback: Check if this is a vocabulary/general guidance issue with description before quote
+            if not rewrite_part and "EXACT QUOTE:" in suggestion_text and "Change '" not in suggestion_text:
+                # Format: "[Problem Type]: [Explanation]. EXACT QUOTE: 'text'"
+                # Extract everything before "EXACT QUOTE:" as the description
+                parts = suggestion_text.split("EXACT QUOTE:")
+                if parts[0].strip():
+                    issue_desc = parts[0].strip()
+                    # Remove trailing period if present
+                    if issue_desc.endswith('.'):
+                        issue_desc = issue_desc[:-1]
+            elif not rewrite_part and "Change '" in suggestion_text:
+                # Format with concrete rewrite: extract description before "Change"
                 parts = suggestion_text.split("Change '")
                 if parts[0].strip():
                     issue_desc = parts[0].strip()
@@ -429,10 +470,11 @@ def get_remedy_for_issue(issue_type: str, dimension: str, issue_items: List[Dict
                     issue_desc = "Suggested rewrite"
                 
                 rewrite_part = "Change '" + parts[1]
-            elif "." in suggestion_text:
+            elif not rewrite_part and "." in suggestion_text:
+                # Fallback: use first sentence
                 issue_desc = suggestion_text.split(".")[0].strip()
             
-            item_lines.append(f"{idx}. {issue_desc}:{lang_indicator}")
+            item_lines.append(f"{idx}. {issue_desc}{lang_indicator}")
             
             if rewrite_part:
                 item_lines.append(rewrite_part)
@@ -441,6 +483,22 @@ def get_remedy_for_issue(issue_type: str, dimension: str, issue_items: List[Dict
             quote = ""
             if "EXACT QUOTE:" in evidence:
                 quote = evidence.split("EXACT QUOTE:")[1].strip()
+            elif "EXACT QUOTE:" in suggestion_text:
+                # For vocabulary issues, quote may be in suggestion text
+                parts = suggestion_text.split("EXACT QUOTE:")
+                if len(parts) > 1:
+                    quote_text = parts[1].strip()
+                    # Extract just the quoted portion (between quotes if present)
+                    if "'" in quote_text:
+                        # Find the quoted text: 'text here'
+                        start = quote_text.find("'")
+                        end = quote_text.find("'", start + 1)
+                        if start != -1 and end != -1:
+                            quote = "'" + quote_text[start+1:end] + "'"
+                        else:
+                            quote = quote_text
+                    else:
+                        quote = quote_text
             elif "Change '" in suggestion_text:
                 # Try to extract from suggestion: Change 'X' -> 'Y'
                 parts = suggestion_text.split("Change '")

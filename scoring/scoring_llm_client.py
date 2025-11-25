@@ -180,6 +180,13 @@ class LLMScoringClient:
                - hidden_sponsored_content, missing_data_source_citations
                - poor_readability, inappropriate_tone
             
+            8. CRITICAL - For VOCABULARY issues specifically:
+               - Start with the problem type: "Inconsistent terminology:", "Jargon mismatch:", "Brand voice deviation:", "Unclear wording:", etc.
+               - Explain WHY the flagged text is problematic
+               - Then provide the EXACT QUOTE
+               - Format: "[Problem Type]: [Explanation]. EXACT QUOTE: 'text from content'"
+               - Example: "Jargon mismatch: The phrase 'Zone Enhancement Information' is technical jargon that doesn't match the plain-language style used elsewhere. EXACT QUOTE: 'Zone Enhancement Information'"
+            
             IMPORTANT - Visual Hierarchy & Structure Awareness:
             If the content includes element markers like [HEADLINE], [SUBHEADLINE], [BODY_TEXT], [PRODUCT_LISTING]:
             - Different capitalization between HEADLINE and other elements is INTENTIONAL design
@@ -188,13 +195,20 @@ class LLMScoringClient:
             - Product listings may have repeated similar text - this is INTENTIONAL structure
             - Footer text often has different tone than body - this is EXPECTED
             
-            EXAMPLE GOOD SUGGESTION:
+            EXAMPLE GOOD SUGGESTIONS:
+            
+            For concrete rewrites:
             "Change 'Find the right type of Mastercard payment card for you' → 'Discover the perfect Mastercard for your needs'. This improves coherence by using more consistent, engaging brand voice."
             
-            EXAMPLE BAD SUGGESTION (DO NOT DO THIS):
+            For vocabulary issues (no rewrite needed):
+            "Inconsistent terminology: The site uses both 'customer' and 'client' interchangeably, which can confuse readers. EXACT QUOTE: 'Our clients receive premium service'"
+            "Jargon mismatch: Technical term doesn't align with the conversational tone used throughout the rest of the page. EXACT QUOTE: 'Zone Enhancement Information'"
+            
+            EXAMPLE BAD SUGGESTIONS (DO NOT DO THIS):
             "Improve the wording" or "Make it more professional" (too vague, no concrete rewrite)
             Suggesting changes to text that doesn't appear in the content provided
             Flagging capitalization differences between [HEADLINE] and [BODY_TEXT] as tone shifts
+            For vocabulary: Just providing a quote without explaining what type of vocabulary problem it is
             """
         else:
             # High score (0.9-1.0): Suggestions are optional, especially for very high scores
@@ -219,6 +233,7 @@ class LLMScoringClient:
                 3. The quoted text MUST appear in the content above
                 4. Show CONCRETE REWRITE using format: "Change 'X' → 'Y'"
                 5. Explain WHY this small change improves the content
+                6. SPECIFY which aspect of {dimension} you're addressing (e.g., for Coherence: "Brand voice consistency", "CTA clarity", "Tone optimization", "Vocabulary refinement")
                 
                 Respond with JSON in this exact format:
                 {{
@@ -228,10 +243,16 @@ class LLMScoringClient:
                             "confidence": 0.7,
                             "severity": "low",
                             "evidence": "EXACT QUOTE: 'the actual text'",
-                            "suggestion": "Change 'the actual text' → 'the optimized text'. This is a minor optimization to [reason]."
+                            "suggestion": "[Specific Aspect]: [Brief explanation of current state and why it could be better]. Change 'the actual text' → 'the optimized text'. This enhances [specific benefit]."
                         }}
                     ]
                 }}
+                
+                EXAMPLE FOR COHERENCE:
+                "suggestion": "Call-to-Action Clarity: The phrase uses generic all-caps text that could be more specific and engaging. Change 'Explore ALL PRODUCTS' → 'Discover Our Complete Oral Care Collection'. This enhances coherence by using descriptive, brand-aligned language instead of generic CTAs."
+                
+                EXAMPLE FOR TRANSPARENCY:
+                "suggestion": "Timestamp Specificity: The vague time reference reduces transparency. Change 'Posted recently' → 'Published on January 15, 2024'. This enhances transparency by providing specific, verifiable dates."
                 """
             else:
                 # High score (0.9-0.95): Ask for improvement suggestions with concrete rewrites
