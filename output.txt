@@ -1,0 +1,31 @@
+INFO:ingestion.serper_search:Serper API request: query=procter and gamble, batch_size=10, page=1 (collected: 0/10)
+INFO:ingestion.serper_search:Serper API batch returned 7 results
+INFO:ingestion.serper_search:Serper search completed: collected 7 results for query: procter and gamble
+INFO:ingestion.serper_search:Serper API request: query=procter and gamble, batch_size=10, page=1 (collected: 0/30)
+INFO:ingestion.serper_search:Serper API batch returned 7 results
+INFO:ingestion.serper_search:Serper API request: query=procter and gamble, batch_size=10, page=2 (collected: 7/30)
+INFO:ingestion.serper_search:Serper API batch returned 10 results
+INFO:ingestion.serper_search:Serper API request: query=procter and gamble, batch_size=10, page=3 (collected: 17/30)
+INFO:ingestion.serper_search:Serper API batch returned 10 results
+INFO:ingestion.serper_search:Serper search completed: collected 27 results for query: procter and gamble
+INFO:ingestion.serper_search:[SERPER] Requested pool_size=30, received 27 search results for query=procter and gamble
+INFO:ingestion.page_fetcher:Attempting Playwright-rendered fetch for thin content: https://us.pg.com/
+WARNING:ingestion.page_fetcher:Fetching https://pginvestor.com/ returned 403
+INFO:ingestion.page_fetcher:Attempting Playwright-rendered fetch for https://pginvestor.com/ (domain config or AR_USE_PLAYWRIGHT)
+INFO:ingestion.page_fetcher:Attempting Playwright-rendered fetch for thin content: https://www.pgcareers.com/us/en
+INFO:ingestion.serper_search:Collected 5/5 successful pages for query=procter and gamble
+Found .env file at: /Users/andrewdeutsch/Documents/AR/.env
+Testing Serper search for query: 'procter and gamble'
+SERPER_API_KEY is set: 12f9...e937
+
+--- Testing search_serper (raw results) ---
+Found 7 raw results.
+Result 1: Procter & Gamble - https://us.pg.com/
+Result 2: Procter & Gamble - https://latam.pg.com/
+Result 3: Procter & Gamble - Wikipedia - https://en.wikipedia.org/wiki/Procter_%26_Gamble
+
+--- Testing collect_serper_pages (fetched content) ---
+Collected 5 pages.
+Page 1: Procter & Gamble - 994 bytes
+Page 2: Procter & Gamble - Wikipedia - 35092 bytes
+Page 3: Investor Relations | Procter & Gamble Investor Relations - 3000 bytes

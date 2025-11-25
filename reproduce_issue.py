@@ -1,6 +1,14 @@
 import os
 import logging
 import sys
+from dotenv import load_dotenv, find_dotenv
+
+# Load environment variables from .env file
+env_file = find_dotenv()
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+logger.info(f"Found .env file at: {env_file}")
+load_dotenv(env_file)
 
 # Add the project root to the python path
 sys.path.append(os.getcwd())

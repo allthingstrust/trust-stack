@@ -222,13 +222,10 @@ def collect_serper_pages(
     if url_collection_config:
         from ingestion.domain_classifier import classify_url, URLSourceType
 
-    try:
-        search_results = search_serper(query, size=pool_size)
-        logger.info('[SERPER] Requested pool_size=%d, received %d search results for query=%s',
-                   pool_size, len(search_results), query)
-    except Exception as e:
-        logger.warning('Serper search failed while collecting pages: %s', e)
-        search_results = []
+    # Let exceptions bubble up so the caller knows if configuration is wrong
+    search_results = search_serper(query, size=pool_size)
+    logger.info('[SERPER] Requested pool_size=%d, received %d search results for query=%s',
+               pool_size, len(search_results), query)
 
     if not search_results:
         logger.warning('[SERPER] No search results returned, returning empty list')
