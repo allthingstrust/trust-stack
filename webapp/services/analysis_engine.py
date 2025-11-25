@@ -313,5 +313,11 @@ def run_analysis(brand_id: str, keywords: List[str], sources: List[str], max_ite
                 if st.session_state['progress_container'] is not None:
                     st.session_state['progress_container'].empty()
                 st.session_state['progress_container'] = None
+                
+            # Also clear the placeholder itself
+            if 'progress_container_placeholder' in st.session_state:
+                if st.session_state['progress_container_placeholder'] is not None:
+                    st.session_state['progress_container_placeholder'].empty()
+                st.session_state['progress_container_placeholder'] = None
         except:
             pass

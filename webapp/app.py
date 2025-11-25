@@ -1612,6 +1612,16 @@ def show_results_page():
         except:
             pass
         st.session_state['progress_container'] = None
+        
+    # Also clear the placeholder itself to remove the purple box
+    if 'progress_container_placeholder' in st.session_state:
+        try:
+            if st.session_state['progress_container_placeholder'] is not None:
+                st.session_state['progress_container_placeholder'].empty()
+        except:
+            pass
+        # Remove it completely so it doesn't re-render empty space
+        del st.session_state['progress_container_placeholder']
 
     if not run_data:
         st.warning("⚠️ No analysis results available. Please run an analysis first.")

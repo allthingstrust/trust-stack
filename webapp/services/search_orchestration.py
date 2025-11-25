@@ -400,6 +400,12 @@ API Key set: {'Yes' if os.getenv('SERPER_API_KEY') else 'No'}
                     st.session_state['progress_container'].empty()
                 st.session_state['progress_container'] = None
 
+            # Also clear the placeholder itself
+            if 'progress_container_placeholder' in st.session_state:
+                if st.session_state['progress_container_placeholder'] is not None:
+                    st.session_state['progress_container_placeholder'].empty()
+                st.session_state['progress_container_placeholder'] = None
+
             # Clean up log handler if it was created
             if log_handler and search_logger:
                 try:
