@@ -1600,6 +1600,14 @@ def show_results_page():
     # Load last run or selected run
     run_data = st.session_state.get('last_run')
 
+    # Safety check: Ensure progress container is cleared
+    if 'progress_container' in st.session_state and st.session_state['progress_container'] is not None:
+        try:
+            st.session_state['progress_container'].empty()
+        except:
+            pass
+        st.session_state['progress_container'] = None
+
     if not run_data:
         st.warning("⚠️ No analysis results available. Please run an analysis first.")
         if st.button("← Back to Analysis"):

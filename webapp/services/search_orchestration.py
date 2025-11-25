@@ -352,7 +352,7 @@ API Key set: {'Yes' if os.getenv('SERPER_API_KEY') else 'No'}
                     progress_animator.show(f"Search complete! Found {brand_owned_count} brand + {third_party_count} 3rd-party URLs (including {social_count} social channels)", "✅")
                 else:
                     progress_animator.show(f"Search complete! Found {brand_owned_count} brand + {third_party_count} 3rd-party URLs", "✅")
-                progress_animator.clear()
+                
                 progress_bar.empty()
 
                 if social_count > 0:
@@ -388,7 +388,15 @@ API Key set: {'Yes' if os.getenv('SERPER_API_KEY') else 'No'}
         # Clean up progress indicators
         try:
             progress_bar.empty()
-            progress_animator.clear()
+            if 'progress_animator' in locals():
+                progress_animator.clear()
+            
+            # Ensure progress container is cleared from session state
+            if 'progress_container' in st.session_state:
+                if st.session_state['progress_container'] is not None:
+                    st.session_state['progress_container'].empty()
+                st.session_state['progress_container'] = None
+
             # Clean up log handler if it was created
             if log_handler and search_logger:
                 try:
