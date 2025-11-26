@@ -1755,8 +1755,9 @@ def show_results_page():
             dim_score = dimension_breakdown.get(dimension_key, {}).get('average', 1.0) * 100
             is_high_score = dim_score >= 80
 
-            # Only show dimensions that have detected issues OR are high scoring with successes
-            if not issues and not (is_high_score and successes):
+            # Only show dimensions that have detected issues OR are high scoring
+            # (even if no specific successes were extracted, the high score itself is a success)
+            if not issues and not is_high_score:
                 continue
 
             dimension_names = {
@@ -1770,8 +1771,11 @@ def show_results_page():
             dim_emoji_name, dim_subtitle = dimension_names[dimension_key]
 
             # Show issue count with score
-            if is_high_score and successes:
-                expander_label = f"{dim_emoji_name}: {len(successes)} strengths, {len(issues)} issues (Score {dim_score:.1f}/100)"
+            if is_high_score:
+                if successes:
+                    expander_label = f"{dim_emoji_name}: {len(successes)} strengths, {len(issues)} issues (Score {dim_score:.1f}/100)"
+                else:
+                    expander_label = f"{dim_emoji_name}: No issues found (Score {dim_score:.1f}/100)"
             else:
                 expander_label = f"{dim_emoji_name}: {len(issues)} issues found (Score {dim_score:.1f}/100)"
 
@@ -1787,12 +1791,15 @@ def show_results_page():
                 st.markdown("---")
 
                 # Display Successes for high-scoring dimensions
-                if is_high_score and successes:
+                if is_high_score:
                     st.markdown("### 🌟 Successes & Strengths")
                     st.markdown(f"**Great job! This content scores highly in {dimension_key.title()}.**")
                     
-                    for success in successes:
-                        st.success(f"**{success['success']}**: {success['evidence']}")
+                    if successes:
+                        for success in successes:
+                            st.success(f"**{success['success']}**: {success['evidence']}")
+                    else:
+                        st.success(f"**No specific issues detected**: The content performs well in this dimension.")
                     
                     st.markdown("---")
 
