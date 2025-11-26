@@ -772,7 +772,28 @@ def get_remedy_for_issue(issue_type: str, dimension: str, issue_items: List[Dict
                         else:
                             description = evidence if evidence and 'LLM:' not in evidence else "Issue detected"
                         
-                        example_items.append(f"• {url}{lang_indicator}\n  - {description}")
+                        # Use numbered format for structural issues too, to match the rest of the site
+                        # Format:
+                        # 1. {Description} (🌐 Translated from {Code})
+                        # 🔗 {URL}
+                        #     * From: {Title}
+                        
+                        item_lines = []
+                        
+                        # Only show language indicator if NOT English
+                        lang_indicator_str = ""
+                        if item.get('language', 'en') != 'en':
+                            lang_code = item.get('language', '').upper()
+                            lang_indicator_str = f" (🌐 Translated from {lang_code})"
+                            
+                        item_lines.append(f"{idx}. {description}{lang_indicator_str}")
+                        item_lines.append(f"🔗 {url}")
+                        
+                        if title:
+                            truncated_title = title[:60] + "..." if len(title) > 60 else title
+                            item_lines.append(f"    * From: {truncated_title}")
+                        
+                        example_items.append("\n".join(item_lines))
                     else:
                         # Numbered format with evidence for non-structural issues
                         if evidence and 'LLM:' not in evidence:

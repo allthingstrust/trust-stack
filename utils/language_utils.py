@@ -70,17 +70,40 @@ def _detect_language_fallback(text: str) -> str:
         'español', 'méxico'  # Spanish-specific words
     ]
     
-    # Count indicators
-    french_count = sum(1 for indicator in french_indicators if indicator in text_lower)
-    spanish_count = sum(1 for indicator in spanish_indicators if indicator in text_lower)
+    # Count indicators with stricter matching
+    french_count = 0
+    for indicator in french_indicators:
+        if indicator in text_lower:
+            french_count += 1
+            
+    spanish_count = 0
+    for indicator in spanish_indicators:
+        # For very short indicators like ' y ' or ' o ', ensure they are distinct words
+        if len(indicator.strip()) <= 2:
+            if indicator in text_lower:
+                spanish_count += 1
+        else:
+            if indicator in text_lower:
+                spanish_count += 1
+    
+    # English indicators to confirm English
+    english_indicators = [
+        ' the ', ' and ', ' of ', ' to ', ' in ', ' is ', ' you ', ' that ', ' it ',
+        ' he ', ' was ', ' for ', ' on ', ' are ', ' as ', ' with ', ' his ', ' they ',
+        ' at ', ' be ', ' this ', ' have ', ' from ', ' or ', ' one ', ' had ', ' by '
+    ]
+    english_count = sum(1 for indicator in english_indicators if indicator in text_lower)
     
     # Determine language based on indicator counts
-    if french_count > 3:
+    # Require a significant number of indicators to override default English
+    # and ensure it's significantly more than English indicators
+    
+    if french_count > 3 and french_count > english_count:
         return 'fr'
-    elif spanish_count > 3:
+    elif spanish_count > 3 and spanish_count > english_count:
         return 'es'
     
-    # Default to English if no strong indicators
+    # Default to English if no strong indicators or if English is dominant
     return 'en'
 
 

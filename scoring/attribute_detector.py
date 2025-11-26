@@ -1275,6 +1275,18 @@ class TrustStackAttributeDetector:
         meta = content.meta or {}
 
         # Check for privacy policy in multiple ways
+    
+        # 0. Check if the page ITSELF is a privacy policy
+        # If the URL contains "privacy" or "legal", it's likely the policy itself
+        if "privacy" in content.url.lower() or "legal" in content.url.lower() or "terms" in content.url.lower():
+             return DetectedAttribute(
+                attribute_id="privacy_policy_link_availability_clarity",
+                dimension="transparency",
+                label="Privacy Policy Link Availability & Clarity",
+                value=10.0,
+                evidence="Page appears to be a privacy policy or legal page",
+                confidence=0.95
+            )
 
         # 1. Check metadata for privacy policy URL
         has_privacy_url = any(key in meta for key in [
@@ -1291,7 +1303,10 @@ class TrustStackAttributeDetector:
             "privacy and terms",
             "cookie policy",
             "privacy center",
-            "your privacy"
+            "your privacy",
+            "legal",
+            "terms of use",
+            "terms of service"
         ]
 
         has_privacy_text = any(pattern in text for pattern in privacy_link_patterns)
@@ -1301,7 +1316,9 @@ class TrustStackAttributeDetector:
             "/privacy",
             "/privacy-policy",
             "/legal/privacy",
-            "/privacy-notice"
+            "/privacy-notice",
+            "/legal",
+            "/terms"
         ]
 
         has_privacy_url_pattern = any(pattern in text for pattern in privacy_url_patterns)
