@@ -156,7 +156,7 @@ DIMENSION ISSUE COUNTS (Items with specific defects):
         total_issues_count = len(issues)
         
         if total_issues_count > 0:
-            prompt += f"  - {dim.title()}: {total_issues_count} specific issues found across {unique_urls_with_issues} items\n"
+            prompt += f"  - {dim.title()}: {total_issues_count} specific issues detected (affecting {unique_urls_with_issues} unique items)\n"
 
 
     # Add specific problematic content examples
