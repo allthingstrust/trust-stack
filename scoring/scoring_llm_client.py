@@ -180,12 +180,13 @@ class LLMScoringClient:
                - hidden_sponsored_content, missing_data_source_citations
                - poor_readability, inappropriate_tone
             
-            8. CRITICAL - For VOCABULARY issues specifically:
-               - Start with the problem type: "Inconsistent terminology:", "Jargon mismatch:", "Brand voice deviation:", "Unclear wording:", etc.
+            8. CRITICAL - For VOCABULARY and TONE SHIFT issues specifically:
+               - Start with the problem type: "Inconsistent terminology:", "Jargon mismatch:", "Brand voice deviation:", "Unclear wording:", "Tone shift:", etc.
                - Explain WHY the flagged text is problematic
                - Then provide the EXACT QUOTE
                - Format: "[Problem Type]: [Explanation]. EXACT QUOTE: 'text from content'"
                - Example: "Jargon mismatch: The phrase 'Zone Enhancement Information' is technical jargon that doesn't match the plain-language style used elsewhere. EXACT QUOTE: 'Zone Enhancement Information'"
+               - DO NOT start the suggestion with "EXACT QUOTE" - you MUST provide an explanation first.
             
             IMPORTANT - Visual Hierarchy & Structure Awareness:
             If the content includes element markers like [HEADLINE], [SUBHEADLINE], [BODY_TEXT], [PRODUCT_LISTING]:
@@ -209,6 +210,7 @@ class LLMScoringClient:
             Suggesting changes to text that doesn't appear in the content provided
             Flagging capitalization differences between [HEADLINE] and [BODY_TEXT] as tone shifts
             For vocabulary: Just providing a quote without explaining what type of vocabulary problem it is
+            "EXACT QUOTE: 'some text'" (missing explanation)
             """
         else:
             # High score (0.9-1.0): Suggestions are optional, especially for very high scores

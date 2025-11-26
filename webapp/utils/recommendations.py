@@ -109,6 +109,10 @@ def extract_issues_from_items(items: List[Dict[str, Any]]) -> Dict[str, List[Dic
             suggestion = attr.get('suggestion')  # Extract LLM suggestion
             attr_id = attr.get('attribute_id') or attr.get('id', '')
 
+            # Normalize issue labels to ensure consolidation
+            if label.lower() == 'missing data source citations':
+                label = 'Data Source Citations for Claims'
+
             # Determine passing threshold for this attribute
             passing_threshold = PASSING_THRESHOLDS.get(attr_id, 10.0)
 
@@ -354,18 +358,27 @@ def get_remedy_for_issue(issue_type: str, dimension: str, issue_items: List[Dict
                     not suggestion.strip().startswith("EXACT QUOTE")
                 )
                 
-                # Also check if it's just a bare quote without explanation
-                # This catches: "EXACT QUOTE: 'some text'" with nothing else
-                is_bare_quote = (
-                    not has_aspect_prefix and 
-                    "Change '" not in suggestion and
-                    (len(suggestion) < 100 or "EXACT QUOTE:" in suggestion) and
-                    (suggestion.strip().startswith("EXACT QUOTE:") or suggestion.strip().startswith("'"))
+            # Check if it's a bare quote (applies to ALL issue types)
+            # This catches: "EXACT QUOTE: 'some text'" with nothing else
+            # Or just "'some text'" with nothing else
+            is_bare_quote = (
+                "Change '" not in suggestion and
+                (len(suggestion) < 100 or "EXACT QUOTE:" in suggestion) and
+                (suggestion.strip().startswith("EXACT QUOTE:") or suggestion.strip().startswith("'"))
+            )
+            
+            if is_bare_quote:
+                logger.warning(f"Filtering bare quote suggestion without explanation: {suggestion[:100]}")
+                continue
+
+            if is_improvement_opportunity:
+                # Check if suggestion has aspect prefix (format: "Aspect Name: explanation...")
+                # Ensure "EXACT QUOTE" is not treated as an aspect prefix
+                has_aspect_prefix = (
+                    ':' in suggestion and 
+                    suggestion.index(':') < 60 and 
+                    not suggestion.strip().startswith("EXACT QUOTE")
                 )
-                
-                if is_bare_quote:
-                    logger.warning(f"Filtering improvement opportunity without aspect context (bare quote): {suggestion[:100]}")
-                    continue
                 
                 if not has_aspect_prefix and "Change '" not in suggestion:
                     logger.warning(f"Filtering improvement opportunity without aspect prefix or concrete rewrite: {suggestion[:100]}")
@@ -574,7 +587,6 @@ def get_remedy_for_issue(issue_type: str, dimension: str, issue_items: List[Dict
             # Define structural issues that should show all URLs (not just max 3)
             structural_issues = [
                 'missing_privacy_policy',
-                'missing_data_source_citations',
                 'no_ai_disclosure',
                 'unclear_authorship',
                 'missing_metadata',
@@ -584,8 +596,9 @@ def get_remedy_for_issue(issue_type: str, dimension: str, issue_items: List[Dict
             # Check if this is a structural issue
             is_structural = any(pattern in issue_type.lower().replace(' ', '_') for pattern in structural_issues)
             
-            # Check if this is an improvement opportunity
+            # Check if this is an improvement opportunity OR other issue type requiring explanation
             is_improvement_opportunity = 'improvement' in issue_type.lower() or 'opportunity' in issue_type.lower()
+            requires_explanation = is_improvement_opportunity or 'vocabulary' in issue_type.lower() or 'tone' in issue_type.lower() or 'voice' in issue_type.lower()
             
             for idx, item in enumerate(issue_items, 1):
                 url = item.get('url', '').strip()
@@ -594,16 +607,24 @@ def get_remedy_for_issue(issue_type: str, dimension: str, issue_items: List[Dict
                 if url and url in added_urls:
                     continue
                 
-                # For improvement opportunities, apply the same validation as above
-                # Don't show items in fallback that were filtered out
-                if is_improvement_opportunity:
+                # For issues requiring explanation, apply validation
+                # Don't show items in fallback that were filtered out or lack explanation
+                if requires_explanation:
                     suggestion = item.get('suggestion', '')
                     
-                    # Skip if no suggestion
+                    # If no suggestion, check evidence for explanation
                     if not suggestion:
-                        continue
+                        evidence = item.get('evidence', '')
+                        # If evidence is just a quote, skip it
+                        if "EXACT QUOTE:" in evidence and len(evidence) < 100:
+                             # Check if there's text before "EXACT QUOTE"
+                             if evidence.strip().startswith("EXACT QUOTE:"):
+                                 continue
+                        elif evidence.strip().startswith("'") and len(evidence) < 100:
+                            continue
                     
                     # Check for hallucinations
+
                     prompt_phrases = [
                         "why didn't i get 100%",
                         "what specific thing could make this even better",
