@@ -1725,55 +1725,6 @@ def show_results_page():
 
     st.divider()
 
-    # Visualizations
-    col1, col2 = st.columns(2)
-
-    with col1:
-        # Rating Distribution Pie Chart
-        st.markdown("#### Rating Distribution")
-
-        fig_pie = px.pie(
-            values=[excellent, good, fair, poor],
-            names=['Excellent (80+)', 'Good (60-79)', 'Fair (40-59)', 'Poor (<40)'],
-            color_discrete_map={
-                'Excellent (80+)': '#2ecc71',
-                'Good (60-79)': '#3498db',
-                'Fair (40-59)': '#f39c12',
-                'Poor (<40)': '#e74c3c'
-            },
-            hole=0.3
-        )
-        fig_pie.update_traces(textposition='inside', textinfo='percent+label')
-        st.plotly_chart(fig_pie, use_container_width=True, config={'displayModeBar': False})
-
-    with col2:
-        # Rating Score Distribution Histogram
-        st.markdown("#### Score Distribution")
-
-        scores = [item.get('final_score', 0) for item in items]
-
-        fig_hist = go.Figure(data=[
-            go.Histogram(
-                x=scores,
-                nbinsx=20,
-                marker_color='#3498db',
-                opacity=0.7
-            )
-        ])
-        fig_hist.update_layout(
-            xaxis_title="Rating Score (0-100)",
-            yaxis_title="Number of Items",
-            showlegend=False,
-            height=350
-        )
-        # Add threshold lines
-        fig_hist.add_vline(x=80, line_dash="dash", line_color="green", annotation_text="Excellent")
-        fig_hist.add_vline(x=60, line_dash="dash", line_color="blue", annotation_text="Good")
-        fig_hist.add_vline(x=40, line_dash="dash", line_color="orange", annotation_text="Fair")
-        st.plotly_chart(fig_hist, use_container_width=True, config={'displayModeBar': False})
-
-    st.divider()
-
     # Remedies Section - NEW!
     st.markdown("### 🔧 Remedies: Recommended Fixes by Dimension")
 
@@ -1853,6 +1804,55 @@ def show_results_page():
                     st.markdown("")  # Spacing
     else:
         st.success("✅ No major issues detected! Your content shows strong trust signals across all dimensions.")
+
+    st.divider()
+
+    # Visualizations
+    col1, col2 = st.columns(2)
+
+    with col1:
+        # Rating Distribution Pie Chart
+        st.markdown("#### Rating Distribution")
+
+        fig_pie = px.pie(
+            values=[excellent, good, fair, poor],
+            names=['Excellent (80+)', 'Good (60-79)', 'Fair (40-59)', 'Poor (<40)'],
+            color_discrete_map={
+                'Excellent (80+)': '#2ecc71',
+                'Good (60-79)': '#3498db',
+                'Fair (40-59)': '#f39c12',
+                'Poor (<40)': '#e74c3c'
+            },
+            hole=0.3
+        )
+        fig_pie.update_traces(textposition='inside', textinfo='percent+label')
+        st.plotly_chart(fig_pie, use_container_width=True, config={'displayModeBar': False})
+
+    with col2:
+        # Rating Score Distribution Histogram
+        st.markdown("#### Score Distribution")
+
+        scores = [item.get('final_score', 0) for item in items]
+
+        fig_hist = go.Figure(data=[
+            go.Histogram(
+                x=scores,
+                nbinsx=20,
+                marker_color='#3498db',
+                opacity=0.7
+            )
+        ])
+        fig_hist.update_layout(
+            xaxis_title="Rating Score (0-100)",
+            yaxis_title="Number of Items",
+            showlegend=False,
+            height=350
+        )
+        # Add threshold lines
+        fig_hist.add_vline(x=80, line_dash="dash", line_color="green", annotation_text="Excellent")
+        fig_hist.add_vline(x=60, line_dash="dash", line_color="blue", annotation_text="Good")
+        fig_hist.add_vline(x=40, line_dash="dash", line_color="orange", annotation_text="Fair")
+        st.plotly_chart(fig_hist, use_container_width=True, config={'displayModeBar': False})
 
     st.divider()
 

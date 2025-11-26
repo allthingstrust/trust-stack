@@ -747,8 +747,39 @@ class TrustStackAttributeDetector:
         words = len(text.split())
         
         # First, try traditional sentence splitting (periods, exclamation, question marks)
+        # Use a more robust regex that handles multiple punctuation marks
         sentence_list = re.split(r'(?<=[\.\!\?])\s+', text)
-        sentence_list = [s.strip() for s in sentence_list if len(s.strip()) > 10]
+        sentence_list = [s.strip() for s in sentence_list if len(s.strip()) > 0]
+
+        # Secondary pass: Check for "run-on" sentences that are actually lists or unpunctuated blocks
+        refined_sentence_list = []
+        for sentence in sentence_list:
+            # If a sentence is very long (> 50 words) and contains newlines, it might be a list or block
+            if len(sentence.split()) > 50 and '\n' in sentence:
+                # Split by newlines
+                lines = [line.strip() for line in sentence.split('\n') if line.strip()]
+                refined_sentence_list.extend(lines)
+            else:
+                refined_sentence_list.append(sentence)
+        
+        sentence_list = refined_sentence_list
+
+        # Filter out "list-like" items from the sentence count
+        # Heuristic: Real sentences usually have at least 5 words. 
+        # Very short lines in a long block are likely list items (navigation, product names, etc.)
+        # We keep them if they end in punctuation, otherwise we treat them as fragments to ignore
+        # or count as short sentences depending on context.
+        # Here, we'll filter out very short fragments (< 5 words) that don't end in punctuation
+        # to avoid skewing the count with "Home", "About", "Contact", etc.
+        
+        final_sentences = []
+        for s in sentence_list:
+            word_count = len(s.split())
+            if word_count < 5 and not s[-1] in ['.', '!', '?']:
+                continue # Skip short fragments
+            final_sentences.append(s)
+            
+        sentence_list = final_sentences
 
         # If we have very few sentences for the amount of text, try splitting on newlines too
         # This handles product pages, navigation, lists, etc.
@@ -785,6 +816,9 @@ class TrustStackAttributeDetector:
         # Use median instead of mean to be robust against outliers
         sentence_word_counts.sort()
         n = len(sentence_word_counts)
+        if n == 0:
+            return None
+            
         if n % 2 == 0:
             median_words = (sentence_word_counts[n//2 - 1] + sentence_word_counts[n//2]) / 2
         else:
