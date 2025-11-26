@@ -1798,7 +1798,7 @@ def show_results_page():
                     if successes:
                         for success in successes:
                             st.success(f"**{success['success']}**: {success['evidence']}")
-                    else:
+                    elif not issues:
                         st.success(f"**No specific issues detected**: The content performs well in this dimension.")
                     
                     st.markdown("---")
@@ -2384,19 +2384,7 @@ def main():
 
         st.divider()
 
-        # API Status
-        st.markdown("### API Status")
-        cfg = APIConfig()
 
-        st.markdown("**Search Providers:**")
-        st.write("🌐 Brave:", "✅" if cfg.brave_api_key else "❌")
-        st.write("🔍 Serper:", "✅" if cfg.serper_api_key else "❌")
-
-        st.markdown("**Other APIs:**")
-        st.write("🔴 Reddit:", "✅" if (cfg.reddit_client_id and cfg.reddit_client_secret) else "❌")
-        st.write("📹 YouTube:", "✅" if cfg.youtube_api_key else "❌")
-
-        st.divider()
         st.caption("Trust Stack Rating v2.0")
         st.caption("5D Trust Framework")
 

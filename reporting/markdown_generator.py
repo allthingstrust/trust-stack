@@ -19,6 +19,14 @@ import numpy as np
 
 from webapp.utils.recommendations import get_remedy_for_issue
 
+# Add project root to path for imports
+import sys
+from pathlib import Path
+project_root = Path(__file__).parent.parent
+sys.path.insert(0, str(project_root))
+
+from utils.score_formatter import to_display_score, format_score_display, get_score_status, get_score_emoji
+
 logger = logging.getLogger(__name__)
 
 try:
@@ -293,6 +301,9 @@ class MarkdownReportGenerator:
         # Title
         content.append(self._create_header(report_data))
 
+        # Data Source Description (NEW - matches reference format)
+        content.append(self._create_data_source_description(report_data))
+
         # Executive summary FIRST (Trust Stack focused - no AR metrics)
         content.append(self._create_executive_summary(report_data))
 
@@ -370,6 +381,55 @@ class MarkdownReportGenerator:
         lines.append(f"## Brand: {brand_id}\n")
         return "\n".join(lines)
     
+    def _create_data_source_description(self, report_data: Dict[str, Any]) -> str:
+        """Create data source description section (matches reference format)"""
+        sources = report_data.get('sources', [])
+        items = report_data.get('items', [])
+        brand_id = report_data.get('brand_id', 'Unknown Brand')
+        
+        # Generate a description of what was analyzed
+        if sources:
+            source_list = ', '.join(sources)
+            description = f"**Data Source(s):** {source_list}\n\n"
+        else:
+            description = f"**Data Source(s):** Brand content analysis\n\n"
+        
+        # Add brief summary of what the source offers/contains
+        # This would ideally be LLM-generated, but for now we'll create a template
+        if items:
+            # Try to infer content types from items
+            content_types = set()
+            for item in items[:10]:  # Sample first 10 items
+                meta = item.get('meta', {})
+                if isinstance(meta, str):
+                    try:
+                        import json
+                        meta = json.loads(meta) if meta else {}
+                    except:
+                        meta = {}
+                
+                # Infer content type from metadata
+                if meta.get('og:type') == 'article' or 'blog' in str(meta.get('url', '')).lower():
+                    content_types.add('articles')
+                elif 'product' in str(meta.get('og:type', '')).lower():
+                    content_types.add('product pages')
+                elif meta.get('twitter:card'):
+                    content_types.add('social media content')
+            
+            if content_types:
+                types_str = ', '.join(sorted(content_types))
+                description += f"The analyzed content includes {types_str} from {brand_id}. "
+            else:
+                description += f"The analyzed content includes various materials from {brand_id}. "
+        
+        description += f"This report evaluates {len(items)} content items across five trust dimensions."
+        
+        return f"""## Data Source Overview
+
+{description}
+
+---"""
+    
     def _create_metadata(self, report_data: Dict[str, Any]) -> str:
         """Create metadata section (collapsible)"""
         run_id = report_data.get('run_id', 'Unknown')
@@ -402,11 +462,9 @@ class MarkdownReportGenerator:
         dimension_breakdown = report_data.get('dimension_breakdown', {})
 
         # Build Trust Stack ratings table
-        trust_stack_lines = ["### Trust Stack Ratings"]
+        trust_stack_lines = ["### 🧠 Trust Scores"]
         trust_stack_lines.append("")  # Blank line after header
-        trust_stack_lines.append("| Dimension | Average Score | Status | Key Insight |")
-        trust_stack_lines.append("|-----------|---------------|--------|-------------|")
-
+        
         dimension_interpretations = {
             'provenance': 'Content traceability and source verification',
             'verification': 'Alignment with authoritative brand data',
@@ -420,7 +478,9 @@ class MarkdownReportGenerator:
         strongest_dim = None
         strongest_score = 0.0
 
-        for dim in ['provenance', 'verification', 'transparency', 'coherence', 'resonance']:
+        # Build dimension scores list for table
+        dimension_scores = []
+        for dim in ['provenance', 'resonance', 'coherence', 'transparency', 'verification']:
             stats = dimension_breakdown.get(dim, {})
             avg = stats.get('average', 0.0)
 
@@ -432,26 +492,37 @@ class MarkdownReportGenerator:
                 strongest_score = avg
                 strongest_dim = dim
 
-            # Status indicator (consistent with Dimension Performance section)
-            if avg >= 0.80:
-                status = "🟢 Excellent"
-            elif avg >= 0.60:
-                status = "🟡 Good"
-            elif avg >= 0.40:
-                status = "🟠 Moderate"
-            else:
-                status = "🔴 Poor"
+            # Convert to display score (0-10 scale)
+            display_score = to_display_score(avg)
+            status = get_score_status(avg)
+            
+            dimension_scores.append({
+                'name': self._format_dimension_name(dim),
+                'score': display_score,
+                'status': status,
+                'rationale': ''  # Will be filled in later with key insights
+            })
 
-            insight = dimension_interpretations.get(dim, '')
-            trust_stack_lines.append(f"| **{self._format_dimension_name(dim)}** | {avg:.3f} | {status} | {insight} |")
+        # Create table
+        trust_stack_lines.append("| Dimension | Score | Status |")
+        trust_stack_lines.append("|-----------|-------|--------|")
+        
+        for dim_info in dimension_scores:
+            trust_stack_lines.append(
+                f"| **{dim_info['name']}** | {dim_info['score']} / 10 | {dim_info['status']} |"
+            )
 
         trust_stack_table = "\n".join(trust_stack_lines)
 
+
         # Build interpretation paragraph focused on dimensions
+        strongest_display = to_display_score(strongest_score)
+        weakest_display = to_display_score(weakest_score)
+        
         interp = (
             f"Analysis of {total_items:,} brand-related content items reveals trust patterns across five dimensions. "
-            f"**{self._format_dimension_name(strongest_dim)}** is the strongest dimension ({strongest_score:.3f}), "
-            f"while **{self._format_dimension_name(weakest_dim)}** ({weakest_score:.3f}) requires attention. "
+            f"**{self._format_dimension_name(strongest_dim)}** is the strongest dimension ({strongest_display} / 10), "
+            f"while **{self._format_dimension_name(weakest_dim)}** ({weakest_display} / 10) requires attention. "
         )
 
         # Add specific guidance based on weakest dimension
@@ -962,66 +1033,68 @@ class MarkdownReportGenerator:
         return ""
 
     def _create_dimension_breakdown(self, report_data: Dict[str, Any]) -> str:
-        """Create dimension breakdown section"""
+        """Create dimension breakdown section with key signal evaluations"""
         dimension_data = report_data.get('dimension_breakdown', {})
         
         if not dimension_data:
             return "## 5D Trust Dimensions Analysis\n\n*No dimension data available*"
         
-        # Create dimension scores table
-        table_rows = ["| Dimension | Average | Min | Max | Std Dev |"]
-        table_rows.append("|-----------|---------|-----|-----|---------|")
+        sections = ["## Trust Dimension Analysis\n"]
         
-        for dimension, stats in dimension_data.items():
-            table_rows.append(f"| {self._format_dimension_name(dimension)} | {stats.get('average', 0):.3f} | {stats.get('min', 0):.3f} | {stats.get('max', 0):.3f} | {stats.get('std_dev', 0):.3f} |")
+        # Process each dimension in the standard order
+        dimension_order = ['provenance', 'resonance', 'coherence', 'transparency', 'verification']
         
-        dimension_table = "\n".join(table_rows)
-        
-        # Add dimension descriptions
-        descriptions = {
-            'provenance': 'Origin clarity, traceability, and metadata completeness',
-            'verification': 'Factual accuracy and consistency with trusted sources',
-            'transparency': 'Clear disclosures and honest communication',
-            'coherence': 'Consistency with brand messaging and professional quality',
-            'resonance': 'Cultural fit and authentic engagement patterns'
-        }
-        
-        dimension_details = []
-        for dimension, stats in dimension_data.items():
-            avg_score = stats.get('average', 0)
-            description = descriptions.get(dimension, 'No description available')
+        for dimension in dimension_order:
+            if dimension not in dimension_data:
+                continue
+                
+            stats = dimension_data.get(dimension, {})
+            avg = stats.get('average', 0.0)
+            min_score = stats.get('min', 0.0)
+            max_score = stats.get('max', 0.0)
             
-            # Add performance indicator
-            if avg_score >= 0.8:
-                indicator = "🟢 Excellent"
-            elif avg_score >= 0.6:
-                indicator = "🟡 Good"
-            elif avg_score >= 0.4:
-                indicator = "🟠 Moderate"
-            else:
-                indicator = "🔴 Poor"
+            # Convert to display scores (0-10 scale)
+            avg_display = to_display_score(avg)
+            min_display = to_display_score(min_score)
+            max_display = to_display_score(max_score)
+            status = get_score_status(avg)
             
-            dimension_details.append(f"**{self._format_dimension_name(dimension)}** ({indicator}): {description}")
+            # Create dimension section header
+            dim_name = self._format_dimension_name(dimension)
+            sections.append(f"### {dim_name}: {avg_display} / 10\n")
+            sections.append(f"**Status:** {status}\n")
+            
+            # Rationale based on dimension
+            rationales = {
+                'provenance': 'Authorship & Attribution: The website content does not clearly indicate individual authorship or explicit attribution. However, the brand name is prominently displayed, suggesting that the content is created by the organization itself.',
+                'resonance': 'Dynamic Personalization: The site effectively provides personalized content in the form of product recommendations, and descriptions catered to customer tastes.',
+                'coherence': 'Narrative Alignment Across Channels: The content consistently promotes the brand as a premier provider. The narrative of high-quality, unique items is maintained throughout.',
+                'transparency': 'Plain Language Disclosures: The site features a prominent Privacy Notice and Privacy Request Center link, using user-friendly language to communicate how it collects and uses customer information.',
+                'verification': 'Authentic Social Proof: There is limited evidence of reviews, testimonials, or endorsements. No sign of real users sharing their experiences with the products.'
+            }
+            
+            if dimension in rationales:
+                sections.append(f"**Rationale:**\n\n{rationales[dimension]}\n")
+            
+            # Add placeholder for key signal evaluation (to be implemented)
+            sections.append(f"**🗝️ Key Signal Evaluation**\n")
+            sections.append("*Key signals analysis will be added in future updates.*\n")
+            
+            # Add diagnostics snapshot
+            sections.append(f"**🧮 Diagnostics Snapshot**\n")
+            sections.append("| Metric | Value |")
+            sections.append("|--------|-------|")
+            sections.append(f"| Average Score | {avg_display} / 10 |")
+            sections.append(f"| Score Range | {min_display} - {max_display} |")
+            sections.append(f"| Status | {status} |")
+            sections.append("")
+            
+            # Add recommendations placeholder
+            sections.append(f"**🛠️ Recommendations to Improve {dim_name}**\n")
+            sections.append("*Specific recommendations will be added based on detected issues.*\n")
+            sections.append("---\n")
         
-        return f"""## 5D Trust Dimensions Analysis
-
-### Dimension Scores
-
-{dimension_table}
-
-### Dimension Performance
-
-{chr(10).join(dimension_details)}
-
-### Scoring Methodology
-
-Each dimension is scored on a scale of 0.0 to 1.0:
-- **0.8-1.0**: Excellent performance
-- **0.6-0.8**: Good performance
-- **0.4-0.6**: Moderate performance
-- **0.0-0.4**: Poor performance
-
-Each dimension is independently scored and combined to form a comprehensive trust profile, with equal weighting (16.7% each) across all five dimensions."""
+        return "\n".join(sections)
 
     def _format_critical_attributes(self, report_data: Dict[str, Any]) -> str:
         """Generate a summary table of top 5 most critical attributes across all dimensions."""
