@@ -1306,7 +1306,12 @@ class TrustStackAttributeDetector:
             "your privacy",
             "legal",
             "terms of use",
-            "terms of service"
+            "terms of service",
+            "cookie preferences",
+            "cookie settings",
+            "personal information",
+            "data privacy",
+            "legal notice"
         ]
 
         has_privacy_text = any(pattern in text for pattern in privacy_link_patterns)
