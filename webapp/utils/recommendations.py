@@ -159,6 +159,90 @@ def extract_issues_from_items(items: List[Dict[str, Any]]) -> Dict[str, List[Dic
     return dimension_issues
 
 
+def extract_successes_from_items(items: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, Any]]]:
+    """
+    Extract specific successes (high-scoring attributes) from content items grouped by dimension.
+
+    Args:
+        items: List of analyzed content items with detected attributes
+
+    Returns:
+        Dictionary mapping dimension to list of specific successes found
+    """
+    dimension_successes = {
+        'provenance': [],
+        'verification': [],
+        'transparency': [],
+        'coherence': [],
+        'resonance': []
+    }
+
+    # Define success threshold (attributes with value >= 8.0 are considered successes)
+    SUCCESS_THRESHOLD = 8.0
+
+    for item in items:
+        meta = item.get('meta')
+        
+        # Ensure meta is always a dict
+        if meta is None:
+            meta = {}
+        elif isinstance(meta, str):
+            try:
+                meta = json.loads(meta)
+            except:
+                meta = {}
+        elif not isinstance(meta, dict):
+            meta = {}
+
+        # Extract detected attributes
+        detected_attrs = meta.get('detected_attributes', [])
+        title = meta.get('title') or meta.get('name') or 'Unknown content'
+        title = title[:60]
+        url = meta.get('source_url') or meta.get('url') or ''
+        language = meta.get('language', 'en')
+
+        for attr in detected_attrs:
+            dimension = attr.get('dimension', 'unknown')
+            value = attr.get('value', 5)
+            evidence = attr.get('evidence', '')
+            label = attr.get('label', '')
+            
+            # Report if value is above the success threshold
+            if dimension in dimension_successes and value >= SUCCESS_THRESHOLD:
+                success_dict = {
+                    'title': title,
+                    'url': url,
+                    'success': label,
+                    'evidence': evidence,
+                    'value': value,
+                    'language': language
+                }
+                dimension_successes[dimension].append(success_dict)
+
+        # Check applied_rules for high scores
+        for rule in item.get('applied_rules', []):
+            if rule.get('value', 0) >= SUCCESS_THRESHOLD:
+                dimension = rule.get('dimension', 'unknown').lower()
+                success_label = rule.get('label') or rule.get('id')
+                
+                if dimension not in dimension_successes:
+                    dimension_successes[dimension] = []
+                
+                # Check if this success is already added (avoid duplicates)
+                existing_successes = [s['success'] for s in dimension_successes[dimension] if s['url'] == url]
+                if success_label not in existing_successes:
+                    dimension_successes[dimension].append({
+                        'title': title,
+                        'url': url,
+                        'success': success_label,
+                        'evidence': rule.get('reason', 'High score detected by scoring rule'),
+                        'value': rule.get('value'),
+                        'language': language
+                    })
+
+    return dimension_successes
+
+
 def get_remedy_for_issue(issue_type: str, dimension: str, issue_items: List[Dict[str, Any]] = None) -> Dict[str, str]:
     """
     Get specific remedy recommendation for a detected issue type with contextual examples.
@@ -186,13 +270,13 @@ def get_remedy_for_issue(issue_type: str, dimension: str, issue_items: List[Dict
         'Schema Compliance': 'Implement schema.org structured data markup (JSON-LD) for all content types. This helps search engines understand your content and can improve visibility and trust signals.',
         'Metadata Completeness': 'Add complete metadata to all pages. Required elements: title tag, meta description, author attribution, publication/modified date, Open Graph tags (og:title, og:description, og:image), and Twitter Card tags.',
         'unclear_authorship': 'Add clear author attribution to all content. For blog posts and articles: include visible bylines with author names and optional author bio pages. For corporate pages and landing pages: add schema.org markup with author/publisher information using JSON-LD format, include <meta name="author"> tags, or add subtle footer attribution like "Content by [Team/Name]". Create an About page listing content contributors and link to it from main pages.',
-        'missing_metadata': 'Add complete metadata to all pages. Required elements: title tag, meta description, author attribution, publication/modified date, Open Graph tags (og:title, og:description, og:image), and Twitter Card tags. Use tools like Google Rich Results Test to validate your metadata.',
+        'missing_metadata': 'Add complete metadata to all pages. Required elements: title tag, meta description, author attribution, publication/modified date, Open Graph tags (og.title, og.description, og.image), and Twitter Card tags. Use tools like Google Rich Results Test to validate your metadata.',
         'no_schema_markup': 'Implement schema.org structured data markup (JSON-LD) for all content types. This helps search engines understand your content and can improve visibility and trust signals. Common schema types: Article, Product, Organization, LocalBusiness, FAQPage.',
 
         # Verification
         'Ad/Sponsored Label Consistency': 'Clearly label all sponsored content and advertisements. Use consistent, prominent labels: "Sponsored", "Ad", "Paid Partnership", or "Promoted". Ensure labels appear: on social media posts, in email campaigns, on website promotional content. Labels must be visible before user interaction.',
         'Agent Safety Guardrail Presence': 'Implement content safety guardrails and moderation policies for AI systems. Document publicly: what topics AI will/won\'t discuss, how harmful content is filtered, escalation procedures. Test guardrails regularly with adversarial inputs.',
-        'Claim-to-source traceability': 'Add citations and inline references for all factual claims. Each claim should link to an authoritative, verifiable source (research papers, official statistics, primary sources). Avoid unsourced assertions.',
+        'Claim traceability': 'Add citations and inline references for all factual claims. Ensure every statistic or data point links to a verifiable source (research papers, official statistics, primary sources). Avoid unsourced assertions.',
         'Engagement Authenticity Ratio': 'Monitor engagement metrics for bot activity and fake engagement. Look for: sudden spikes in followers/likes, accounts with no profile pictures, generic comments, engagement from inactive accounts. Remove fake engagement and report bot accounts. Focus on organic community building.',
         'Influencer/Partner Identity Verified': 'Verify all influencer and partner identities before collaboration. Check for: platform verification badges (blue checkmarks), consistent presence across platforms, genuine audience engagement, professional credentials. Display verification status on partnership content.',
         'Review Authenticity Confidence': 'Implement verified review systems with purchase verification. Flag suspicious patterns: multiple reviews from same IP, identical phrasing, reviews posted in rapid succession, overly promotional language. Consider implementing CAPTCHA or email verification for reviewers.',

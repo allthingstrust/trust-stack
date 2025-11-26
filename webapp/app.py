@@ -43,7 +43,10 @@ from webapp.utils.url_utils import (
 )
 from webapp.utils.logging_utils import StreamlitLogHandler, ProgressAnimator
 from webapp.utils.recommendations import (
-    extract_issues_from_items, get_remedy_for_issue, generate_rating_recommendation
+    extract_issues_from_items,
+    extract_successes_from_items,
+    get_remedy_for_issue,
+    generate_rating_recommendation
 )
 
 # Import service modules
@@ -1726,9 +1729,10 @@ def show_results_page():
     st.divider()
 
     # Remedies Section - NEW!
-    st.markdown("### 🔧 Remedies: Recommended Fixes by Dimension")
+    st.markdown("### 🔧 Detailed Analysis: Remedies & Successes")
 
     dimension_issues = extract_issues_from_items(items)
+    dimension_successes = extract_successes_from_items(items)
 
     # Also check dimension scores to ensure we show remedies for low-scoring dimensions
     # even if no specific attributes were detected
@@ -1740,18 +1744,20 @@ def show_results_page():
     total_issues = sum(issue_counts.values())
     dimensions_with_issues = len([c for c in issue_counts.values() if c > 0])
 
-    if dimensions_with_issues > 0:
+    if dimensions_with_issues > 0 or any(dimension_breakdown.get(k, {}).get('average', 0) >= 0.8 for k in ['provenance', 'verification', 'transparency', 'coherence', 'resonance']):
         st.markdown(f"**Found {total_issues} specific issues across {dimensions_with_issues} dimensions**")
 
         # Display remedies for each dimension with detected issues
         for dimension_key in ['provenance', 'verification', 'transparency', 'coherence', 'resonance']:
             issues = dimension_issues.get(dimension_key, [])
+            successes = dimension_successes.get(dimension_key, [])
             
-            # Only show dimensions that have detected issues
-            if not issues:
-                continue
-
             dim_score = dimension_breakdown.get(dimension_key, {}).get('average', 1.0) * 100
+            is_high_score = dim_score >= 80
+
+            # Only show dimensions that have detected issues OR are high scoring with successes
+            if not issues and not (is_high_score and successes):
+                continue
 
             dimension_names = {
                 'provenance': ('🔗 Provenance', 'Origin & Metadata Issues'),
@@ -1764,44 +1770,66 @@ def show_results_page():
             dim_emoji_name, dim_subtitle = dimension_names[dimension_key]
 
             # Show issue count with score
-            expander_label = f"{dim_emoji_name}: {len(issues)} issues found (Score {dim_score:.1f}/100)"
+            if is_high_score and successes:
+                expander_label = f"{dim_emoji_name}: {len(successes)} strengths, {len(issues)} issues (Score {dim_score:.1f}/100)"
+            else:
+                expander_label = f"{dim_emoji_name}: {len(issues)} issues found (Score {dim_score:.1f}/100)"
 
-            with st.expander(expander_label, expanded=(dimension_key == min(issue_counts, key=lambda k: (issue_counts[k], -dimension_breakdown.get(k, {}).get('average', 1.0)*100)) if issue_counts else False)):
+            # Determine if expanded: expand if it has the most issues OR if it's the highest scoring one with successes (if no issues)
+            is_expanded = False
+            if issue_counts and dimension_key == min(issue_counts, key=lambda k: (issue_counts[k], -dimension_breakdown.get(k, {}).get('average', 1.0)*100)):
+                is_expanded = True
+            elif not issue_counts and is_high_score:
+                is_expanded = True
+
+            with st.expander(expander_label, expanded=is_expanded):
                 st.markdown(f"**{dim_subtitle}**")
                 st.markdown("---")
 
+                # Display Successes for high-scoring dimensions
+                if is_high_score and successes:
+                    st.markdown("### 🌟 Successes & Strengths")
+                    st.markdown(f"**Great job! This content scores highly in {dimension_key.title()}.**")
+                    
+                    for success in successes:
+                        st.success(f"**{success['success']}**: {success['evidence']}")
+                    
+                    st.markdown("---")
+
                 # Group issues by type
-                issues_by_type = {}
-                for issue in issues:
-                    issue_type = issue['issue']
-                    if issue_type not in issues_by_type:
-                        issues_by_type[issue_type] = []
-                    issues_by_type[issue_type].append(issue)
+                if issues:
+                    st.markdown("### ⚠️ Areas for Improvement")
+                    issues_by_type = {}
+                    for issue in issues:
+                        issue_type = issue['issue']
+                        if issue_type not in issues_by_type:
+                            issues_by_type[issue_type] = []
+                        issues_by_type[issue_type].append(issue)
 
-                # Display each issue type with affected pages
-                for issue_type, type_issues in issues_by_type.items():
-                    st.markdown(f"**⚠️ {issue_type}** ({len(type_issues)} occurrence{'s' if len(type_issues) > 1 else ''})")
+                    # Display each issue type with affected pages
+                    for issue_type, type_issues in issues_by_type.items():
+                        st.markdown(f"**⚠️ {issue_type}** ({len(type_issues)} occurrence{'s' if len(type_issues) > 1 else ''})")
 
-                    # Show remedy recommendation with specific examples from detected issues
-                    remedy_data = get_remedy_for_issue(issue_type, dimension_key, issue_items=type_issues)
-                    if remedy_data:
-                        # Display specific fix in a white box
-                        recommended_fix = remedy_data.get('recommended_fix', '')
-                        if recommended_fix:
-                            st.markdown(f"""
-                            <div style="background-color: white; color: #333333; padding: 1rem; border-radius: 0.5rem; border: 1px solid #e0e0e0; margin-bottom: 1rem;">
-                                <strong>💡 Recommended Fix:</strong><br><br>
-                                {recommended_fix.replace(chr(10), '<br>')}
-                            </div>
-                            """, unsafe_allow_html=True)
+                        # Show remedy recommendation with specific examples from detected issues
+                        remedy_data = get_remedy_for_issue(issue_type, dimension_key, issue_items=type_issues)
+                        if remedy_data:
+                            # Display specific fix in a white box
+                            recommended_fix = remedy_data.get('recommended_fix', '')
+                            if recommended_fix:
+                                st.markdown(f"""
+                                <div style="background-color: white; color: #333333; padding: 1rem; border-radius: 0.5rem; border: 1px solid #e0e0e0; margin-bottom: 1rem;">
+                                    <strong>💡 Recommended Fix:</strong><br><br>
+                                    {recommended_fix.replace(chr(10), '<br>')}
+                                </div>
+                                """, unsafe_allow_html=True)
 
-                        # Display general best practice in a dropdown
-                        general_practice = remedy_data.get('general_best_practice', '')
-                        if general_practice:
-                            with st.expander(f"💡 General Best Practice for {issue_type.lower()}"):
-                                st.info(general_practice)
+                            # Display general best practice in a dropdown
+                            general_practice = remedy_data.get('general_best_practice', '')
+                            if general_practice:
+                                with st.expander(f"💡 General Best Practice for {issue_type.lower()}"):
+                                    st.info(general_practice)
 
-                    st.markdown("")  # Spacing
+                        st.markdown("")  # Spacing
     else:
         st.success("✅ No major issues detected! Your content shows strong trust signals across all dimensions.")
 

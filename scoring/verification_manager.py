@@ -106,9 +106,9 @@ class VerificationManager:
         if not search_results:
             return {
                 "claim": claim,
-                "status": "unverified",
-                "confidence": 0.0,
-                "reasoning": "No search results found."
+                "status": "UNVERIFIED",
+                "confidence": 0.9,
+                "reasoning": "No search results found to support this claim."
             }
             
         # Format context
@@ -183,12 +183,12 @@ class VerificationManager:
                     "evidence": f"Claim: '{c['claim']}'\nReasoning: {c.get('reasoning', '')}",
                     "suggestion": "Remove or correct this claim based on external evidence."
                 })
-            elif c.get('status') == 'UNVERIFIED' and c.get('confidence', 0) > 0.5:
+            elif c.get('status') == 'UNVERIFIED':
                  issues.append({
                     "type": "unverified_claims",
-                    "confidence": 0.6, # Lower confidence for unverified
+                    "confidence": 0.8, # Higher confidence so it passes the UI threshold
                     "severity": "medium",
-                    "evidence": f"Claim: '{c['claim']}' could not be verified.",
+                    "evidence": f"Claim: '{c['claim']}' could not be verified. {c.get('reasoning', '')}",
                     "suggestion": "Add a citation or source for this claim."
                 })
                 

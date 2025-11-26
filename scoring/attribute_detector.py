@@ -1368,9 +1368,33 @@ class TrustStackAttributeDetector:
         return None
 
     def _detect_claim_traceability(self, content: NormalizedContent) -> Optional[DetectedAttribute]:
-        """Detect claim-to-source traceability (placeholder)"""
-        # TODO: Implement claim linking
-        return None
+        """Detect claim-to-source traceability"""
+        # Reuse logic from _detect_citations since it covers the same ground
+        # (detecting data claims and checking for citations)
+        
+        # We'll use a slightly stricter threshold or different logic if needed,
+        # but for now, the core requirement is the same: claims need sources.
+        
+        # Call the existing citation detector
+        citation_result = self._detect_citations(content)
+        
+        if not citation_result:
+            return None
+            
+        # Map the result to the Verification dimension
+        # If citations are missing (value < 10), it's a traceability issue
+        
+        # We only want to report this if there's an issue (value < 10)
+        # or if we want to give credit for good traceability
+        
+        return DetectedAttribute(
+            attribute_id="claim_to_source_traceability",
+            dimension="verification",
+            label="Claim traceability",  # Must match rubric.json
+            value=citation_result.value,
+            evidence=citation_result.evidence,
+            confidence=citation_result.confidence
+        )
 
     def _detect_engagement_authenticity(self, content: NormalizedContent) -> Optional[DetectedAttribute]:
         """Detect engagement authenticity ratio"""

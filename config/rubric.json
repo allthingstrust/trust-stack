@@ -1785,7 +1785,7 @@
     },
     {
       "id": "claim_to_source_traceability",
-      "label": "Claim-to-source traceability",
+      "label": "Claim traceability",
       "match_meta": [
         "claim",
         "source",
@@ -1796,7 +1796,7 @@
       "enabled": true,
       "source_row": {
         "Unified Dimension": "Verification",
-        "Attribute (Objective Signal)": "Claim-to-source traceability",
+        "Attribute (Objective Signal)": "Claim traceability: Add citations and inline references for all factual claims. Ensure every statistic or data point links to a verifiable source.",
         "How to Collect (API/Scrape)": "Link each claim to source URL/doc",
         "Field Type": "integer",
         "Scoring Rule (1\u201310)": "10 if all claims traced",
