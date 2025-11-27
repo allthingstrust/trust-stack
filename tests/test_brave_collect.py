@@ -11,7 +11,7 @@ def test_collect_skips_thin_and_reaches_target(monkeypatch):
     monkeypatch.setattr(brave_search, 'search_brave', lambda q, size: [{'url': u, 'title': f't{i}'} for i, u in enumerate(urls)])
 
     # Fake fetch_page: first two are thin (simulate 403/blocked body), later ones are full
-    def fake_fetch(url):
+    def fake_fetch(url, browser_manager=None):
         if url.endswith('page0') or url.endswith('page1'):
             return {'title': '', 'body': '', 'url': url}
         return {'title': 'Good', 'body': 'x' * 500, 'url': url}
@@ -41,7 +41,7 @@ def test_collect_respects_robots_disallow(monkeypatch):
     monkeypatch.setattr(brave_search, 'search_brave', lambda q, size: [{'url': u} for u in urls])
 
     called = []
-    def fake_fetch(url):
+    def fake_fetch(url, browser_manager=None):
         called.append(url)
         return {'title': 'OK', 'body': 'x' * 300, 'url': url}
 

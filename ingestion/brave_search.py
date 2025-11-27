@@ -19,6 +19,7 @@ import time
 import threading
 import re
 from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # Import fetch configuration module
 from ingestion.fetch_config import (
@@ -29,30 +30,15 @@ from ingestion.fetch_config import (
     get_retry_config,
 )
 
-# Rate limiting: minimum interval (seconds) between outbound Brave requests
-_BRAVE_REQUEST_INTERVAL = float(os.getenv('BRAVE_REQUEST_INTERVAL', '1.2'))
-_LAST_BRAVE_REQUEST_TS = 0.0
-_BRAVE_RATE_LOCK = threading.Lock()
+# Per-domain rate limiting (allows parallel requests to different domains)
+from ingestion.rate_limiter import PerDomainRateLimiter
+_rate_limiter = PerDomainRateLimiter(
+    default_interval=float(os.getenv('BRAVE_REQUEST_INTERVAL', '2.0'))
+)
 
 # Session management for connection pooling and cookie handling
 _SESSIONS_CACHE: Dict[str, requests.Session] = {}
 _SESSIONS_LOCK = threading.Lock()
-
-
-def _wait_for_rate_limit():
-    """Ensure at least _BRAVE_REQUEST_INTERVAL seconds between requests."""
-    global _LAST_BRAVE_REQUEST_TS
-    if _BRAVE_REQUEST_INTERVAL <= 0:
-        return
-    with _BRAVE_RATE_LOCK:
-        now = time.monotonic()
-        elapsed = now - _LAST_BRAVE_REQUEST_TS
-        if elapsed < _BRAVE_REQUEST_INTERVAL:
-            to_sleep = _BRAVE_REQUEST_INTERVAL - elapsed
-            time.sleep(to_sleep)
-        # Update the timestamp to now after sleeping
-        _LAST_BRAVE_REQUEST_TS = time.monotonic()
-    # end _wait_for_rate_limit
 
 
 def _get_session(domain: str) -> requests.Session:
@@ -103,7 +89,7 @@ def _is_allowed_by_robots(url: str, user_agent: str | None = None) -> bool:
         robots_url = f"{key}/robots.txt"
         rp = robotparser.RobotFileParser()
         try:
-            _wait_for_rate_limit()
+            _rate_limiter.wait_for_domain(robots_url)
             r = requests.get(robots_url, headers={'User-Agent': ua}, timeout=5)
             if r.status_code == 200 and r.text:
                 rp.parse(r.text.splitlines())
@@ -244,7 +230,7 @@ def search_brave(query: str, size: int = 10) -> List[Dict[str, str]]:
 
                 logger.info('Using Brave API endpoint for query=%s (api_auth=%s)', query, api_auth)
                 # Prepare request (if query-param auth, append below)
-                _wait_for_rate_limit()
+                _rate_limiter.wait_for_domain(BRAVE_SEARCH_URL)
                 # Use helper-style retry for robustness
                 # Allow timeout override via environment variable
                 api_timeout = int(os.getenv('BRAVE_API_TIMEOUT', '10'))
@@ -372,7 +358,7 @@ def search_brave(query: str, size: int = 10) -> List[Dict[str, str]]:
     logger.info('Falling back to Brave HTML scraping for query=%s', query)
     # Fallback to HTML scraping (only when API key is not present or fallback explicitly enabled)
     params = {"q": query, "source": "web", "count": size}
-    _wait_for_rate_limit()
+    _rate_limiter.wait_for_domain(BRAVE_SEARCH_URL)
     # Use simple retries/backoff for the public HTML scrape path
     # Allow timeout override via environment variable
     html_timeout = int(os.getenv('BRAVE_API_TIMEOUT', '10'))
@@ -1028,7 +1014,127 @@ def _extract_body_text(soup: BeautifulSoup) -> str:
     return body
 
 
-def fetch_page(url: str, timeout: int = 10) -> Dict[str, str]:
+def _fetch_with_playwright(url: str, user_agent: str, browser_manager=None) -> Dict[str, str]:
+    """Fetch a URL using Playwright and extract content.
+    
+    Args:
+        url: URL to fetch
+        user_agent: User agent string
+        browser_manager: Optional PlaywrightBrowserManager instance for persistent browser
+        
+    Returns:
+        Dict with title, body, url, terms, and privacy keys
+    """
+    page = None
+    browser = None
+    pw_context = None
+    
+    try:
+        # Use persistent browser if available, otherwise launch new browser
+        if browser_manager and browser_manager.is_started:
+            page = browser_manager.get_page(user_agent=user_agent)
+            if not page:
+                logger.warning('Failed to get page from browser manager for %s', url)
+                return {"title": "", "body": "", "url": url, "terms": "", "privacy": ""}
+        else:
+            # Fallback to per-page browser launch
+            if not _PLAYWRIGHT_AVAILABLE:
+                return {"title": "", "body": "", "url": url, "terms": "", "privacy": ""}
+            pw_context = sync_playwright().start()
+            browser = pw_context.chromium.launch(headless=True)
+            page = browser.new_page(user_agent=user_agent)
+        
+        # Navigate to page
+        page.goto(url, timeout=20000)
+        
+        # Wait for body
+        try:
+            page.wait_for_selector('body', timeout=8000)
+        except Exception:
+            pass
+        
+        page_content = page.content()
+        page_title = page.title() or ''
+        
+        # Try multiple extraction strategies for rendered content
+        page_body = ""
+        try:
+            # Strategy 1: article tag
+            article = page.query_selector('article')
+            if article:
+                page_body = article.inner_text()
+
+            # Strategy 2: main tag or role="main"
+            if not page_body or len(page_body) < 150:
+                main = page.query_selector('main') or page.query_selector('[role="main"]')
+                if main:
+                    page_body = main.inner_text()
+
+            # Strategy 3: divs with content-related class names
+            if not page_body or len(page_body) < 150:
+                content_patterns = ['content', 'post-content', 'article-body', 'article', 'entry', 'post', 'story-body']
+                for pattern in content_patterns:
+                    divs = page.query_selector_all(f'div[class*="{pattern}"]')
+                    for div in divs:
+                        div_text = div.inner_text()
+                        if div_text and len(div_text) >= 150:
+                            page_body = div_text
+                            break
+                    if page_body:
+                        break
+
+            # Strategy 4: all paragraphs
+            if not page_body or len(page_body) < 150:
+                paragraphs = page.query_selector_all('p')
+                texts = [p.inner_text() for p in paragraphs if p]
+                page_body = "\n\n".join(texts)
+
+            # Strategy 5: fall back to entire body content
+            if not page_body or len(page_body) < 100:
+                body_elem = page.query_selector('body')
+                if body_elem:
+                    page_body = body_elem.inner_text()
+        except Exception:
+            # Fallback to raw HTML if inner_text extraction fails
+            page_body = page_content
+        
+        # Extract footer links
+        try:
+            links = _extract_footer_links(page_content, url)
+        except Exception:
+            links = {"terms": "", "privacy": ""}
+        
+        return {
+            "title": page_title.strip(),
+            "body": page_body.strip(),
+            "url": url,
+            "terms": links.get("terms", ""),
+            "privacy": links.get("privacy", "")
+        }
+        
+    except Exception as e:
+        logger.warning('Playwright fetch failed for %s: %s', url, e)
+        return {"title": "", "body": "", "url": url, "terms": "", "privacy": ""}
+    finally:
+        # Clean up
+        if page:
+            try:
+                page.close()
+            except Exception:
+                pass
+        if browser:
+            try:
+                browser.close()
+            except Exception:
+                pass
+        if pw_context:
+            try:
+                pw_context.stop()
+            except Exception:
+                pass
+
+
+def fetch_page(url: str, timeout: int = 10, browser_manager=None) -> Dict[str, str]:
     """Fetch a URL and return a simple content dict {title, body, url}"""
     # Get realistic headers for this URL
     headers = get_realistic_headers(url)
@@ -1051,7 +1157,7 @@ def fetch_page(url: str, timeout: int = 10) -> Dict[str, str]:
             # Use randomized delay instead of fixed rate limit
             if attempt == 1:
                 # First attempt: use configured rate limit
-                _wait_for_rate_limit()
+                _rate_limiter.wait_for_domain(url)
             else:
                 # Retry attempts: use randomized delay
                 delay = get_random_delay(url)
@@ -1095,61 +1201,9 @@ def fetch_page(url: str, timeout: int = 10) -> Dict[str, str]:
                         allowed = True
                     if allowed:
                         logger.info('Attempting Playwright-rendered fetch for %s (domain config or AR_USE_PLAYWRIGHT)', url)
-                        with sync_playwright() as pw:
-                            browser = pw.chromium.launch(headless=True)
-                            page = browser.new_page(user_agent=ua)
-                            page.goto(url, timeout=20000)
-                            # wait for body
-                            try:
-                                page.wait_for_selector('body', timeout=8000)
-                            except Exception:
-                                pass
-                            page_content = page.content()
-                            page_title = page.title() or ''
-                            # Try multiple extraction strategies for rendered content
-                            page_body = ""
-                            try:
-                                # Strategy 1: article tag
-                                article = page.query_selector('article')
-                                if article:
-                                    page_body = article.inner_text()
-
-                                # Strategy 2: main tag or role="main"
-                                if not page_body or len(page_body) < 150:
-                                    main = page.query_selector('main') or page.query_selector('[role="main"]')
-                                    if main:
-                                        page_body = main.inner_text()
-
-                                # Strategy 3: divs with content-related class names
-                                if not page_body or len(page_body) < 150:
-                                    content_patterns = ['content', 'post-content', 'article-body', 'article', 'entry', 'post', 'story-body']
-                                    for pattern in content_patterns:
-                                        divs = page.query_selector_all(f'div[class*="{pattern}"]')
-                                        for div in divs:
-                                            div_text = div.inner_text()
-                                            if div_text and len(div_text) >= 150:
-                                                page_body = div_text
-                                                break
-                                        if page_body:
-                                            break
-
-                                # Strategy 4: all paragraphs
-                                if not page_body or len(page_body) < 150:
-                                    paragraphs = page.query_selector_all('p')
-                                    texts = [p.inner_text() for p in paragraphs if p]
-                                    page_body = "\n\n".join(texts)
-
-                                # Strategy 5: fall back to entire body content
-                                if not page_body or len(page_body) < 100:
-                                    body_elem = page.query_selector('body')
-                                    if body_elem:
-                                        page_body = body_elem.inner_text()
-                            except Exception:
-                                page_body = page_content
-                            browser.close()
-                            if page_body and len(page_body) >= 100:
-                                links = _extract_footer_links(page_content, url)
-                                return {"title": page_title.strip(), "body": page_body.strip(), "url": url, "terms": links.get("terms", ""), "privacy": links.get("privacy", "")}
+                        result = _fetch_with_playwright(url, ua, browser_manager)
+                        if result.get('body') and len(result.get('body', '')) >= 100:
+                            return result
                 except Exception as e:
                     logger.warning('Playwright fallback failed for %s: %s', url, e)
 
@@ -1204,64 +1258,9 @@ def fetch_page(url: str, timeout: int = 10) -> Dict[str, str]:
                         allowed = True
                     if allowed:
                         logger.info('Attempting Playwright-rendered fetch for thin content: %s', url)
-                        with sync_playwright() as pw:
-                            browser = pw.chromium.launch(headless=True)
-                            page = browser.new_page(user_agent=ua)
-                            page.goto(url, timeout=20000)
-                            try:
-                                page.wait_for_selector('body', timeout=8000)
-                            except Exception:
-                                pass
-                            page_html = page.content()
-                            page_title = page.title() or ''
-                            # Try multiple extraction strategies for rendered content
-                            page_body = ""
-                            try:
-                                # Strategy 1: article tag
-                                article = page.query_selector('article')
-                                if article:
-                                    page_body = article.inner_text()
-
-                                # Strategy 2: main tag or role="main"
-                                if not page_body or len(page_body) < 150:
-                                    main = page.query_selector('main') or page.query_selector('[role="main"]')
-                                    if main:
-                                        page_body = main.inner_text()
-
-                                # Strategy 3: divs with content-related class names
-                                if not page_body or len(page_body) < 150:
-                                    content_patterns = ['content', 'post-content', 'article-body', 'article', 'entry', 'post', 'story-body']
-                                    for pattern in content_patterns:
-                                        divs = page.query_selector_all(f'div[class*="{pattern}"]')
-                                        for div in divs:
-                                            div_text = div.inner_text()
-                                            if div_text and len(div_text) >= 150:
-                                                page_body = div_text
-                                                break
-                                        if page_body:
-                                            break
-
-                                # Strategy 4: all paragraphs
-                                if not page_body or len(page_body) < 150:
-                                    paragraphs = page.query_selector_all('p')
-                                    texts = [p.inner_text() for p in paragraphs if p]
-                                    page_body = "\n\n".join(texts)
-
-                                # Strategy 5: fall back to entire body content
-                                if not page_body or len(page_body) < 150:
-                                    body_elem = page.query_selector('body')
-                                    if body_elem:
-                                        page_body = body_elem.inner_text()
-                            except Exception:
-                                # fallback to raw HTML if inner_text extraction fails
-                                page_body = page_html
-                            browser.close()
-                            if page_body and len(page_body) >= 150:
-                                try:
-                                    links = _extract_footer_links(page_html, url)
-                                except Exception:
-                                    links = {"terms": "", "privacy": ""}
-                                return {"title": page_title.strip(), "body": page_body.strip(), "url": url, "terms": links.get("terms", ""), "privacy": links.get("privacy", "")}
+                        result = _fetch_with_playwright(url, ua, browser_manager)
+                        if result.get('body') and len(result.get('body', '')) >= 150:
+                            return result
                 except Exception as e:
                     logger.warning('Playwright fallback for thin content failed for %s: %s', url, e)
 
@@ -1343,6 +1342,19 @@ def collect_brave_pages(
     if url_collection_config:
         from ingestion.domain_classifier import classify_url, URLSourceType
 
+    # Initialize persistent Playwright browser if available
+    browser_manager = None
+    try:
+        from ingestion.playwright_manager import PlaywrightBrowserManager
+        browser_manager = PlaywrightBrowserManager()
+        if browser_manager.start():
+            logger.info('[BRAVE] Persistent Playwright browser started for collection')
+        else:
+            browser_manager = None
+    except Exception as e:
+        logger.debug('[BRAVE] Could not start persistent browser: %s', e)
+        browser_manager = None
+
     results = []
     try:
         search_results = search_brave(query, size=pool_size)
@@ -1354,6 +1366,8 @@ def collect_brave_pages(
 
     if not search_results:
         logger.warning('[BRAVE] No search results returned, returning empty list')
+        if browser_manager:
+            browser_manager.close()
         return []
 
     # robots.txt cache per netloc
@@ -1378,7 +1392,7 @@ def collect_brave_pages(
         rp = robotparser.RobotFileParser()
         try:
             # Fetch robots.txt using requests so we can set headers and timeouts
-            _wait_for_rate_limit()
+            _rate_limiter.wait_for_domain(robots_url)
             r = requests.get(robots_url, headers=ua, timeout=5)
             if r.status_code == 200 and r.text:
                 rp.parse(r.text.splitlines())
@@ -1471,7 +1485,7 @@ def collect_brave_pages(
 
             # Attempt to fetch and only count if body meets minimum length
             # Use lower threshold for brand-owned URLs (landing pages often have less text)
-            content = fetch_page(url)
+            content = fetch_page(url, browser_manager=browser_manager)
             body = content.get('body') or ''
             required_length = min_brand_body_length if is_brand_owned else min_body_length
             if body and len(body) >= required_length:
@@ -1626,7 +1640,7 @@ def collect_brave_pages(
                 continue
 
             # Attempt to fetch and only count if body meets minimum length
-            content = fetch_page(url)
+            content = fetch_page(url, browser_manager=browser_manager)
             body = content.get('body') or ''
             if body and len(body) >= min_body_length:
                 collected.append(content)
@@ -1638,4 +1652,9 @@ def collect_brave_pages(
         else:
             logger.info('No usable pages collected for query=%s', query)
 
+    # Clean up browser manager
+    if browser_manager:
+        browser_manager.close()
+        logger.info('[BRAVE] Persistent Playwright browser closed')
+    
     return collected

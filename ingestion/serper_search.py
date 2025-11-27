@@ -17,24 +17,11 @@ from typing import List, Dict, Optional
 
 logger = logging.getLogger(__name__)
 
-# Rate limiting: minimum interval (seconds) between Serper API requests
-_SERPER_REQUEST_INTERVAL = float(os.getenv('SERPER_REQUEST_INTERVAL', '1.0'))
-_LAST_SERPER_REQUEST_TS = 0.0
-_SERPER_RATE_LOCK = threading.Lock()
-
-
-def _wait_for_rate_limit():
-    """Ensure at least _SERPER_REQUEST_INTERVAL seconds between requests."""
-    global _LAST_SERPER_REQUEST_TS
-    if _SERPER_REQUEST_INTERVAL <= 0:
-        return
-    with _SERPER_RATE_LOCK:
-        now = time.monotonic()
-        elapsed = now - _LAST_SERPER_REQUEST_TS
-        if elapsed < _SERPER_REQUEST_INTERVAL:
-            to_sleep = _SERPER_REQUEST_INTERVAL - elapsed
-            time.sleep(to_sleep)
-        _LAST_SERPER_REQUEST_TS = time.monotonic()
+# Per-domain rate limiting (allows parallel requests to different domains)
+from ingestion.rate_limiter import PerDomainRateLimiter
+_rate_limiter = PerDomainRateLimiter(
+    default_interval=float(os.getenv('SERPER_REQUEST_INTERVAL', '1.0'))
+)
 
 
 def search_serper(query: str, size: int = 10) -> List[Dict[str, str]]:
@@ -100,7 +87,7 @@ def search_serper(query: str, size: int = 10) -> List[Dict[str, str]]:
 
         try:
             # Apply rate limiting
-            _wait_for_rate_limit()
+            _rate_limiter.wait_for_domain(endpoint)
 
             # Make API request
             timeout = int(os.getenv('SERPER_API_TIMEOUT', '30'))
@@ -468,9 +455,10 @@ def get_serper_stats() -> Dict[str, any]:
         return {"error": "SERPER_API_KEY not configured"}
 
     try:
-        _wait_for_rate_limit()
+        account_url = "https://google.serper.dev/account"
+        _rate_limiter.wait_for_domain(account_url)
         response = requests.get(
-            "https://google.serper.dev/account",
+            account_url,
             headers={"X-API-KEY": api_key},
             timeout=10
         )

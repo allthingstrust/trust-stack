@@ -6,6 +6,7 @@ including web search, social media discovery, and URL classification.
 """
 import os
 import logging
+import time
 import streamlit as st
 from typing import List, Dict, Any
 
@@ -168,12 +169,20 @@ def search_for_urls(brand_id: str, keywords: List[str], sources: List[str], web_
                     from ingestion.brave_search import collect_brave_pages
                     progress_animator.show(f"Executing Brave Search API requests ({brand_owned_ratio}% brand-owned target)", "🌐")
 
+                    # Start timer for search duration
+                    search_start_time = time.time()
+                    
                     pages = collect_brave_pages(
                         query=query,
                         target_count=web_pages,
                         pool_size=pool_size,
                         url_collection_config=url_collection_config
                     )
+                    
+                    # Calculate and store search duration
+                    search_duration = time.time() - search_start_time
+                    st.session_state['last_search_duration'] = search_duration
+                    logger.info(f"Search completed in {search_duration:.2f} seconds")
                     # Convert to search result format and show URLs as we process them
                     total_pages = len(pages)
                     for idx, page in enumerate(pages):
@@ -208,12 +217,20 @@ def search_for_urls(brand_id: str, keywords: List[str], sources: List[str], web_
                     log_handler.setFormatter(log_formatter)
                     search_logger.addHandler(log_handler)
 
+                    # Start timer for search duration
+                    search_start_time = time.time()
+                    
                     pages = collect_serper_pages(
                         query=query,
                         target_count=web_pages,
                         pool_size=pool_size,
                         url_collection_config=url_collection_config
                     )
+                    
+                    # Calculate and store search duration
+                    search_duration = time.time() - search_start_time
+                    st.session_state['last_search_duration'] = search_duration
+                    logger.info(f"Search completed in {search_duration:.2f} seconds")
                     # Convert to search result format and show URLs as we process them
                     total_pages = len(pages)
                     for idx, page in enumerate(pages):
@@ -358,10 +375,16 @@ API Key set: {'Yes' if os.getenv('SERPER_API_KEY') else 'No'}
                 
                 progress_bar.empty()
 
+                # Display search duration if available
+                duration_text = ""
+                if 'last_search_duration' in st.session_state:
+                    duration = st.session_state['last_search_duration']
+                    duration_text = f" in {duration:.1f}s"
+                
                 if social_count > 0:
-                    st.success(f"✓ Found {len(found_urls)} URLs ({brand_owned_count} brand-owned including {social_count} social channels, {third_party_count} third-party)")
+                    st.success(f"✓ Found {len(found_urls)} URLs ({brand_owned_count} brand-owned including {social_count} social channels, {third_party_count} third-party){duration_text}")
                 else:
-                    st.success(f"✓ Found {len(found_urls)} URLs ({brand_owned_count} brand-owned, {third_party_count} third-party)")
+                    st.success(f"✓ Found {len(found_urls)} URLs ({brand_owned_count} brand-owned, {third_party_count} third-party){duration_text}")
                 st.rerun()
 
             except TimeoutError as e:
