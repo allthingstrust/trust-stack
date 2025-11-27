@@ -1076,9 +1076,35 @@ class MarkdownReportGenerator:
             if dimension in rationales:
                 sections.append(f"**Rationale:**\n\n{rationales[dimension]}\n")
             
-            # Add placeholder for key signal evaluation (to be implemented)
+            # Generate key signal evaluations using LLM
             sections.append(f"**🗝️ Key Signal Evaluation**\n")
-            sections.append("*Key signals analysis will be added in future updates.*\n")
+            
+            try:
+                from scoring.key_signal_evaluator import generate_key_signals_for_dimension
+                
+                # Get items for context
+                items = report_data.get('items', [])
+                model = report_data.get('llm_model', 'gpt-4o-mini')
+                
+                # Generate key signals
+                key_signals = generate_key_signals_for_dimension(
+                    dimension=dimension,
+                    items=items,
+                    dimension_score=avg,
+                    model=model
+                )
+                
+                if key_signals:
+                    for signal in key_signals:
+                        sections.append(f"{signal['status']} **{signal['number']}. {signal['name']}**")
+                        sections.append(f"- {signal['assessment']}\n")
+                else:
+                    sections.append("*Key signals analysis in progress.*\n")
+                    
+            except Exception as e:
+                logger.warning(f"Could not generate key signals for {dimension}: {e}")
+                sections.append("*Key signals analysis will be added in future updates.*\n")
+            
             
             # Add diagnostics snapshot
             sections.append(f"**🧮 Diagnostics Snapshot**\n")
