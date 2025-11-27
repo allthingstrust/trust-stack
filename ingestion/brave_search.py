@@ -405,35 +405,19 @@ def collect_brave_pages(
 ) -> List[Dict[str, str]]:
     """Collect up to `target_count` successfully fetched pages for a Brave search query.
 
-    Behavior:
-    - Request `pool_size` search results (defaults to max(30, target_count*3)).
-    - If url_collection_config is provided, enforces brand-owned vs 3rd party ratio
-    - Iterate results in order, skip URLs disallowed by robots.txt.
-    - Attempt to fetch each allowed URL via `fetch_page` and only count pages whose
-      `body` length >= min_body_length as successful.
-    - Brand-owned URLs can use a lower threshold (min_brand_body_length) if specified
-    - Stop once `target_count` successful pages are collected or the pool is exhausted.
-
-    This function honors robots.txt directives and will not fetch pages explicitly
-    disallowed for the configured user-agent.
-
-    Args:
-        query: Search query
-        target_count: Target number of pages to collect
-        pool_size: Number of search results to request
-        min_body_length: Minimum body length for third-party pages (default: 200)
-        min_brand_body_length: Minimum body length for brand-owned pages (default: 75, filters error pages)
-        url_collection_config: Optional ratio enforcement configuration
+    Uses a Producer-Consumer pattern:
+    - Main thread (Producer): Fetches search results and pushes them to a queue.
+    - Worker threads (Consumers): Fetch page content and process results.
     """
+    import queue
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+
     # Dynamic Pool Sizing Configuration
     initial_multiplier = 2
     max_total_results = pool_size if pool_size is not None else max(30, target_count * 5)
     current_batch_size = target_count * initial_multiplier
     
-    total_processed = 0
-    total_fetched = 0
-    total_processed = 0
-    total_fetched = 0
     current_offset = 0
     
     # Initialize persistent Playwright browser if available
@@ -449,6 +433,12 @@ def collect_brave_pages(
         logger.debug('[BRAVE] Could not start persistent browser: %s', e)
         browser_manager = None
 
+    # Shared state
+    # Use bounded queue to prevent producer from flooding memory if consumers are slow
+    url_queue = queue.Queue(maxsize=max_total_results if max_total_results < 100 else 50)
+    results_lock = threading.Lock()
+    stop_event = threading.Event()
+    
     # Collections
     brand_owned_collected: List[Dict[str, str]] = []
     third_party_collected: List[Dict[str, str]] = []
@@ -457,8 +447,11 @@ def collect_brave_pages(
     domain_counts: Dict[str, int] = {}
     max_per_domain = max(1, int(target_count * 0.2))
     
-    # Track skip reasons for debugging
-    skip_stats = {
+    # Stats
+    stats = {
+        'total_processed': 0,
+        'total_fetched': 0,
+        'total_valid': 0,
         'no_url': 0,
         'robots_txt': 0,
         'thin_content': 0,
@@ -486,129 +479,161 @@ def collect_brave_pages(
                    target_third_party, url_collection_config.third_party_ratio * 100,
                    max_total_results)
 
-    logger.info('[BRAVE] Starting dynamic collection for query=%s (target=%d)', query, target_count)
+    logger.info('[BRAVE] Starting concurrent collection for query=%s (target=%d)', query, target_count)
 
-    while len(brand_owned_collected) + len(third_party_collected) < target_count:
-        if total_processed >= max_total_results:
-            logger.info('[BRAVE] Reached max total results (%d), stopping', max_total_results)
-            break
-
-        logger.info('[BRAVE] Fetching search batch: size=%d, offset=%d', current_batch_size, current_offset)
-        try:
-            search_results = search_brave(query, size=current_batch_size, start_offset=current_offset)
-        except Exception as e:
-            logger.warning('Brave search failed: %s', e)
-            break
-            
-        if not search_results:
-            logger.info('[BRAVE] No more search results available')
-            break
-            
-        current_offset += len(search_results)
-        
-        # Filter out already processed URLs? 
-        # Brave search results might overlap if we are not careful, but offset should handle it.
-        
-        batch_fetched_count = 0
-        batch_valid_count = 0
-        
-        for item in search_results:
-            skip_stats['processed'] += 1
-            total_processed += 1
-            
-            url = item.get('url')
-            if not url:
-                skip_stats['no_url'] += 1
-                continue
-
-            # Classify
-            is_brand_owned = False
-            classification = None
-            if url_collection_config:
-                classification = classify_url(url, url_collection_config)
-                is_brand_owned = classification.source_type == URLSourceType.BRAND_OWNED
-
-            # Robots check
+    def worker():
+        while True:
             try:
-                allowed = is_allowed_by_robots(url)
-            except Exception:
-                allowed = True
-            if not allowed:
-                skip_stats['robots_txt'] += 1
+                # Timeout allows checking stop_event periodically
+                item = url_queue.get(timeout=0.5)
+            except queue.Empty:
+                if stop_event.is_set():
+                    break
                 continue
-
-            # Fetch
-            batch_fetched_count += 1
-            content = fetch_page(url, browser_manager=browser_manager)
-            body = content.get('body') or ''
-            required_length = min_brand_body_length if is_brand_owned else min_body_length
             
-            if body and len(body) >= required_length:
-                # Check error page
-                title = content.get('title', '').lower()
-                error_indicators = ['access denied', 'forbidden', '403', '401', 'error', 'not found', '404']
-                if any(indicator in title for indicator in error_indicators):
-                    skip_stats['error_page'] += 1
+            try:
+                with results_lock:
+                    # Check if we're already done
+                    if len(brand_owned_collected) + len(third_party_collected) >= target_count:
+                        continue
+                    stats['processed'] += 1
+                    stats['total_processed'] += 1
+
+                url = item.get('url')
+                if not url:
+                    with results_lock: stats['no_url'] += 1
                     continue
 
-                # Check pools
+                # Classify
+                is_brand_owned = False
+                classification = None
                 if url_collection_config:
-                    if is_brand_owned and len(brand_owned_collected) >= target_brand_owned:
-                        skip_stats['brand_owned_pool_full'] += 1
+                    classification = classify_url(url, url_collection_config)
+                    is_brand_owned = classification.source_type == URLSourceType.BRAND_OWNED
+
+                # Robots check (cached)
+                try:
+                    allowed = is_allowed_by_robots(url)
+                except Exception:
+                    allowed = True
+                if not allowed:
+                    with results_lock: stats['robots_txt'] += 1
+                    continue
+
+                # Fetch
+                with results_lock: stats['total_fetched'] += 1
+                content = fetch_page(url, browser_manager=browser_manager)
+                body = content.get('body') or ''
+                required_length = min_brand_body_length if is_brand_owned else min_body_length
+                
+                if body and len(body) >= required_length:
+                    # Check error page
+                    title = content.get('title', '').lower()
+                    error_indicators = ['access denied', 'forbidden', '403', '401', 'error', 'not found', '404']
+                    if any(indicator in title for indicator in error_indicators):
+                        with results_lock: stats['error_page'] += 1
                         continue
-                    if not is_brand_owned and len(third_party_collected) >= target_third_party:
-                        skip_stats['third_party_pool_full'] += 1
-                        continue
-                elif len(brand_owned_collected) + len(third_party_collected) >= target_count:
+
+                    with results_lock:
+                        # Re-check limits inside lock
+                        if len(brand_owned_collected) + len(third_party_collected) >= target_count:
+                            continue
+
+                        # Check pools
+                        if url_collection_config:
+                            if is_brand_owned and len(brand_owned_collected) >= target_brand_owned:
+                                stats['brand_owned_pool_full'] += 1
+                                continue
+                            if not is_brand_owned and len(third_party_collected) >= target_third_party:
+                                stats['third_party_pool_full'] += 1
+                                continue
+
+                        # Check diversity
+                        parsed_url = urlparse(url)
+                        domain = parsed_url.netloc.lower()
+                        if domain_counts.get(domain, 0) >= max_per_domain:
+                            stats['domain_limit_reached'] += 1
+                            continue
+
+                        # Add
+                        if url_collection_config:
+                            content['source_type'] = classification.source_type.value
+                            content['source_tier'] = classification.tier.value if classification.tier else 'unknown'
+                            if is_brand_owned:
+                                brand_owned_collected.append(content)
+                            else:
+                                third_party_collected.append(content)
+                        else:
+                            brand_owned_collected.append(content)
+
+                        domain_counts[domain] = domain_counts.get(domain, 0) + 1
+                        stats['total_valid'] += 1
+                        
+                        logger.info('[BRAVE] Collected page %d/%d: %s', 
+                                   len(brand_owned_collected) + len(third_party_collected), 
+                                   target_count, url)
+                else:
+                    with results_lock: stats['thin_content'] += 1
+
+            except Exception as e:
+                logger.error('Worker error processing %s: %s', url, e)
+            finally:
+                url_queue.task_done()
+
+    # Start workers
+    with ThreadPoolExecutor(max_workers=5) as executor:
+        futures = [executor.submit(worker) for _ in range(5)]
+        
+        # Producer Loop
+        while not stop_event.is_set():
+            # Check if done
+            with results_lock:
+                if len(brand_owned_collected) + len(third_party_collected) >= target_count:
+                    logger.info('[BRAVE] Target reached, stopping producer')
+                    stop_event.set()
+                    break
+                if stats['total_processed'] >= max_total_results:
+                    logger.info('[BRAVE] Max total results reached, stopping producer')
+                    stop_event.set()
                     break
 
-                # Check diversity
-                parsed_url = urlparse(url)
-                domain = parsed_url.netloc.lower()
-                if domain_counts.get(domain, 0) >= max_per_domain:
-                    skip_stats['domain_limit_reached'] += 1
-                    continue
-
-                # Add
-                if url_collection_config:
-                    content['source_type'] = classification.source_type.value
-                    content['source_tier'] = classification.tier.value if classification.tier else 'unknown'
-                    if is_brand_owned:
-                        brand_owned_collected.append(content)
-                        # Subpage logic omitted for brevity
-                    else:
-                        third_party_collected.append(content)
-                else:
-                    brand_owned_collected.append(content)
-
-                domain_counts[domain] = domain_counts.get(domain, 0) + 1
-                batch_valid_count += 1
-                
-            else:
-                skip_stats['thin_content'] += 1
-
-            if len(brand_owned_collected) + len(third_party_collected) >= target_count:
+            logger.info('[BRAVE] Fetching search batch: size=%d, offset=%d', current_batch_size, current_offset)
+            try:
+                search_results = search_brave(query, size=current_batch_size, start_offset=current_offset)
+            except Exception as e:
+                logger.warning('Brave search failed: %s', e)
                 break
-        
-        total_fetched += batch_fetched_count
-        success_rate = batch_valid_count / batch_fetched_count if batch_fetched_count > 0 else 0
-        
-        logger.info('[BRAVE] Batch finished. Valid: %d/%d (Rate: %.2f). Total: %d/%d', 
-                   batch_valid_count, batch_fetched_count, success_rate,
-                   len(brand_owned_collected) + len(third_party_collected), target_count)
-
-        if len(brand_owned_collected) + len(third_party_collected) >= target_count:
-            break
+                
+            if not search_results:
+                logger.info('[BRAVE] No more search results available')
+                break
+                
+            current_offset += len(search_results)
             
-        # Dynamic Sizing
-        if success_rate < 0.3:
-            current_batch_size = target_count * 2
-        elif success_rate > 0.6:
-            needed = target_count - (len(brand_owned_collected) + len(third_party_collected))
-            current_batch_size = max(10, int(needed / success_rate) + 5)
-        else:
-            current_batch_size = target_count
+            # Push to queue
+            for item in search_results:
+                url_queue.put(item)
+            
+            # Dynamic Sizing based on cumulative success rate
+            with results_lock:
+                success_rate = stats['total_valid'] / stats['total_fetched'] if stats['total_fetched'] > 0 else 0
+            
+            if success_rate < 0.3 and stats['total_fetched'] > 5:
+                current_batch_size = target_count * 2
+            elif success_rate > 0.6 and stats['total_fetched'] > 5:
+                with results_lock:
+                    needed = target_count - (len(brand_owned_collected) + len(third_party_collected))
+                current_batch_size = max(10, int(needed / (success_rate or 0.1)) + 5)
+            else:
+                current_batch_size = target_count
+            
+            # Small sleep to let workers consume a bit before fetching next batch?
+            # Not strictly necessary, but helps avoid flooding queue if search is much faster than fetch
+            time.sleep(0.1)
 
+        # Wait for workers to finish pending tasks or notice stop_event
+        stop_event.set()
+        
     collected = brand_owned_collected + third_party_collected
     
     # Clean up browser manager
@@ -616,4 +641,5 @@ def collect_brave_pages(
         browser_manager.close()
         logger.info('[BRAVE] Persistent Playwright browser closed')
     
+    logger.info('[BRAVE] Collection complete. Collected: %d. Stats: %s', len(collected), stats)
     return collected

@@ -174,43 +174,30 @@ def collect_serper_pages(
 ) -> List[Dict[str, str]]:
     """Collect up to `target_count` successfully fetched pages from Serper search.
 
-    Behavior:
-    - Request `pool_size` search results (defaults to max(30, target_count*3)).
-    - If url_collection_config is provided, enforces brand-owned vs 3rd party ratio
-    - Iterate results in order and fetch page content
-    - Only count pages whose `body` length >= min_body_length as successful
-    - Brand-owned URLs can use a lower threshold (min_brand_body_length) if specified
-    - Stop once `target_count` successful pages are collected or the pool is exhausted
-
-    Args:
-        query: Search query
-        target_count: Target number of pages to collect
-        pool_size: Number of search results to request
-        min_body_length: Minimum body length for third-party pages (default: 200)
-        min_brand_body_length: Minimum body length for brand-owned pages (default: 75, filters error pages)
-        url_collection_config: Optional ratio enforcement configuration
-
-    Returns:
-        List of dicts with page content {title, body, url, ...}
+    Uses a Producer-Consumer pattern:
+    - Main thread (Producer): Fetches search results and pushes them to a queue.
+    - Worker threads (Consumers): Fetch page content and process results.
     """
+    import queue
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+    
     # Import fetch_page from page_fetcher module
-    from ingestion.page_fetcher import fetch_page, fetch_pages_parallel
+    from ingestion.page_fetcher import fetch_page
 
     # Dynamic Pool Sizing Configuration
-    # Start with 2x target (instead of 5x) to minimize waste
     initial_multiplier = 2
-    
-    # If pool_size is explicitly provided, use it as a hard limit for total results
     max_total_results = pool_size if pool_size is not None else max(30, target_count * 5)
-    
-    # Initial batch size
     current_batch_size = target_count * initial_multiplier
     
-    # State tracking
-    total_processed = 0
-    total_fetched = 0
-    total_valid = 0
     current_page = 1
+    
+    # Shared state
+    # Use bounded queue to prevent producer from flooding memory if consumers are slow
+    url_queue = queue.Queue(maxsize=max_total_results if max_total_results < 100 else 50)
+    results_lock = threading.Lock()
+    stop_event = threading.Event()
+    seen_urls = set()
     
     # Collections
     brand_owned_collected: List[Dict[str, str]] = []
@@ -221,13 +208,26 @@ def collect_serper_pages(
     domain_counts: Dict[str, int] = {}
     max_per_domain = max(1, int(target_count * 0.2))
     
+    # Stats
+    stats = {
+        'total_processed': 0,
+        'total_fetched': 0,
+        'total_valid': 0,
+        'no_url': 0,
+        'thin_content': 0,
+        'brand_owned_pool_full': 0,
+        'third_party_pool_full': 0,
+        'domain_limit_reached': 0,
+        'error_page': 0,
+        'processed': 0
+    }
+    
     # Ratio targets
     target_brand_owned = target_count
     target_third_party = 0
     if url_collection_config:
         target_brand_owned = int(target_count * url_collection_config.brand_owned_ratio)
         target_third_party = int(target_count * url_collection_config.third_party_ratio)
-        # Handle rounding
         if target_brand_owned + target_third_party < target_count:
             if url_collection_config.brand_owned_ratio >= url_collection_config.third_party_ratio:
                 target_brand_owned += (target_count - target_brand_owned - target_third_party)
@@ -241,172 +241,156 @@ def collect_serper_pages(
     if url_collection_config:
         from ingestion.domain_classifier import classify_url, URLSourceType
 
-    # Skip stats (aggregated)
-    skip_stats = {
-        'no_url': 0,
-        'thin_content': 0,
-        'brand_owned_pool_full': 0,
-        'third_party_pool_full': 0,
-        'domain_limit_reached': 0,
-        'error_page': 0,
-        'processed': 0
-    }
+    logger.info('[SERPER] Starting concurrent collection for query=%s (target=%d)', query, target_count)
 
-    logger.info('[SERPER] Starting dynamic collection for query=%s (target=%d)', query, target_count)
-
-    while len(brand_owned_collected) + len(third_party_collected) < target_count:
-        # Check if we've exceeded max total results
-        if total_processed >= max_total_results:
-            logger.info('[SERPER] Reached max total results (%d), stopping', max_total_results)
-            break
-
-        # Fetch batch of search results
-        logger.info('[SERPER] Fetching search batch: size=%d, start_page=%d', current_batch_size, current_page)
-        search_results = search_serper(query, size=current_batch_size, start_page=current_page)
-        
-        if not search_results:
-            logger.info('[SERPER] No more search results available')
-            break
-            
-        # Update pagination for next time
-        pages_in_batch = (len(search_results) + 9) // 10
-        current_page += pages_in_batch
-        
-        # Filter out already processed URLs (though unlikely with pagination)
-        # Actually, we don't track processed URLs globally across batches here, but pagination should handle it.
-        
-        # Pre-fetch unique URLs in this batch
-        urls_to_fetch = list(set(item.get('url') for item in search_results if item.get('url')))
-        logger.info('[SERPER] Pre-fetching %d unique URLs in parallel...', len(urls_to_fetch))
-        
-        parallel_results = fetch_pages_parallel(urls_to_fetch, max_workers=5)
-        url_content_map = {res['url']: res for res in parallel_results}
-        
-        batch_fetched_count = len(parallel_results)
-        batch_valid_count = 0
-        
-        # Process results in this batch
-        for item in search_results:
-            skip_stats['processed'] += 1
-            total_processed += 1
-            
-            url = item.get('url')
-            if not url:
-                skip_stats['no_url'] += 1
+    def worker():
+        while True:
+            try:
+                item = url_queue.get(timeout=0.5)
+            except queue.Empty:
+                if stop_event.is_set():
+                    break
                 continue
-
-            # Classify
-            is_brand_owned = False
-            classification = None
-            if url_collection_config:
-                classification = classify_url(url, url_collection_config)
-                is_brand_owned = classification.source_type == URLSourceType.BRAND_OWNED
-
-            # Get content
-            content = url_content_map.get(url)
-            if not content:
-                content = fetch_page(url) # Fallback
             
-            body = content.get('body') or ''
-            required_length = min_brand_body_length if is_brand_owned else min_body_length
-            
-            # Validate content
-            if body and len(body) >= required_length:
-                # Check error page
-                title = content.get('title', '').lower()
-                error_indicators = ['access denied', 'forbidden', '403', '401', 'error', 'not found', '404']
-                if any(indicator in title for indicator in error_indicators):
-                    skip_stats['error_page'] += 1
+            try:
+                with results_lock:
+                    if len(brand_owned_collected) + len(third_party_collected) >= target_count:
+                        continue
+                    stats['processed'] += 1
+                    stats['total_processed'] += 1
+
+                url = item.get('url')
+                if not url:
+                    with results_lock: stats['no_url'] += 1
                     continue
 
-                # Check pools full
+                # Classify
+                is_brand_owned = False
+                classification = None
                 if url_collection_config:
-                    if is_brand_owned and len(brand_owned_collected) >= target_brand_owned:
-                        skip_stats['brand_owned_pool_full'] += 1
+                    classification = classify_url(url, url_collection_config)
+                    is_brand_owned = classification.source_type == URLSourceType.BRAND_OWNED
+
+                # Fetch
+                with results_lock: stats['total_fetched'] += 1
+                content = fetch_page(url)
+                body = content.get('body') or ''
+                required_length = min_brand_body_length if is_brand_owned else min_body_length
+                
+                if body and len(body) >= required_length:
+                    # Check error page
+                    title = content.get('title', '').lower()
+                    error_indicators = ['access denied', 'forbidden', '403', '401', 'error', 'not found', '404']
+                    if any(indicator in title for indicator in error_indicators):
+                        with results_lock: stats['error_page'] += 1
                         continue
-                    if not is_brand_owned and len(third_party_collected) >= target_third_party:
-                        skip_stats['third_party_pool_full'] += 1
-                        continue
-                elif len(brand_owned_collected) + len(third_party_collected) >= target_count:
+
+                    with results_lock:
+                        # Re-check limits
+                        if len(brand_owned_collected) + len(third_party_collected) >= target_count:
+                            continue
+
+                        # Check pools
+                        if url_collection_config:
+                            if is_brand_owned and len(brand_owned_collected) >= target_brand_owned:
+                                stats['brand_owned_pool_full'] += 1
+                                continue
+                            if not is_brand_owned and len(third_party_collected) >= target_third_party:
+                                stats['third_party_pool_full'] += 1
+                                continue
+                        elif len(brand_owned_collected) + len(third_party_collected) >= target_count:
+                            continue
+
+                        # Check diversity
+                        parsed_url = urlparse(url)
+                        domain = parsed_url.netloc.lower()
+                        if domain_counts.get(domain, 0) >= max_per_domain:
+                            stats['domain_limit_reached'] += 1
+                            continue
+
+                        # Add
+                        if url_collection_config:
+                            content['source_type'] = classification.source_type.value
+                            content['source_tier'] = classification.tier.value if classification.tier else 'unknown'
+                            if is_brand_owned:
+                                brand_owned_collected.append(content)
+                            else:
+                                third_party_collected.append(content)
+                        else:
+                            brand_owned_collected.append(content)
+
+                        domain_counts[domain] = domain_counts.get(domain, 0) + 1
+                        stats['total_valid'] += 1
+                        
+                        logger.info('[SERPER] Collected page %d/%d: %s', 
+                                   len(brand_owned_collected) + len(third_party_collected), 
+                                   target_count, url)
+                else:
+                    with results_lock: stats['thin_content'] += 1
+
+            except Exception as e:
+                logger.error('Worker error processing %s: %s', url, e)
+            finally:
+                url_queue.task_done()
+
+    # Start workers
+    with ThreadPoolExecutor(max_workers=5) as executor:
+        futures = [executor.submit(worker) for _ in range(5)]
+        
+        # Producer Loop
+        while not stop_event.is_set():
+            # Check if done
+            with results_lock:
+                if len(brand_owned_collected) + len(third_party_collected) >= target_count:
+                    logger.info('[SERPER] Target reached, stopping producer')
+                    stop_event.set()
+                    break
+                if stats['total_processed'] >= max_total_results:
+                    logger.info('[SERPER] Max total results reached, stopping producer')
+                    stop_event.set()
                     break
 
-                # Check domain diversity
-                parsed_url = urlparse(url)
-                domain = parsed_url.netloc.lower()
-                if domain_counts.get(domain, 0) >= max_per_domain:
-                    skip_stats['domain_limit_reached'] += 1
-                    # Store skipped brand urls for second pass if needed
-                    if is_brand_owned:
-                        if 'skipped_brand_urls' not in locals():
-                            skipped_brand_urls = []
-                        skipped_brand_urls.append(content)
-                    continue
-
-                # Add to collection
-                if url_collection_config:
-                    content['source_type'] = classification.source_type.value
-                    content['source_tier'] = classification.tier.value if classification.tier else 'unknown'
-                    
-                    if is_brand_owned:
-                        brand_owned_collected.append(content)
-                        # Try subpages if needed (simplified logic here for brevity, can expand if needed)
-                        # For now, let's rely on the main loop to fetch more if needed, 
-                        # or we can re-add the subpage logic. 
-                        # The user wants optimization, so maybe skipping subpages for now is okay?
-                        # Wait, subpages are important for brand coverage.
-                        # I'll re-add subpage logic briefly.
-                        if len(brand_owned_collected) < target_brand_owned:
-                             # ... (subpage logic omitted for brevity in this refactor, but can be added back)
-                             pass
-                    else:
-                        third_party_collected.append(content)
-                else:
-                    brand_owned_collected.append(content) # Just add to main list (using brand_owned_collected as generic container if no config)
-
-                domain_counts[domain] = domain_counts.get(domain, 0) + 1
-                batch_valid_count += 1
-                total_valid += 1
-                
-            else:
-                skip_stats['thin_content'] += 1
-
-            # Check if done
-            if len(brand_owned_collected) + len(third_party_collected) >= target_count:
+            logger.info('[SERPER] Fetching search batch: size=%d, start_page=%d', current_batch_size, current_page)
+            try:
+                search_results = search_serper(query, size=current_batch_size, start_page=current_page)
+            except Exception as e:
+                logger.warning('Serper search failed: %s', e)
                 break
-        
-        # End of batch processing
-        total_fetched += batch_fetched_count
-        
-        # Calculate Success Rate
-        success_rate = batch_valid_count / batch_fetched_count if batch_fetched_count > 0 else 0
-        logger.info('[SERPER] Batch finished. Valid: %d/%d (Rate: %.2f). Total collected: %d/%d', 
-                   batch_valid_count, batch_fetched_count, success_rate, 
-                   len(brand_owned_collected) + len(third_party_collected), target_count)
-        
-        if len(brand_owned_collected) + len(third_party_collected) >= target_count:
-            break
+                
+            if not search_results:
+                logger.info('[SERPER] No more search results available')
+                break
+                
+            # Update pagination
+            pages_in_batch = (len(search_results) + 9) // 10
+            current_page += pages_in_batch
             
-        # Dynamic Sizing Logic
-        if success_rate < 0.3:
-            logger.info('[SERPER] Low success rate (%.2f < 0.3). Increasing batch size.', success_rate)
-            current_batch_size = target_count * 2 # Keep fetching aggressive batches
-        elif success_rate > 0.6:
-            logger.info('[SERPER] High success rate (%.2f > 0.6). Optimizing batch size.', success_rate)
-            needed = target_count - (len(brand_owned_collected) + len(third_party_collected))
-            current_batch_size = max(10, int(needed / success_rate) + 5) # Fetch just enough + buffer
-        else:
-            # Moderate success
-            current_batch_size = target_count
+            # Push to queue
+            for item in search_results:
+                url = item.get('url')
+                if url and url not in seen_urls:
+                    seen_urls.add(url)
+                    url_queue.put(item)
+            
+            # Dynamic Sizing
+            with results_lock:
+                success_rate = stats['total_valid'] / stats['total_fetched'] if stats['total_fetched'] > 0 else 0
+            
+            if success_rate < 0.3 and stats['total_fetched'] > 5:
+                current_batch_size = target_count * 2
+            elif success_rate > 0.6 and stats['total_fetched'] > 5:
+                with results_lock:
+                    needed = target_count - (len(brand_owned_collected) + len(third_party_collected))
+                current_batch_size = max(10, int(needed / (success_rate or 0.1)) + 5)
+            else:
+                current_batch_size = target_count
+            
+            time.sleep(0.1)
 
-    # Second pass for brand URLs if needed (using skipped ones)
-    if url_collection_config and len(brand_owned_collected) < target_brand_owned and 'skipped_brand_urls' in locals() and skipped_brand_urls:
-         # ... (logic to add skipped brand urls)
-         for content in skipped_brand_urls:
-             if len(brand_owned_collected) >= target_brand_owned:
-                 break
-             brand_owned_collected.append(content)
+        stop_event.set()
 
     collected = brand_owned_collected + third_party_collected
+    logger.info('[SERPER] Collection complete. Collected: %d. Stats: %s', len(collected), stats)
     return collected
 
 
