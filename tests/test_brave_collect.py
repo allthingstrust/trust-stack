@@ -4,7 +4,7 @@ import pytest
 def test_collect_skips_thin_and_reaches_target(monkeypatch):
     """collect_brave_pages should skip thin/empty fetches and keep trying until it
     collects the requested number of successful pages (or exhausts pool)."""
-    from ingestion import brave_search
+    from ingestion import brave_search, page_fetcher
 
     # Prepare fake search results (5 URLs)
     urls = [f"https://site{i}.com/page{i}" for i in range(5)]
@@ -16,7 +16,7 @@ def test_collect_skips_thin_and_reaches_target(monkeypatch):
             return {'title': '', 'body': '', 'url': url}
         return {'title': 'Good', 'body': 'x' * 500, 'url': url}
 
-    monkeypatch.setattr(brave_search, 'fetch_page', fake_fetch)
+    monkeypatch.setattr(page_fetcher, 'fetch_page', fake_fetch)
 
     # Mock robots.txt fetch to be permissive (200 but empty body -> treated permissive by code)
     class FakeResp:
@@ -35,7 +35,7 @@ def test_collect_skips_thin_and_reaches_target(monkeypatch):
 
 def test_collect_respects_robots_disallow(monkeypatch):
     """collect_brave_pages should skip URLs disallowed by robots.txt and fetch allowed ones."""
-    from ingestion import brave_search
+    from ingestion import brave_search, page_fetcher
 
     urls = ['https://example.com/blocked', 'https://example.com/allowed']
     monkeypatch.setattr(brave_search, 'search_brave', lambda q, size: [{'url': u} for u in urls])
@@ -45,7 +45,7 @@ def test_collect_respects_robots_disallow(monkeypatch):
         called.append(url)
         return {'title': 'OK', 'body': 'x' * 300, 'url': url}
 
-    monkeypatch.setattr(brave_search, 'fetch_page', fake_fetch)
+    monkeypatch.setattr(page_fetcher, 'fetch_page', fake_fetch)
 
     # robots.txt returns a Disallow for /blocked path
     def fake_requests_get(url, headers=None, timeout=None):

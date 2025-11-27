@@ -1,7 +1,7 @@
 import pytest
 from unittest import mock
 
-from ingestion import brave_search
+from ingestion import brave_search, page_fetcher
 
 
 def test_fetch_page_handles_invalid_url(monkeypatch):
@@ -13,7 +13,7 @@ def test_fetch_page_handles_invalid_url(monkeypatch):
         raise Exception("network error")
 
     monkeypatch.setattr('ingestion.brave_search.requests.get', fake_get)
-    res = brave_search.fetch_page('http://invalid.local')
+    res = page_fetcher.fetch_page('http://invalid.local')
     assert isinstance(res, dict)
     assert res.get('url') == 'http://invalid.local'
 

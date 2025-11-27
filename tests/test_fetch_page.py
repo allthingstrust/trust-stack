@@ -1,7 +1,7 @@
 import os
 import types
 import pytest
-from ingestion import brave_search
+from ingestion import page_fetcher
 
 
 class DummyResponse:
@@ -24,9 +24,16 @@ def test_fetch_page_http_success(monkeypatch, tmp_path):
         assert u == url
         return DummyResponse(status_code=200, text=html)
 
-    monkeypatch.setattr(brave_search, 'requests', types.SimpleNamespace(get=fake_get))
+    # Mock both requests.get and requests.Session
+    class FakeSession:
+        def __init__(self):
+            self.max_redirects = 10
+        def get(self, *args, **kwargs):
+            return fake_get(*args, **kwargs)
+    
+    monkeypatch.setattr(page_fetcher, 'requests', types.SimpleNamespace(get=fake_get, Session=FakeSession))
 
-    result = brave_search.fetch_page(url)
+    result = page_fetcher.fetch_page(url)
     assert result['title'] == 'Test Title'
     assert 'Paragraph one' in result['body']
     assert result['url'] == url
@@ -98,18 +105,25 @@ def test_fetch_page_playwright_fallback(monkeypatch, tmp_path):
             return C()
 
     # Monkeypatch requests
-    monkeypatch.setattr(brave_search, 'requests', types.SimpleNamespace(get=fake_get))
+    # Mock both requests.get and requests.Session
+    class FakeSession:
+        def __init__(self):
+            self.max_redirects = 10
+        def get(self, *args, **kwargs):
+            return fake_get(*args, **kwargs)
+    
+    monkeypatch.setattr(page_fetcher, 'requests', types.SimpleNamespace(get=fake_get, Session=FakeSession))
 
     # Ensure Playwright is considered available
-    monkeypatch.setattr(brave_search, '_PLAYWRIGHT_AVAILABLE', True)
+    monkeypatch.setattr(page_fetcher, '_PLAYWRIGHT_AVAILABLE', True)
 
     # Monkeypatch sync_playwright in the module to return FakePW
-    monkeypatch.setattr(brave_search, 'sync_playwright', lambda: FakePW())
+    monkeypatch.setattr(page_fetcher, 'sync_playwright', lambda: FakePW())
 
     # Enable Playwright via env var
     monkeypatch.setenv('AR_USE_PLAYWRIGHT', '1')
 
-    result = brave_search.fetch_page(url)
+    result = page_fetcher.fetch_page(url)
     assert result['title'] == 'Rendered Title'
     assert 'Rendered paragraph' in result['body']
     assert result['url'] == url
@@ -131,13 +145,20 @@ def test_fetch_page_respects_robots(monkeypatch, tmp_path):
             return DummyResponse(status_code=200, text='User-agent: *\nDisallow: /')
         return DummyResponse(status_code=404, text='')
 
-    monkeypatch.setattr(brave_search, 'requests', types.SimpleNamespace(get=fake_get))
+    # Mock both requests.get and requests.Session
+    class FakeSession:
+        def __init__(self):
+            self.max_redirects = 10
+        def get(self, *args, **kwargs):
+            return fake_get(*args, **kwargs)
+    
+    monkeypatch.setattr(page_fetcher, 'requests', types.SimpleNamespace(get=fake_get, Session=FakeSession))
 
     # Even if Playwright is available, it should not be used because robots disallow
-    monkeypatch.setattr(brave_search, '_PLAYWRIGHT_AVAILABLE', True)
+    monkeypatch.setattr(page_fetcher, '_PLAYWRIGHT_AVAILABLE', True)
     monkeypatch.setenv('AR_USE_PLAYWRIGHT', '1')
 
-    result = brave_search.fetch_page(url)
+    result = page_fetcher.fetch_page(url)
     # Since robots disallow, fetch_page should not use Playwright and should return empty body
     assert result['body'] == ''
     assert result['terms'] == ''

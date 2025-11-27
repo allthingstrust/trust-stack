@@ -35,7 +35,8 @@ except Exception:
     YouTubeScraper = None
 
 from ingestion.search_unified import search
-from ingestion.brave_search import fetch_page, collect_brave_pages
+from ingestion.page_fetcher import fetch_page
+from ingestion.brave_search import collect_brave_pages
 from ingestion.serper_search import collect_serper_pages
 from ingestion.normalizer import ContentNormalizer
 from scoring.pipeline import ScoringPipeline

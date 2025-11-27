@@ -125,7 +125,7 @@ class MetadataExtractor:
         # Check HTML for OpenGraph tags
         if html:
             try:
-                soup = BeautifulSoup(html, 'html.parser')
+                soup = BeautifulSoup(html, 'lxml')
                 og_type = soup.find('meta', property='og:type')
                 if og_type and og_type.get('content'):
                     og_content = og_type['content'].lower()
@@ -201,7 +201,7 @@ class MetadataExtractor:
         structured_data = {}
 
         try:
-            soup = BeautifulSoup(html, 'html.parser')
+            soup = BeautifulSoup(html, 'lxml')
 
             # Extract JSON-LD
             json_ld_scripts = soup.find_all('script', type='application/ld+json')
@@ -247,7 +247,7 @@ class MetadataExtractor:
             return None
 
         try:
-            soup = BeautifulSoup(html, 'html.parser')
+            soup = BeautifulSoup(html, 'lxml')
             canonical = soup.find('link', rel='canonical')
             if canonical and canonical.get('href'):
                 return canonical['href']
@@ -272,7 +272,7 @@ class MetadataExtractor:
             return og_data
 
         try:
-            soup = BeautifulSoup(html, 'html.parser')
+            soup = BeautifulSoup(html, 'lxml')
 
             # Extract all OG tags
             og_tags = soup.find_all('meta', property=re.compile(r'^og:'))
@@ -303,7 +303,7 @@ class MetadataExtractor:
             return meta_data
 
         try:
-            soup = BeautifulSoup(html, 'html.parser')
+            soup = BeautifulSoup(html, 'lxml')
 
             # Extract description
             description = soup.find('meta', attrs={'name': 'description'})

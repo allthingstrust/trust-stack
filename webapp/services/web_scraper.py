@@ -26,7 +26,7 @@ def fetch_page_title(url: str, brand_id: str = '', timeout: float = 5.0) -> str:
         response = requests.get(url, timeout=timeout, headers=headers)
         status = getattr(response, 'status_code', None)
         if status and 200 <= status < 400:
-            soup = BeautifulSoup(response.text, 'html.parser')
+            soup = BeautifulSoup(response.text, 'lxml')
             title_tag = soup.title
             if title_tag and title_tag.string:
                 title = title_tag.string.strip()
@@ -42,7 +42,7 @@ def fetch_page_title(url: str, brand_id: str = '', timeout: float = 5.0) -> str:
                 fresh_headers = get_realistic_headers(url)
                 resp2 = requests.get(url, timeout=max(timeout, 6.0), headers=fresh_headers)
                 if getattr(resp2, 'status_code', None) and 200 <= resp2.status_code < 400:
-                    soup = BeautifulSoup(resp2.text, 'html.parser')
+                    soup = BeautifulSoup(resp2.text, 'lxml')
                     title_tag = soup.title
                     if title_tag and title_tag.string:
                         return title_tag.string.strip()

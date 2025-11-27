@@ -7,6 +7,8 @@ import time
 import html as html_module
 
 
+from streamlit.errors import NoSessionContext
+
 class StreamlitLogHandler(logging.Handler):
     """
     Custom logging handler that captures log messages and sends them to a ProgressAnimator.
@@ -38,6 +40,10 @@ class StreamlitLogHandler(logging.Handler):
             msg = self.format(record)
             # Send to progress animator
             self.progress_animator.add_log(msg)
+        except NoSessionContext:
+            # Ignore logs from background threads that don't have a Streamlit context
+            # This prevents "NoSessionContext" errors when using ThreadPoolExecutor
+            pass
         except Exception:
             self.handleError(record)
 
