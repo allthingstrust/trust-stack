@@ -1755,9 +1755,18 @@ Engaging description:"""
                 max_tokens=60,
                 temperature=0.5
             ).strip()
+            
+            # Debug: Show if LLM generation succeeded
+            if brand_description:
+                logger.info(f"Generated brand description via LLM: {brand_description}")
         except Exception as e:
+            # Log the error so we can see what's failing
+            logger.warning(f"Brand description LLM generation failed: {e}")
             # Fallback to simple description
             pass
+    else:
+        # Debug: Log if we don't have sample descriptions
+        logger.info(f"No sample descriptions available for brand description. Items: {len(items)}")
     
     # Fallback description if LLM fails
     if not brand_description:
