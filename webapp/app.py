@@ -31,6 +31,7 @@ from urllib.parse import urlparse
 from config.settings import APIConfig, SETTINGS
 from scoring.llm_client import ChatClient
 from ingestion.fetch_config import get_realistic_headers, get_random_delay
+from utils.score_formatter import to_display_score, format_score_display, get_score_status
 
 # Import utility modules
 from webapp.utils.url_utils import (
@@ -1636,11 +1637,14 @@ def show_results_page():
     report = run_data.get('scoring_report', {})
     items = report.get('items', [])
 
-    # Calculate average comprehensive rating
+    # Calculate average comprehensive rating (convert to 0-10 scale for display)
     if items:
-        avg_rating = sum(item.get('final_score', 0) for item in items) / len(items)
+        avg_rating_internal = sum(item.get('final_score', 0) for item in items) / len(items)
+        avg_rating_internal = avg_rating_internal / 100  # Convert from 0-100 to 0-1
+        avg_rating_display = to_display_score(avg_rating_internal)
     else:
-        avg_rating = 0
+        avg_rating_internal = 0
+        avg_rating_display = 0
 
     # Calculate rating distribution
     excellent = sum(1 for item in items if item.get('final_score', 0) >= 80)
@@ -1650,8 +1654,139 @@ def show_results_page():
 
     # Header
     st.markdown('<div class="main-header">⭐ Trust Stack Results</div>', unsafe_allow_html=True)
-    st.markdown(f'<div class="sub-header">Brand: {run_data.get("brand_id")} | Run: {run_data.get("run_id")}</div>', unsafe_allow_html=True)
+    
+    # Date
+    from datetime import datetime
+    current_date = datetime.now().strftime("%B %d, %Y")
+    st.markdown(f"**Date:** {current_date}")
+    st.markdown("")  # Spacing
+    
+    # Data Source Description Section (NEW - matches reference format)
+    brand_id = run_data.get("brand_id", "Unknown Brand")
+    brand_name_display = brand_id.replace('_', ' ').replace('-', ' ').title()
+    
+    st.markdown(f"### {brand_name_display}")
+    
+    # Get actual URLs from items instead of just source type
+    sources = report.get('sources', [])
+    actual_urls = set()
+    
+    for item in items:
+        meta = item.get('meta', {})
+        if isinstance(meta, str):
+            try:
+                meta = json.loads(meta) if meta else {}
+            except:
+                meta = {}
+        
+        # Extract URL from metadata
+        url = meta.get('source_url') or meta.get('url') or meta.get('link')
+        if url and url.startswith('http'):
+            # Extract domain for cleaner display
+            from urllib.parse import urlparse
+            parsed = urlparse(url)
+            domain = f"{parsed.scheme}://{parsed.netloc}"
+            actual_urls.add(domain)
+    
+    # Display sources
+    if actual_urls:
+        sources_str = ', '.join(sorted(actual_urls))
+        st.markdown(f"**Data Source(s):** {sources_str}")
+    elif sources and sources != ['web']:
+        sources_str = ', '.join(sources)
+        st.markdown(f"**Data Source(s):** {sources_str}")
+    else:
+        st.markdown(f"**Data Source(s):** Brand content analysis")
+    
+    st.markdown("")  # Spacing
+    
+    # Try to infer content types and generate description
+    content_types = set()
+    sample_titles = []
+    sample_descriptions = []
+    
+    for item in items[:10]:  # Sample first 10 items
+        meta = item.get('meta', {})
+        if isinstance(meta, str):
+            try:
+                meta = json.loads(meta) if meta else {}
+            except:
+                meta = {}
+        
+        # Collect titles and descriptions for brand description
+        title = meta.get('title') or meta.get('og:title') or ''
+        description = meta.get('description') or meta.get('og:description') or ''
+        
+        if title:
+            sample_titles.append(title)
+        if description:
+            sample_descriptions.append(description)
+        
+        # Infer content type from metadata
+        if meta.get('og:type') == 'article' or 'blog' in str(meta.get('url', '')).lower():
+            content_types.add('articles')
+        elif 'product' in str(meta.get('og:type', '')).lower() or '/product' in str(meta.get('url', '')).lower():
+            content_types.add('product pages')
+        elif meta.get('twitter:card'):
+            content_types.add('social media content')
+    
+    # Generate brand description using LLM or fallback
+    brand_description = ""
+    
+    # Try to use LLM for brand description if we have sample content
+    if sample_descriptions:
+        try:
+            from scoring.scoring_llm_client import ScoringLLMClient
+            
+            # Use first few descriptions to generate brand summary
+            sample_text = ' '.join(sample_descriptions[:3])[:500]
+            
+            prompt = f"""Based on this content from {brand_id}, write a single engaging sentence (20-30 words) that captures what makes this brand special and what they offer. Make it vivid and specific, not generic.
 
+Content samples:
+{sample_text}
+
+Engaging description:"""
+            
+            client = ScoringLLMClient()
+            brand_description = client.generate(
+                prompt=prompt,
+                model=summary_model_used,
+                max_tokens=60,
+                temperature=0.5
+            ).strip()
+            
+            # Debug: Show if LLM generation succeeded
+            if brand_description:
+                logger.info(f"Generated brand description via LLM: {brand_description}")
+        except Exception as e:
+            # Log the error so we can see what's failing
+            logger.warning(f"Brand description LLM generation failed: {e}")
+            # Fallback to simple description
+            pass
+    else:
+        # Debug: Log if we don't have sample descriptions
+        logger.info(f"No sample descriptions available for brand description. Items: {len(items)}")
+    
+    # Fallback description if LLM fails
+    if not brand_description:
+        if content_types:
+            types_str = ', '.join(sorted(content_types))
+            brand_description = f"The website {brand_name_display} offers {types_str}."
+        else:
+            brand_description = f"The website {brand_name_display} provides various content and offerings."
+    
+    # Add content type info
+    if content_types:
+        types_str = ', '.join(sorted(content_types))
+        full_description = f"{brand_description} This report evaluates **{len(items)} content items** ({types_str}) across five trust dimensions."
+    else:
+        full_description = f"{brand_description} This report evaluates **{len(items)} content items** across five trust dimensions."
+    
+    st.markdown(full_description)
+    
+    st.divider()
+    
     # Display model info (read-only - model was selected before analysis)
     summary_model_used = report.get('llm_model', 'gpt-4o-mini')
     recommendations_model_used = report.get('recommendations_model', 'gpt-4o-mini')
@@ -1670,8 +1805,8 @@ def show_results_page():
 
     with col1:
         st.metric(
-            label="Average Rating",
-            value=f"{avg_rating:.1f}/100",
+            label="Average Trust Score",
+            value=f"{avg_rating_display:.1f} / 10",
             delta=None
         )
 
@@ -1703,9 +1838,10 @@ def show_results_page():
     from reporting.executive_summary import generate_executive_summary
 
     # Generate summary using models that were selected before analysis
+    # Pass the display score (0-10 scale) for better summary generation
     try:
         recommendation = generate_executive_summary(
-            avg_rating=avg_rating,
+            avg_rating=avg_rating_display * 10,  # Convert 0-10 to 0-100 for the function
             dimension_breakdown=dimension_breakdown,
             items=items,
             sources=sources,
@@ -1715,13 +1851,14 @@ def show_results_page():
     except Exception as e:
         st.error(f"Executive summary generation failed: {e}")
         # Fallback to template
-        recommendation = generate_rating_recommendation(avg_rating, dimension_breakdown, items)
+        recommendation = generate_rating_recommendation(avg_rating_display * 10, dimension_breakdown, items)
 
-    if avg_rating >= 80:
+    # Use display score for status determination (8.0+ = Excellent, 6.0+ = Good, etc.)
+    if avg_rating_display >= 8.0:
         st.markdown(f'<div class="success-box">🟢 <b>Excellent</b> - {recommendation}</div>', unsafe_allow_html=True)
-    elif avg_rating >= 60:
+    elif avg_rating_display >= 6.0:
         st.markdown(f'<div class="info-box">🟡 <b>Good</b> - {recommendation}</div>', unsafe_allow_html=True)
-    elif avg_rating >= 40:
+    elif avg_rating_display >= 4.0:
         st.markdown(f'<div class="warning-box">🟠 <b>Fair</b> - {recommendation}</div>', unsafe_allow_html=True)
     else:
         st.markdown(f'<div class="warning-box">🔴 <b>Poor</b> - {recommendation}</div>', unsafe_allow_html=True)
@@ -1752,8 +1889,9 @@ def show_results_page():
             issues = dimension_issues.get(dimension_key, [])
             successes = dimension_successes.get(dimension_key, [])
             
-            dim_score = dimension_breakdown.get(dimension_key, {}).get('average', 1.0) * 100
-            is_high_score = dim_score >= 80
+            dim_score_internal = dimension_breakdown.get(dimension_key, {}).get('average', 1.0)
+            dim_score_display = to_display_score(dim_score_internal)
+            is_high_score = dim_score_display >= 8.0
 
             # Only show dimensions that have detected issues OR are high scoring
             # (even if no specific successes were extracted, the high score itself is a success)
@@ -1770,14 +1908,14 @@ def show_results_page():
 
             dim_emoji_name, dim_subtitle = dimension_names[dimension_key]
 
-            # Show issue count with score
+            # Show issue count with score (0-10 scale)
             if is_high_score:
                 if successes:
-                    expander_label = f"{dim_emoji_name}: {len(successes)} strengths, {len(issues)} issues (Score {dim_score:.1f}/100)"
+                    expander_label = f"{dim_emoji_name}: {len(successes)} strengths, {len(issues)} issues (Score {dim_score_display:.1f} / 10)"
                 else:
-                    expander_label = f"{dim_emoji_name}: No issues found (Score {dim_score:.1f}/100)"
+                    expander_label = f"{dim_emoji_name}: No issues found (Score {dim_score_display:.1f} / 10)"
             else:
-                expander_label = f"{dim_emoji_name}: {len(issues)} issues found (Score {dim_score:.1f}/100)"
+                expander_label = f"{dim_emoji_name}: {len(issues)} issues found (Score {dim_score_display:.1f} / 10)"
 
             # Determine if expanded: expand if it has the most issues OR if it's the highest scoring one with successes (if no issues)
             is_expanded = False
@@ -1798,7 +1936,7 @@ def show_results_page():
                     if successes:
                         for success in successes:
                             st.success(f"**{success['success']}**: {success['evidence']}")
-                    else:
+                    elif not issues:
                         st.success(f"**No specific issues detected**: The content performs well in this dimension.")
                     
                     st.markdown("---")
@@ -1946,23 +2084,22 @@ def show_results_page():
             dim_data = dimension_breakdown.get(dim_key, {})
             avg_score = dim_data.get('average', 0)
             
+            # Convert to display scores (0-10 scale)
+            avg_display = to_display_score(avg_score)
+            min_display = to_display_score(dim_data.get('min', 0))
+            max_display = to_display_score(dim_data.get('max', 0))
+            
             # Get dimension-specific color
             dim_color = DIMENSION_COLORS.get(dim_key, '#3498db')
 
-            # Status indicator based on score
-            if avg_score >= 0.8:
-                status = "🟢"
-            elif avg_score >= 0.6:
-                status = "🟡"
-            elif avg_score >= 0.4:
-                status = "🟠"
-            else:
-                status = "🔴"
+            # Status indicator based on display score
+            status = get_score_status(avg_score)
 
             # Display with dimension color
             st.markdown(f"**{status} <span style='color: {dim_color}'>{dim_name}</span>**", unsafe_allow_html=True)
+            # Progress bar still uses 0-1 scale internally
             st.progress(avg_score)
-            st.caption(f"Score: {avg_score*100:.1f}/100 | Range: {dim_data.get('min', 0)*100:.1f} - {dim_data.get('max', 0)*100:.1f}")
+            st.caption(f"Score: {avg_display:.1f} / 10 | Range: {min_display:.1f} - {max_display:.1f}")
 
     st.divider()
 
@@ -2384,19 +2521,7 @@ def main():
 
         st.divider()
 
-        # API Status
-        st.markdown("### API Status")
-        cfg = APIConfig()
 
-        st.markdown("**Search Providers:**")
-        st.write("🌐 Brave:", "✅" if cfg.brave_api_key else "❌")
-        st.write("🔍 Serper:", "✅" if cfg.serper_api_key else "❌")
-
-        st.markdown("**Other APIs:**")
-        st.write("🔴 Reddit:", "✅" if (cfg.reddit_client_id and cfg.reddit_client_secret) else "❌")
-        st.write("📹 YouTube:", "✅" if cfg.youtube_api_key else "❌")
-
-        st.divider()
         st.caption("Trust Stack Rating v2.0")
         st.caption("5D Trust Framework")
 
