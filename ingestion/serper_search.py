@@ -244,6 +244,23 @@ def collect_serper_pages(
     logger.info('[SERPER] Starting concurrent collection for query=%s (target=%d)', query, target_count)
 
     def worker():
+        """Worker function that processes URLs from the queue.
+        
+        Attaches Streamlit context to suppress warnings in worker threads.
+        """
+        # Attach Streamlit context to this worker thread to suppress warnings
+        try:
+            from streamlit.runtime.scriptrunner_utils.script_run_context import get_script_run_ctx, add_script_run_ctx
+            ctx = get_script_run_ctx()
+            if ctx:
+                add_script_run_ctx(threading.current_thread(), ctx)
+        except ImportError:
+            # Streamlit context not available, continue without it
+            pass
+        except Exception:
+            # Context attachment failed, continue without it
+            pass
+        
         while True:
             try:
                 item = url_queue.get(timeout=0.5)
@@ -349,18 +366,10 @@ def collect_serper_pages(
         logger.debug('[SERPER] PlaywrightBrowserManager not available')
 
     try:
-        # Start workers
-        # Try to attach Streamlit context to workers to suppress warnings
-        try:
-            from streamlit.runtime.scriptrunner import add_script_run_ctx
-        except ImportError:
-            try:
-                from streamlit.scriptrunner import add_script_run_ctx
-            except ImportError:
-                add_script_run_ctx = lambda x: x
-
+        # Start workers - context is attached inside worker function
         with ThreadPoolExecutor(max_workers=5) as executor:
-            futures = [executor.submit(add_script_run_ctx(worker)) for _ in range(5)]
+            # Submit worker tasks directly (context attachment happens inside worker)
+            futures = [executor.submit(worker) for _ in range(5)]
             
             # Producer Loop
             while not stop_event.is_set():

@@ -65,15 +65,13 @@ class PlaywrightBrowserManager:
                 return False
 
     def _run_browser_loop(self):
-        """Internal loop running in a dedicated thread."""
-        # Create a new event loop for this thread to isolate it from Streamlit's loop
-        import asyncio
-        try:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-        except Exception as e:
-            logger.warning('Failed to set new event loop for Playwright thread: %s', e)
-
+        """Internal loop running in a dedicated thread.
+        
+        Note: We do NOT create a new event loop here because:
+        1. sync_playwright() uses synchronous API and doesn't need an event loop
+        2. Creating an event loop interferes with Streamlit's event loop management
+        3. It causes "Event loop is closed" errors during shutdown
+        """
         playwright = None
         browser = None
         
@@ -153,10 +151,14 @@ class PlaywrightBrowserManager:
                     self._request_queue.task_done()
                     
         except Exception as e:
-            # Suppress errors during shutdown (like BrokenPipeError)
-            if "Broken pipe" not in str(e) and "Event loop is closed" not in str(e):
-                logger.error('Playwright browser loop crashed: %s', e)
+            # Suppress errors during shutdown (like BrokenPipeError, Event loop is closed)
+            import sys
+            if not sys.is_finalizing():
+                # Only log if not shutting down
+                if "Broken pipe" not in str(e) and "Event loop is closed" not in str(e):
+                    logger.error('Playwright browser loop crashed: %s', e)
         finally:
+            # Clean up browser and playwright - suppress all errors during cleanup
             if browser:
                 try:
                     browser.close()
@@ -167,10 +169,14 @@ class PlaywrightBrowserManager:
                     playwright.stop()
                 except Exception:
                     pass
-            try:
-                logger.info('Playwright browser thread stopped')
-            except Exception:
-                pass
+            
+            # Log shutdown only if not finalizing
+            import sys
+            if not sys.is_finalizing():
+                try:
+                    logger.info('Playwright browser thread stopped')
+                except Exception:
+                    pass
             
             # Ensure we mark as stopped so it can be restarted if needed
             with self._lock:
