@@ -445,8 +445,20 @@ def collect_brave_pages(
     third_party_collected: List[Dict[str, str]] = []
     
     # Domain diversity tracking
+    from urllib.parse import urlparse
     domain_counts: Dict[str, int] = {}
-    max_per_domain = max(1, int(target_count * 0.2))
+    
+    # Adjust domain limits based on collection strategy
+    if url_collection_config and url_collection_config.brand_owned_ratio >= 0.8:
+        # Brand-controlled search: allow many pages per domain
+        # We WANT multiple pages from the brand's domains (nike.com, about.nike.com, etc.)
+        max_per_domain = target_count  # No effective limit
+        logger.info('[BRAVE] Brand-controlled search: disabled domain diversity limits (max_per_domain=%d)', max_per_domain)
+    else:
+        # Third-party or mixed search: enforce diversity to avoid over-sampling one domain
+        max_per_domain = max(1, int(target_count * 0.2))
+        logger.info('[BRAVE] Mixed search: enforcing domain diversity (max_per_domain=%d)', max_per_domain)
+
     
     # Stats
     stats = {
