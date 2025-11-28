@@ -273,7 +273,7 @@ def collect_serper_pages(
 
                 # Fetch
                 with results_lock: stats['total_fetched'] += 1
-                content = fetch_page(url)
+                content = fetch_page(url, browser_manager=browser_manager)
                 body = content.get('body') or ''
                 required_length = min_brand_body_length if is_brand_owned else min_body_length
                 
@@ -333,65 +333,88 @@ def collect_serper_pages(
             finally:
                 url_queue.task_done()
 
-    # Start workers
-    with ThreadPoolExecutor(max_workers=5) as executor:
-        futures = [executor.submit(worker) for _ in range(5)]
-        
-        # Producer Loop
-        while not stop_event.is_set():
-            # Check if done
-            with results_lock:
-                if len(brand_owned_collected) + len(third_party_collected) >= target_count:
-                    logger.info('[SERPER] Target reached, stopping producer')
-                    stop_event.set()
-                    break
-                if stats['total_processed'] >= max_total_results:
-                    logger.info('[SERPER] Max total results reached, stopping producer')
-                    stop_event.set()
-                    break
+    # Initialize persistent Playwright browser if available
+    browser_manager = None
+    try:
+        from ingestion.playwright_manager import PlaywrightBrowserManager
+        browser_manager = PlaywrightBrowserManager()
+        if browser_manager.start():
+            logger.info('[SERPER] Initialized persistent Playwright browser')
+        else:
+            logger.warning('[SERPER] Failed to start Playwright browser')
+            browser_manager = None
+    except ImportError:
+        logger.debug('[SERPER] PlaywrightBrowserManager not available')
+    except Exception as e:
+        logger.warning('[SERPER] Failed to initialize Playwright browser: %s', e)
 
-            logger.info('[SERPER] Fetching search batch: size=%d, start_page=%d', current_batch_size, current_page)
-            try:
-                search_results = search_serper(query, size=current_batch_size, start_page=current_page)
-            except Exception as e:
-                logger.warning('Serper search failed: %s', e)
-                break
-                
-            if not search_results:
-                logger.info('[SERPER] No more search results available')
-                break
-                
-            # Update pagination
-            pages_in_batch = (len(search_results) + 9) // 10
-            current_page += pages_in_batch
+    try:
+        # Start workers
+        with ThreadPoolExecutor(max_workers=5) as executor:
+            futures = [executor.submit(worker) for _ in range(5)]
             
-            # Push to queue
-            for item in search_results:
-                url = item.get('url')
-                if url and url not in seen_urls:
-                    seen_urls.add(url)
-                    url_queue.put(item)
-            
-            # Dynamic Sizing
-            with results_lock:
-                success_rate = stats['total_valid'] / stats['total_fetched'] if stats['total_fetched'] > 0 else 0
-            
-            if success_rate < 0.3 and stats['total_fetched'] > 5:
-                current_batch_size = target_count * 2
-            elif success_rate > 0.6 and stats['total_fetched'] > 5:
+            # Producer Loop
+            while not stop_event.is_set():
+                # Check if done
                 with results_lock:
-                    needed = target_count - (len(brand_owned_collected) + len(third_party_collected))
-                current_batch_size = max(10, int(needed / (success_rate or 0.1)) + 5)
-            else:
-                current_batch_size = target_count
-            
-            time.sleep(0.1)
+                    if len(brand_owned_collected) + len(third_party_collected) >= target_count:
+                        logger.info('[SERPER] Target reached, stopping producer')
+                        stop_event.set()
+                        break
+                    if stats['total_processed'] >= max_total_results:
+                        logger.info('[SERPER] Max total results reached, stopping producer')
+                        stop_event.set()
+                        break
 
-        stop_event.set()
+                logger.info('[SERPER] Fetching search batch: size=%d, start_page=%d', current_batch_size, current_page)
+                try:
+                    search_results = search_serper(query, size=current_batch_size, start_page=current_page)
+                except Exception as e:
+                    logger.warning('Serper search failed: %s', e)
+                    break
+                    
+                if not search_results:
+                    logger.info('[SERPER] No more search results available')
+                    break
+                    
+                # Update pagination
+                pages_in_batch = (len(search_results) + 9) // 10
+                current_page += pages_in_batch
+                
+                # Push to queue
+                for item in search_results:
+                    url = item.get('url')
+                    if url and url not in seen_urls:
+                        seen_urls.add(url)
+                        url_queue.put(item)
+                
+                # Dynamic Sizing
+                with results_lock:
+                    success_rate = stats['total_valid'] / stats['total_fetched'] if stats['total_fetched'] > 0 else 0
+                
+                if success_rate < 0.3 and stats['total_fetched'] > 5:
+                    current_batch_size = target_count * 2
+                elif success_rate > 0.6 and stats['total_fetched'] > 5:
+                    with results_lock:
+                        needed = target_count - (len(brand_owned_collected) + len(third_party_collected))
+                    current_batch_size = max(10, int(needed / (success_rate or 0.1)) + 5)
+                else:
+                    current_batch_size = target_count
+                
+                time.sleep(0.1)
 
-    collected = brand_owned_collected + third_party_collected
-    logger.info('[SERPER] Collection complete. Collected: %d. Stats: %s', len(collected), stats)
-    return collected
+            stop_event.set()
+
+        collected = brand_owned_collected + third_party_collected
+        logger.info('[SERPER] Collection complete. Collected: %d. Stats: %s', len(collected), stats)
+        return collected
+    finally:
+        if browser_manager:
+            try:
+                browser_manager.close()
+                logger.info('[SERPER] Stopped persistent Playwright browser')
+            except Exception as e:
+                logger.warning('[SERPER] Error stopping browser: %s', e)
 
 
 def get_serper_stats() -> Dict[str, any]:

@@ -16,9 +16,10 @@ logging.basicConfig(level=logging.INFO)
 
 class TestConcurrentSearch(unittest.TestCase):
     
+    @patch('ingestion.playwright_manager.PlaywrightBrowserManager')
     @patch('ingestion.serper_search.search_serper')
     @patch('ingestion.page_fetcher.fetch_page')
-    def test_concurrent_collection(self, mock_fetch, mock_search):
+    def test_concurrent_collection(self, mock_fetch, mock_search, mock_browser_manager):
         # Setup mocks
         
         # Mock search to return batches of results
@@ -66,9 +67,10 @@ class TestConcurrentSearch(unittest.TestCase):
         # Verify search was called
         self.assertTrue(mock_search.called)
         
-    @patch('ingestion.serper_search.search_serper')
+    @patch('ingestion.playwright_manager.PlaywrightBrowserManager')
     @patch('ingestion.page_fetcher.fetch_page')
-    def test_concurrent_collection_with_failures(self, mock_fetch, mock_search):
+    @patch('ingestion.serper_search.search_serper')
+    def test_concurrent_collection_with_failures(self, mock_search, mock_fetch, mock_browser_manager):
         # Setup mocks
         
         # Mock search

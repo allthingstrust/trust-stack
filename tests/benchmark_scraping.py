@@ -8,7 +8,7 @@ from typing import List, Dict
 # Add project root to path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from ingestion.brave_search import collect_brave_pages
+from ingestion.serper_search import collect_serper_pages
 from ingestion.page_fetcher import DomainConfigCache
 
 # Configure logging
@@ -41,7 +41,7 @@ def run_benchmark():
         query_start_time = time.time()
         
         try:
-            results = collect_brave_pages(query, target_count=target_count)
+            results = collect_serper_pages(query, target_count=target_count)
             duration = time.time() - query_start_time
             count = len(results)
             total_pages += count

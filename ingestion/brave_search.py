@@ -438,6 +438,7 @@ def collect_brave_pages(
     url_queue = queue.Queue(maxsize=max_total_results if max_total_results < 100 else 50)
     results_lock = threading.Lock()
     stop_event = threading.Event()
+    seen_urls = set()
     
     # Collections
     brand_owned_collected: List[Dict[str, str]] = []
@@ -612,7 +613,10 @@ def collect_brave_pages(
             
             # Push to queue
             for item in search_results:
-                url_queue.put(item)
+                url = item.get('url')
+                if url and url not in seen_urls:
+                    seen_urls.add(url)
+                    url_queue.put(item)
             
             # Dynamic Sizing based on cumulative success rate
             with results_lock:
