@@ -243,23 +243,31 @@ def collect_serper_pages(
 
     logger.info('[SERPER] Starting concurrent collection for query=%s (target=%d)', query, target_count)
 
+    # Capture Streamlit context in main thread BEFORE workers start
+    # (get_script_run_ctx() only works in the main thread, not in workers)
+    streamlit_ctx = None
+    try:
+        from streamlit.runtime.scriptrunner_utils.script_run_context import get_script_run_ctx
+        streamlit_ctx = get_script_run_ctx()
+    except ImportError:
+        pass
+    except Exception:
+        pass
+
     def worker():
         """Worker function that processes URLs from the queue.
         
         Attaches Streamlit context to suppress warnings in worker threads.
         """
         # Attach Streamlit context to this worker thread to suppress warnings
-        try:
-            from streamlit.runtime.scriptrunner_utils.script_run_context import get_script_run_ctx, add_script_run_ctx
-            ctx = get_script_run_ctx()
-            if ctx:
-                add_script_run_ctx(threading.current_thread(), ctx)
-        except ImportError:
-            # Streamlit context not available, continue without it
-            pass
-        except Exception:
-            # Context attachment failed, continue without it
-            pass
+        # Context was captured in main thread and is available via closure
+        if streamlit_ctx:
+            try:
+                from streamlit.runtime.scriptrunner_utils.script_run_context import add_script_run_ctx
+                add_script_run_ctx(threading.current_thread(), streamlit_ctx)
+            except Exception:
+                # Context attachment failed, continue without it
+                pass
         
         while True:
             try:
