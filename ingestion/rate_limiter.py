@@ -30,7 +30,8 @@ class PerDomainRateLimiter:
             default_interval: Minimum seconds between requests to the same domain
         """
         self._domain_last_request: Dict[str, float] = {}
-        self._lock = threading.Lock()
+        self._domain_locks: Dict[str, threading.Lock] = {}
+        self._locks_lock = threading.Lock()  # Lock for managing the locks dictionary
         self._default_interval = default_interval
     
     def wait_for_domain(self, url: str) -> None:
@@ -50,19 +51,32 @@ class PerDomainRateLimiter:
         except Exception:
             return  # Failed to parse URL, no rate limiting
         
-        with self._lock:
+        # Get or create a lock for this specific domain
+        with self._locks_lock:
+            if domain not in self._domain_locks:
+                self._domain_locks[domain] = threading.Lock()
+            domain_lock = self._domain_locks[domain]
+        
+        # Acquire the domain-specific lock and calculate sleep time
+        with domain_lock:
             last_time = self._domain_last_request.get(domain, 0)
             now = time.monotonic()
             elapsed = now - last_time
             
             if elapsed < self._default_interval:
                 sleep_time = self._default_interval - elapsed
-                time.sleep(sleep_time)
+            else:
+                sleep_time = 0
             
-            # Update last request time for this domain
-            self._domain_last_request[domain] = time.monotonic()
+            # Update timestamp BEFORE sleeping (reserve this slot)
+            self._domain_last_request[domain] = now + sleep_time
+        
+        # Sleep OUTSIDE the lock to allow other domains to proceed in parallel
+        if sleep_time > 0:
+            time.sleep(sleep_time)
     
     def reset(self) -> None:
         """Clear all domain tracking. Useful for testing."""
-        with self._lock:
+        with self._locks_lock:
             self._domain_last_request.clear()
+            self._domain_locks.clear()
