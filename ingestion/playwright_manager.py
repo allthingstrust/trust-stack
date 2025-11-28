@@ -56,6 +56,14 @@ class PlaywrightBrowserManager:
 
     def _run_browser_loop(self):
         """Internal loop running in a dedicated thread."""
+        # Create a new event loop for this thread to isolate it from Streamlit's loop
+        import asyncio
+        try:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+        except Exception as e:
+            logger.warning('Failed to set new event loop for Playwright thread: %s', e)
+
         playwright = None
         browser = None
         
@@ -82,7 +90,9 @@ class PlaywrightBrowserManager:
                     self._request_queue.task_done()
                     
         except Exception as e:
-            logger.error('Playwright browser loop crashed: %s', e)
+            # Suppress errors during shutdown (like BrokenPipeError)
+            if "Broken pipe" not in str(e) and "Event loop is closed" not in str(e):
+                logger.error('Playwright browser loop crashed: %s', e)
         finally:
             if browser:
                 try:
@@ -94,7 +104,10 @@ class PlaywrightBrowserManager:
                     playwright.stop()
                 except Exception:
                     pass
-            logger.info('Playwright browser thread stopped')
+            try:
+                logger.info('Playwright browser thread stopped')
+            except Exception:
+                pass
 
     def _process_fetch(self, browser: Browser, url: str, user_agent: str) -> Dict[str, str]:
         """Perform the actual fetch logic inside the browser thread."""
