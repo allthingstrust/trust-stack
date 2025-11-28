@@ -700,12 +700,21 @@ def _fetch_with_playwright(url: str, user_agent: str, browser_manager=None) -> D
     pw_context = None
     
     try:
-        # Use persistent browser if available, otherwise launch new browser
+        # Use persistent browser if available
         if browser_manager and browser_manager.is_started:
-            page = browser_manager.get_page(user_agent=user_agent)
-            if not page:
-                logger.warning('Failed to get page from browser manager for %s', url)
-                return {"title": "", "body": "", "url": url, "terms": "", "privacy": ""}
+            result = browser_manager.fetch_page(url, user_agent)
+            
+            # Extract footer links from raw_content if available
+            if 'raw_content' in result:
+                try:
+                    links = _extract_footer_links(result['raw_content'], url)
+                    result['terms'] = links.get('terms', '')
+                    result['privacy'] = links.get('privacy', '')
+                    del result['raw_content']  # Clean up
+                except Exception:
+                    result['terms'] = ""
+                    result['privacy'] = ""
+            return result
         else:
             # Fallback to per-page browser launch
             if not _PLAYWRIGHT_AVAILABLE:

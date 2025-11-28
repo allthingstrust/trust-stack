@@ -1,11 +1,7 @@
-"""Playwright browser manager for persistent browser instance.
-
-Provides thread-safe management of a persistent Playwright browser instance
-to avoid the overhead of launching and closing the browser for each page fetch.
-"""
 import logging
 import threading
-from typing import Optional
+import queue
+from typing import Optional, Dict, Any
 
 logger = logging.getLogger('ingestion.playwright_manager')
 
@@ -23,31 +19,22 @@ except Exception:
 class PlaywrightBrowserManager:
     """Thread-safe manager for persistent Playwright browser instance.
     
-    Usage:
-        manager = PlaywrightBrowserManager()
-        manager.start()
-        try:
-            page = manager.get_page(user_agent='...')
-            # ... use page ...
-            page.close()
-        finally:
-            manager.close()
+    Uses a dedicated thread to handle all Playwright interactions, ensuring
+    thread safety for the synchronous Playwright API.
     """
     
     def __init__(self):
         """Initialize the browser manager."""
-        self._playwright: Optional[Playwright] = None
-        self._browser: Optional[Browser] = None
-        self._lock = threading.Lock()
+        self._request_queue = queue.Queue()
+        self._thread: Optional[threading.Thread] = None
         self._is_started = False
+        self._lock = threading.Lock()
         
     def start(self) -> bool:
-        """Launch the browser instance.
-        
-        Should be called once at the start of a collection run.
+        """Launch the browser thread.
         
         Returns:
-            True if browser was started successfully, False otherwise
+            True if started successfully (or already started), False otherwise
         """
         if not _PLAYWRIGHT_AVAILABLE:
             logger.warning('Playwright is not available, cannot start browser')
@@ -55,73 +42,149 @@ class PlaywrightBrowserManager:
             
         with self._lock:
             if self._is_started:
-                logger.debug('Browser already started')
                 return True
                 
             try:
-                logger.info('Starting persistent Playwright browser...')
-                self._playwright = sync_playwright().start()
-                self._browser = self._playwright.chromium.launch(headless=True)
+                self._thread = threading.Thread(target=self._run_browser_loop, daemon=True)
+                self._thread.start()
                 self._is_started = True
-                logger.info('Playwright browser started successfully')
+                logger.info('Playwright browser thread started')
                 return True
             except Exception as e:
-                logger.error('Failed to start Playwright browser: %s', e)
-                self._playwright = None
-                self._browser = None
-                self._is_started = False
+                logger.error('Failed to start Playwright thread: %s', e)
                 return False
-    
-    def get_page(self, user_agent: str) -> Optional[Page]:
-        """Get a new browser page/context.
+
+    def _run_browser_loop(self):
+        """Internal loop running in a dedicated thread."""
+        playwright = None
+        browser = None
         
-        Thread-safe method to create a new page with the specified user agent.
-        Each page should be closed by the caller when done.
-        
-        Args:
-            user_agent: User agent string for the page
+        try:
+            logger.info('Initializing Playwright in dedicated thread...')
+            playwright = sync_playwright().start()
+            browser = playwright.chromium.launch(headless=True)
+            logger.info('Playwright browser initialized successfully')
             
-        Returns:
-            A new Page object, or None if browser is not started
-        """
-        with self._lock:
-            if not self._is_started or not self._browser:
-                logger.warning('Browser not started, cannot create page')
-                return None
+            while True:
+                item = self._request_queue.get()
+                if item is None:
+                    break
+                    
+                url, user_agent, result_queue = item
                 
+                try:
+                    result = self._process_fetch(browser, url, user_agent)
+                    result_queue.put(result)
+                except Exception as e:
+                    logger.error('Error processing fetch for %s: %s', url, e)
+                    result_queue.put({"title": "", "body": "", "url": url, "error": str(e)})
+                finally:
+                    self._request_queue.task_done()
+                    
+        except Exception as e:
+            logger.error('Playwright browser loop crashed: %s', e)
+        finally:
+            if browser:
+                try:
+                    browser.close()
+                except Exception:
+                    pass
+            if playwright:
+                try:
+                    playwright.stop()
+                except Exception:
+                    pass
+            logger.info('Playwright browser thread stopped')
+
+    def _process_fetch(self, browser: Browser, url: str, user_agent: str) -> Dict[str, str]:
+        """Perform the actual fetch logic inside the browser thread."""
+        page = None
+        try:
+            page = browser.new_page(user_agent=user_agent)
+            page.goto(url, timeout=20000)
+            
             try:
-                page = self._browser.new_page(user_agent=user_agent)
-                return page
-            except Exception as e:
-                logger.error('Failed to create new page: %s', e)
-                return None
+                page.wait_for_selector('body', timeout=8000)
+            except Exception:
+                pass
+            
+            page_content = page.content()
+            page_title = page.title() or ''
+            
+            # Extraction logic (mirrors _fetch_with_playwright)
+            page_body = ""
+            try:
+                # Strategy 1: article tag
+                article = page.query_selector('article')
+                if article:
+                    page_body = article.inner_text()
+
+                # Strategy 2: main tag or role="main"
+                if not page_body or len(page_body) < 150:
+                    main = page.query_selector('main') or page.query_selector('[role="main"]')
+                    if main:
+                        page_body = main.inner_text()
+
+                # Strategy 3: divs with content-related class names
+                if not page_body or len(page_body) < 150:
+                    content_patterns = ['content', 'post-content', 'article-body', 'article', 'entry', 'post', 'story-body']
+                    for pattern in content_patterns:
+                        divs = page.query_selector_all(f'div[class*="{pattern}"]')
+                        for div in divs:
+                            div_text = div.inner_text()
+                            if div_text and len(div_text) >= 150:
+                                page_body = div_text
+                                break
+                        if page_body:
+                            break
+
+                # Strategy 4: all paragraphs
+                if not page_body or len(page_body) < 150:
+                    paragraphs = page.query_selector_all('p')
+                    texts = [p.inner_text() for p in paragraphs if p]
+                    page_body = "\\n\\n".join(texts)
+
+                # Strategy 5: fall back to entire body content
+                if not page_body or len(page_body) < 100:
+                    body_elem = page.query_selector('body')
+                    if body_elem:
+                        page_body = body_elem.inner_text()
+            except Exception:
+                page_body = page_content
+
+            return {
+                "title": page_title.strip(),
+                "body": page_body.strip(),
+                "url": url,
+                "raw_content": page_content # Return raw content for footer link extraction
+            }
+        finally:
+            if page:
+                try:
+                    page.close()
+                except Exception:
+                    pass
+
+    def fetch_page(self, url: str, user_agent: str) -> Dict[str, str]:
+        """Submit a fetch request to the browser thread and wait for result."""
+        if not self._is_started:
+            return {"title": "", "body": "", "url": url, "error": "Browser not started"}
+            
+        result_queue = queue.Queue()
+        self._request_queue.put((url, user_agent, result_queue))
+        return result_queue.get()
     
     def close(self):
-        """Close the browser instance.
-        
-        Should be called once at the end of a collection run.
-        Safe to call multiple times.
-        """
+        """Stop the browser thread."""
         with self._lock:
             if not self._is_started:
                 return
-                
-            try:
-                logger.info('Closing persistent Playwright browser...')
-                if self._browser:
-                    self._browser.close()
-                if self._playwright:
-                    self._playwright.stop()
-                logger.info('Playwright browser closed successfully')
-            except Exception as e:
-                logger.error('Error closing Playwright browser: %s', e)
-            finally:
-                self._browser = None
-                self._playwright = None
-                self._is_started = False
+            self._request_queue.put(None)
+            if self._thread:
+                self._thread.join(timeout=5)
+            self._is_started = False
     
     @property
     def is_started(self) -> bool:
-        """Check if the browser is currently started."""
         with self._lock:
             return self._is_started
