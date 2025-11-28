@@ -423,8 +423,8 @@ def collect_brave_pages(
     # Initialize persistent Playwright browser if available
     browser_manager = None
     try:
-        from ingestion.playwright_manager import PlaywrightBrowserManager
-        browser_manager = PlaywrightBrowserManager()
+        from ingestion.playwright_manager import get_browser_manager
+        browser_manager = get_browser_manager()
         if browser_manager.start():
             logger.info('[BRAVE] Persistent Playwright browser started for collection')
         else:
@@ -582,8 +582,18 @@ def collect_brave_pages(
                 url_queue.task_done()
 
     # Start workers
+    # Try to attach Streamlit context to workers to suppress warnings
+    try:
+        from streamlit.runtime.scriptrunner import add_script_run_ctx
+    except ImportError:
+        # Fallback for older Streamlit versions or if not running in Streamlit
+        try:
+            from streamlit.scriptrunner import add_script_run_ctx
+        except ImportError:
+            add_script_run_ctx = lambda x: x
+
     with ThreadPoolExecutor(max_workers=5) as executor:
-        futures = [executor.submit(worker) for _ in range(5)]
+        futures = [executor.submit(add_script_run_ctx(worker)) for _ in range(5)]
         
         # Producer Loop
         while not stop_event.is_set():
@@ -640,10 +650,9 @@ def collect_brave_pages(
         
     collected = brand_owned_collected + third_party_collected
     
-    # Clean up browser manager
-    if browser_manager:
-        browser_manager.close()
-        logger.info('[BRAVE] Persistent Playwright browser closed')
+    # Do NOT close the singleton browser manager here. Let it persist.
+    # if browser_manager:
+    #     browser_manager.close()
     
     logger.info('[BRAVE] Collection complete. Collected: %d. Stats: %s', len(collected), stats)
     return collected

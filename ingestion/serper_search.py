@@ -336,22 +336,31 @@ def collect_serper_pages(
     # Initialize persistent Playwright browser if available
     browser_manager = None
     try:
-        from ingestion.playwright_manager import PlaywrightBrowserManager
-        browser_manager = PlaywrightBrowserManager()
+        from ingestion.playwright_manager import get_browser_manager
+        browser_manager = get_browser_manager()
         if browser_manager.start():
             logger.info('[SERPER] Initialized persistent Playwright browser')
         else:
-            logger.warning('[SERPER] Failed to start Playwright browser')
             browser_manager = None
+    except Exception as e:
+        logger.debug('[SERPER] Could not start persistent browser: %s', e)
+        browser_manager = None
     except ImportError:
         logger.debug('[SERPER] PlaywrightBrowserManager not available')
-    except Exception as e:
-        logger.warning('[SERPER] Failed to initialize Playwright browser: %s', e)
 
     try:
         # Start workers
+        # Try to attach Streamlit context to workers to suppress warnings
+        try:
+            from streamlit.runtime.scriptrunner import add_script_run_ctx
+        except ImportError:
+            try:
+                from streamlit.scriptrunner import add_script_run_ctx
+            except ImportError:
+                add_script_run_ctx = lambda x: x
+
         with ThreadPoolExecutor(max_workers=5) as executor:
-            futures = [executor.submit(worker) for _ in range(5)]
+            futures = [executor.submit(add_script_run_ctx(worker)) for _ in range(5)]
             
             # Producer Loop
             while not stop_event.is_set():
@@ -409,12 +418,14 @@ def collect_serper_pages(
         logger.info('[SERPER] Collection complete. Collected: %d. Stats: %s', len(collected), stats)
         return collected
     finally:
-        if browser_manager:
-            try:
-                browser_manager.close()
-                logger.info('[SERPER] Stopped persistent Playwright browser')
-            except Exception as e:
-                logger.warning('[SERPER] Error stopping browser: %s', e)
+        # Do NOT close the singleton browser manager here. Let it persist.
+        # if browser_manager:
+        #     try:
+        #         browser_manager.close()
+        #         logger.info('[SERPER] Stopped persistent Playwright browser')
+        #     except Exception as e:
+        #         logger.warning('[SERPER] Error stopping browser: %s', e)
+        pass
 
 
 def get_serper_stats() -> Dict[str, any]:

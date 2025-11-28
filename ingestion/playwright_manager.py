@@ -45,7 +45,17 @@ class PlaywrightBrowserManager:
                 return True
                 
             try:
+                # Try to attach Streamlit context to the thread to suppress warnings
+                try:
+                    from streamlit.runtime.scriptrunner import add_script_run_ctx
+                except ImportError:
+                    try:
+                        from streamlit.scriptrunner import add_script_run_ctx
+                    except ImportError:
+                        add_script_run_ctx = lambda x: x
+
                 self._thread = threading.Thread(target=self._run_browser_loop, daemon=True)
+                add_script_run_ctx(self._thread)
                 self._thread.start()
                 self._is_started = True
                 logger.info('Playwright browser thread started')
@@ -70,7 +80,24 @@ class PlaywrightBrowserManager:
         try:
             logger.info('Initializing Playwright in dedicated thread...')
             playwright = sync_playwright().start()
-            browser = playwright.chromium.launch(headless=True)
+            
+            # Harden browser launch args to prevent crashes on macOS/Headless
+            launch_args = [
+                '--disable-gpu',
+                '--disable-dev-shm-usage',
+                '--no-sandbox',
+                '--disable-setuid-sandbox',
+                '--disable-accelerated-2d-canvas',
+                '--disable-gl-drawing-for-tests'
+            ]
+            
+            browser = playwright.chromium.launch(
+                headless=True,
+                args=launch_args,
+                handle_sigint=False,
+                handle_sigterm=False,
+                handle_sighup=False
+            )
             logger.info('Playwright browser initialized successfully')
             
             while True:
@@ -81,11 +108,47 @@ class PlaywrightBrowserManager:
                 url, user_agent, result_queue = item
                 
                 try:
+                    # Check if browser is still connected
+                    if not browser.is_connected():
+                        logger.warning('Browser disconnected, restarting...')
+                        try:
+                            browser.close()
+                        except: pass
+                        browser = playwright.chromium.launch(
+                            headless=True,
+                            args=launch_args,
+                            handle_sigint=False,
+                            handle_sigterm=False,
+                            handle_sighup=False
+                        )
+                        
                     result = self._process_fetch(browser, url, user_agent)
                     result_queue.put(result)
                 except Exception as e:
-                    logger.error('Error processing fetch for %s: %s', url, e)
-                    result_queue.put({"title": "", "body": "", "url": url, "error": str(e)})
+                    error_msg = str(e)
+                    # If target closed, try one restart
+                    if "Target page, context or browser has been closed" in error_msg or "Connection closed" in error_msg:
+                        logger.warning('Browser crashed during fetch, restarting and retrying: %s', e)
+                        try:
+                            try:
+                                browser.close()
+                            except: pass
+                            browser = playwright.chromium.launch(
+                                headless=True,
+                                args=launch_args,
+                                handle_sigint=False,
+                                handle_sigterm=False,
+                                handle_sighup=False
+                            )
+                            # Retry fetch once
+                            result = self._process_fetch(browser, url, user_agent)
+                            result_queue.put(result)
+                        except Exception as retry_e:
+                            logger.error('Retry failed for %s: %s', url, retry_e)
+                            result_queue.put({"title": "", "body": "", "url": url, "error": str(retry_e)})
+                    else:
+                        logger.error('Error processing fetch for %s: %s', url, e)
+                        result_queue.put({"title": "", "body": "", "url": url, "error": str(e)})
                 finally:
                     self._request_queue.task_done()
                     
@@ -108,6 +171,11 @@ class PlaywrightBrowserManager:
                 logger.info('Playwright browser thread stopped')
             except Exception:
                 pass
+            
+            # Ensure we mark as stopped so it can be restarted if needed
+            with self._lock:
+                self._is_started = False
+                self._thread = None
 
     def _process_fetch(self, browser: Browser, url: str, user_agent: str) -> Dict[str, str]:
         """Perform the actual fetch logic inside the browser thread."""
@@ -178,15 +246,22 @@ class PlaywrightBrowserManager:
                 except Exception:
                     pass
 
-    def fetch_page(self, url: str, user_agent: str) -> Dict[str, str]:
+    def fetch_page(self, url: str, user_agent: str, timeout: int = 60) -> Dict[str, str]:
         """Submit a fetch request to the browser thread and wait for result."""
-        if not self._is_started:
-            return {"title": "", "body": "", "url": url, "error": "Browser not started"}
+        if not self.is_started:
+            # Try to auto-restart if not started
+            if not self.start():
+                return {"title": "", "body": "", "url": url, "error": "Browser not started"}
             
         result_queue = queue.Queue()
         self._request_queue.put((url, user_agent, result_queue))
-        return result_queue.get()
-    
+        
+        try:
+            return result_queue.get(timeout=timeout)
+        except queue.Empty:
+            logger.error(f"Timeout waiting for Playwright fetch: {url}")
+            return {"title": "", "body": "", "url": url, "error": "Timeout waiting for browser"}
+
     def close(self):
         """Stop the browser thread."""
         with self._lock:
@@ -196,8 +271,35 @@ class PlaywrightBrowserManager:
             if self._thread:
                 self._thread.join(timeout=5)
             self._is_started = False
+            self._thread = None
     
     @property
     def is_started(self) -> bool:
         with self._lock:
-            return self._is_started
+            return self._is_started and self._thread and self._thread.is_alive()
+
+
+# Global singleton instance
+_GLOBAL_MANAGER = None
+_GLOBAL_LOCK = threading.Lock()
+
+def get_browser_manager() -> PlaywrightBrowserManager:
+    """Get the global singleton browser manager instance."""
+    global _GLOBAL_MANAGER
+    with _GLOBAL_LOCK:
+        if _GLOBAL_MANAGER is None:
+            _GLOBAL_MANAGER = PlaywrightBrowserManager()
+            # Register atexit handler to ensure clean shutdown
+            import atexit
+            atexit.register(_cleanup_browser_manager)
+    return _GLOBAL_MANAGER
+
+def _cleanup_browser_manager():
+    """Cleanup function to close the browser manager on exit."""
+    global _GLOBAL_MANAGER
+    if _GLOBAL_MANAGER:
+        try:
+            _GLOBAL_MANAGER.close()
+        except Exception:
+            pass
+

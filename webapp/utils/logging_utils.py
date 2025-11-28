@@ -44,7 +44,10 @@ class StreamlitLogHandler(logging.Handler):
             # Ignore logs from background threads that don't have a Streamlit context
             # This prevents "NoSessionContext" errors when using ThreadPoolExecutor
             pass
-        except Exception:
+        except Exception as e:
+            # Suppress "Event loop is closed" errors which happen during shutdown
+            if "Event loop is closed" in str(e):
+                return
             self.handleError(record)
 
 
@@ -139,7 +142,15 @@ class ProgressAnimator:
         </div>
         """
 
-        self.container.html(html)
+        try:
+            self.container.html(html)
+        except RuntimeError as e:
+            if "Event loop is closed" in str(e):
+                pass
+            else:
+                raise e
+        except Exception:
+            pass
 
     def _process_log_message(self, log_message: str) -> str:
         """
