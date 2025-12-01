@@ -208,17 +208,28 @@ class KeySignalEvaluator:
                 if attr.get('dimension') == dimension
             ]
             
+            # Construct context entry
+            entry = f"- {title}"
             if relevant_attrs:
                 attr_summary = ', '.join([
                     f"{attr.get('label')}: {attr.get('value')}/10"
                     for attr in relevant_attrs[:3]
                 ])
-                context_parts.append(f"- {title}: {attr_summary}")
+                entry += f" (Attributes: {attr_summary})"
+            
+            # Add content snippet for context
+            body = item.get('body', '') or meta.get('description', '')
+            if body:
+                # Truncate body to avoid hitting token limits, but keep enough for context
+                snippet = body[:500].replace('\n', ' ')
+                entry += f"\n  Content Snippet: \"{snippet}...\""
+            
+            context_parts.append(entry)
         
         if not context_parts:
             return "Limited content metadata available for analysis."
         
-        return "\n".join(context_parts)
+        return "\n\n".join(context_parts)
     
     def _create_signal_evaluation_prompt(
         self,

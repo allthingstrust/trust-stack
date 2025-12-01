@@ -123,7 +123,12 @@ def _generate_dimension_analysis(
         title = item.get('title', 'Untitled')
         item_score = item.get('dimension_scores', {}).get(dimension, 0) * 10
         url = item.get('meta', {}).get('source_url', 'No URL')
-        items_context += f"- [{item_score:.1f}/10] {title} ({url})\n"
+        
+        # Extract a snippet of the body content to give the LLM context
+        body = item.get('body', '') or item.get('meta', {}).get('description', '')
+        snippet = body[:600].replace('\n', ' ') + "..." if body else "No content available."
+        
+        items_context += f"- [{item_score:.1f}/10] {title} ({url})\n  Content Snippet: \"{snippet}\"\n"
 
     prompt = f"""
 You are an expert Trust Stack analyst. Generate a detailed analysis for the '{dimension.title()}' dimension of a brand's content.
@@ -169,15 +174,17 @@ Metric | Value
 [A 2-3 sentence summary paragraph]
 
 🛠️ **Recommendations to Improve {dimension.upper()}**
-1. [Recommendation 1]
-2. [Recommendation 2]
-3. [Recommendation 3]
+(Provide 3-5 concrete, actionable steps based on the **Content Snippets** provided above. Do NOT be generic. Quote the content if relevant.)
+1. [Actionable Recommendation 1]
+2. [Actionable Recommendation 2]
+3. [Actionable Recommendation 3]
 
 INSTRUCTIONS:
 - Be professional, objective, and detailed.
 - Use the provided score to guide the tone.
 - Ensure the "Key Signal Evaluation" section covers ALL the signals listed above.
 - Do NOT use headers like # or ##. Use **bold** for headers to keep font size consistent.
+- CRITICAL: Recommendations must be specific and actionable. Use the provided content snippets to identify specific gaps (e.g., "The 'About' page text '...' lacks team member names").
 """
 
     try:
@@ -246,10 +253,10 @@ Generated on {generated_at}
 [Bullet points of strong areas]
 
 **Areas of Concern**
-[Bullet points of weak areas]
+[Bullet points of weak areas. Be specific about what is missing or weak.]
 
 📌 Recommended Actions
-[Bullet points of high-level strategic recommendations]
+[Bullet points of detailed, actionable remedy recommendations. Avoid generic advice. Suggest specific technical or content fixes.]
 
 📊 Aggregated Brand Trust Summary
 Analyzed {report_data.get('total_items_analyzed', 0)} URLs for brand "{brand_id}".
@@ -264,6 +271,7 @@ Verification: {scores.get('verification', 0):.1f} / 10
 INSTRUCTIONS:
 - Synthesize the scores into a cohesive narrative.
 - Highlight the most critical issues in "Areas of Concern".
+- CRITICAL: "Recommended Actions" must be detailed and actionable. Provide specific remedies for the identified weaknesses.
 """
 
     try:

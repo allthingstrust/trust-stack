@@ -105,6 +105,13 @@ def run_analysis(brand_id: str, keywords: List[str], sources: List[str], max_ite
                 selected_web_urls = [u for u in selected_urls if u['source'] in ['brave', 'serper', 'web']]
                 collected = []
 
+                # Get browser manager for persistent fetching
+                from ingestion.playwright_manager import get_browser_manager
+                browser_manager = get_browser_manager()
+                # Ensure it's started
+                if not browser_manager.is_started:
+                    browser_manager.start()
+
                 for url_data in selected_web_urls:
                     try:
                         # Check if content was already fetched in the orchestration step
@@ -120,7 +127,8 @@ def run_analysis(brand_id: str, keywords: List[str], sources: List[str], max_ite
                             collected.append(page_data)
                         else:
                             # Fallback to fetching if not already fetched
-                            page_data = fetch_page(url_data['url'])
+                            # Pass browser_manager for robust fetching
+                            page_data = fetch_page(url_data['url'], browser_manager=browser_manager)
                             if page_data and page_data.get('body'):
                                 # Add brand-owned flag to metadata
                                 page_data['is_brand_owned'] = url_data.get('is_brand_owned', False)
@@ -137,12 +145,19 @@ def run_analysis(brand_id: str, keywords: List[str], sources: List[str], max_ite
                 from ingestion.search_unified import search
                 search_results = search(query, size=web_pages, provider=search_provider)
 
+                # Get browser manager for persistent fetching
+                from ingestion.playwright_manager import get_browser_manager
+                browser_manager = get_browser_manager()
+                if not browser_manager.is_started:
+                    browser_manager.start()
+
                 collected = []
                 for result in search_results:
                     url = result.get('url', '')
                     if url:
                         try:
-                            page_data = fetch_page(url)
+                            # Pass browser_manager for robust fetching
+                            page_data = fetch_page(url, browser_manager=browser_manager)
                             if page_data and page_data.get('body'):
                                 # Add metadata from search result
                                 page_data['search_title'] = result.get('title', '')

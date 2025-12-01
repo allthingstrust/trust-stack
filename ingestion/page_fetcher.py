@@ -941,8 +941,8 @@ def fetch_page(url: str, timeout: int = 10, browser_manager=None) -> Dict[str, s
                 body = og_desc.get('content').strip()
         if (not title or not body or len(body) < 200):
             # Attempt Playwright fallback for thin content if enabled and allowed
-            use_pw = should_use_playwright(url)
-            try_playwright = use_pw and _PLAYWRIGHT_AVAILABLE
+            # Force Playwright if content is thin, even if not explicitly configured for this domain
+            try_playwright = _PLAYWRIGHT_AVAILABLE
             if try_playwright:
                 try:
                     # Use realistic browser headers for Playwright too

@@ -1757,8 +1757,9 @@ def show_results_page():
     brand_description = ""
     
     # Try to use LLM for brand description if we have sample content
+    # Try to use LLM for brand description if we have items (URLs) or sample content
     summary_model_used = report.get('llm_model', 'gpt-4o-mini')
-    if sample_descriptions:
+    if items:
         try:
             from scoring.scoring_llm_client import LLMScoringClient
             
@@ -1776,12 +1777,17 @@ def show_results_page():
                     urls_list.append(u)
             
             urls_text = '\n'.join(urls_list)
-            sample_text = ' '.join(sample_descriptions[:5])[:1000]
+            # Use whatever sample text we have, or just a placeholder if none
+            sample_text = ' '.join(sample_descriptions[:5])[:1000] if sample_descriptions else "No content snippets available."
             
             prompt = f"""You are writing a summary for a "Trust Stack" analysis report for {brand_id}.
 Instead of a generic brand description, write a 2-3 sentence summary of the SPECIFIC websites and content that were analyzed in this report.
-Mention the types of pages (e.g. "Analysis covers the main corporate homepage, investor relations site, and 3 product pages...").
-Be specific about what was looked at.
+
+CRITICAL INSTRUCTIONS:
+- Be specific about the types of pages analyzed (e.g. "Analysis covers the main corporate homepage, investor relations site, and 3 product pages...").
+- Use a professional but engaging and personable tone. Avoid robotic language.
+- Mention specific details from the URLs or content if possible.
+- Do NOT say "The report analyzes..." repeatedly. vary your sentence structure.
 
 Analyzed URLs:
 {urls_text}
@@ -1795,8 +1801,8 @@ Summary of Analyzed Content:"""
             brand_description = client.generate(
                 prompt=prompt,
                 model=summary_model_used,
-                max_tokens=150,
-                temperature=0.5
+                max_tokens=200,
+                temperature=0.7
             ).strip()
             
             # Debug: Show if LLM generation succeeded
@@ -1808,8 +1814,8 @@ Summary of Analyzed Content:"""
             # Fallback to simple description
             pass
     else:
-        # Debug: Log if we don't have sample descriptions
-        logger.info(f"No sample descriptions available for brand description. Items: {len(items)}")
+        # Debug: Log if we don't have items
+        logger.info(f"No items available for brand description. Items: {len(items)}")
     
     # Fallback description if LLM fails
     if not brand_description:
