@@ -77,7 +77,7 @@ def generate_trust_stack_report(report_data: Dict[str, Any], model: str = 'gpt-4
     content = []
     
     # 1. Trust Scores Section (Dimension by Dimension)
-    content.append("### 🧠 Trust Scores")
+    content.append("🧠 **Trust Scores**")
     
     dimension_breakdown = report_data.get('dimension_breakdown', {})
     items = report_data.get('items', [])
@@ -135,43 +135,49 @@ CONTEXT:
 {items_context}
 
 REQUIRED FORMAT:
-You must output the analysis in the EXACT following markdown format. Do not include the "### {dimension.title()}" header, just start with the score line.
+You must output the analysis in the EXACT following format. Use the provided HTML tags and markdown exactly as shown.
 
-{dimension.title()}: {score:.1f} / 10
+**{dimension.title()}**: {score:.1f} / 10
 
-Rationale:
+*Rationale:*
 
-● [Point 1]: [Explanation]
-● [Point 2]: [Explanation]
-● [Point 3]: [Explanation]
-... (3-5 bullet points explaining the score based on the signals below)
+*   **[Point 1]**: [Explanation]
+*   **[Point 2]**: [Explanation]
+... (3-5 bullet points explaining the score)
 
-🗝️ Key Signal Evaluation
-(For each signal below, mark as ✅ (Pass), ⚠️ (Partial/Concern), or ❌ (Fail) and provide a brief bullet point explanation. Then provide a Summary line.)
+<div class="trust-stack-blue">
+**CUSTOM GPT**
+**{dimension.upper()}**: Score: {score:.1f} / 10
 
-{_format_signals_for_prompt(signals)}
+🗝️ **Key Signal Evaluation**
 
-🧮 Diagnostics Snapshot
-(Create a markdown table with 2 columns: Metric, Value. Include 5-6 relevant metrics for this dimension. Values should be qualitative or quantitative based on the score.)
+(For each signal below, provide the status icon, the signal name as a header, bullet points, and a summary. All text inside this div will be blue.)
+
+{_format_signals_for_prompt_new(signals)}
+
+</div>
+
+🧮 **Diagnostics Snapshot**
+(Create a markdown table with 2 columns: Metric, Value. Include 5-6 relevant metrics.)
 
 Metric | Value
 --- | ---
 [Metric Name] | [Value]
 ...
 
-📊 Final {dimension.title()} Score: {score:.1f} / 10
+📊 **Final {dimension.title()} Score: {score:.1f} / 10**
 [A 2-3 sentence summary paragraph]
 
-🛠️ Recommendations to Improve {dimension.upper()}
+🛠️ **Recommendations to Improve {dimension.upper()}**
 1. [Recommendation 1]
 2. [Recommendation 2]
 3. [Recommendation 3]
 
 INSTRUCTIONS:
 - Be professional, objective, and detailed.
-- Use the provided score to guide the tone (High score = positive, Low score = critical).
-- If you lack specific data for a signal, make a reasonable inference based on the score and typical web content patterns, or mark as "Not evaluated" if strictly impossible.
+- Use the provided score to guide the tone.
 - Ensure the "Key Signal Evaluation" section covers ALL the signals listed above.
+- Do NOT use headers like # or ##. Use **bold** for headers to keep font size consistent.
 """
 
     try:
@@ -188,7 +194,11 @@ INSTRUCTIONS:
         return f"Error generating analysis for {dimension}"
 
 def _format_signals_for_prompt(signals: List[str]) -> str:
-    """Format signals for the prompt"""
+    """Format signals for the prompt (Legacy)"""
+    return "\n".join([f"{i+1}. {s}" for i, s in enumerate(signals)])
+
+def _format_signals_for_prompt_new(signals: List[str]) -> str:
+    """Format signals for the prompt (New)"""
     return "\n".join([f"{i+1}. {s}" for i, s in enumerate(signals)])
 
 def _generate_full_audit_report(report_data: Dict[str, Any], model: str) -> str:

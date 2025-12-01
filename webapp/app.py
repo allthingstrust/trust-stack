@@ -803,6 +803,18 @@ st.markdown("""
         font-family: monospace !important;
     }
 
+    /* Trust Stack Report Styling */
+    .trust-stack-blue {
+        color: #4472C4;
+    }
+    .trust-stack-header {
+        font-weight: bold;
+        font-size: 1rem; /* Match body text size */
+    }
+    .trust-stack-italic {
+        font-style: italic;
+    }
+
     /* Override all Streamlit wrapper classes within progress logs */
     .progress-logs *,
     .progress-log-entry * {
