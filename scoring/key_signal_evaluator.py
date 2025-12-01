@@ -114,7 +114,7 @@ class KeySignalEvaluator:
             Dict with keys: number, name, status (✅/⚠️/❌), summary, assessment
         """
         try:
-            from scoring.scoring_llm_client import ScoringLLMClient
+            from scoring.scoring_llm_client import LLMScoringClient
             
             # Prepare context from items
             context = self._prepare_context_for_signal(items, dimension, signal_name)
@@ -128,7 +128,7 @@ class KeySignalEvaluator:
             )
             
             # Call LLM
-            client = ScoringLLMClient()
+            client = LLMScoringClient()
             response = client.generate(
                 prompt=prompt,
                 model=model,

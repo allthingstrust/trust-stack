@@ -18,6 +18,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from webapp.utils.recommendations import get_remedy_for_issue
+from reporting.trust_stack_report import generate_trust_stack_report
 
 # Add project root to path for imports
 import sys
@@ -301,51 +302,20 @@ class MarkdownReportGenerator:
         # Title
         content.append(self._create_header(report_data))
 
-        # Data Source Description (NEW - matches reference format)
+        # Data Source Description
         content.append(self._create_data_source_description(report_data))
 
-        # Executive summary FIRST (Trust Stack focused - no AR metrics)
-        content.append(self._create_executive_summary(report_data))
+        # Trust Stack Analysis (Detailed 5D Analysis + Full Audit Report)
+        # This replaces the old Executive Summary and Dimension Breakdown
+        model = report_data.get('llm_model', 'gpt-4o-mini')
+        trust_stack_content = generate_trust_stack_report(report_data, model=model)
+        content.append(trust_stack_content)
 
-        # Metadata SECOND (collapsible reference details)
+        # Metadata (collapsible reference details)
         content.append(self._create_metadata(report_data))
 
-        # Dimension breakdown
-        content.append(self._create_dimension_breakdown(report_data))
-
-        # Notable examples (high and low trust items)
-        notable_examples = self._format_notable_examples(report_data)
-        if notable_examples:
-            content.append(notable_examples)
-
-        # Attribute-level analysis (NEW: 5D Trust Stack enhancement)
-        content.append(self._create_attribute_analysis(report_data))
-
-        # Modality breakdown (NEW: Content type analysis)
-        content.append(self._create_modality_breakdown(report_data))
-
-        # Channel breakdown (NEW: Platform analysis)
-        content.append(self._create_channel_breakdown_section(report_data))
-
-        # Classification analysis
-        content.append(self._create_classification_analysis(report_data))
-
-        # Recommendations
-        content.append(self._create_recommendations(report_data))
-
-        # Appendix (per-item diagnostics)
+        # Appendix (per-item diagnostics) - Keep this for detailed reference
         content.append(self._create_appendix(report_data))
-
-        # ============ AUTHENTICITY RATIO INTEGRATION (DISABLED) ============
-        # The AR Analysis section is preserved but commented out during Trust Stack rebrand.
-        # To re-enable AR metrics in reports:
-        # 1. Uncomment the line below to add AR Analysis section
-        # 2. Update header from "Trust Stack Content Analysis" to "Authenticity Ratio™ Report" (line 293)
-        # 3. Update footer to reference AR instead of Trust Stack (line 786)
-        # 4. Update Recommendations to use ar_pct instead of dimension scores (see git history for original logic)
-        #
-        # content.append(self._create_ar_analysis(report_data))
-        # ============ END AR INTEGRATION ============
 
         # Footer
         content.append(self._create_footer(report_data))
@@ -387,15 +357,26 @@ class MarkdownReportGenerator:
         items = report_data.get('items', [])
         brand_id = report_data.get('brand_id', 'Unknown Brand')
         
+        # Try to find the main URL from items if sources is generic
+        main_url = None
+        if items:
+            # Look for a homepage-like URL or just the first one
+            for item in items:
+                url = item.get('meta', {}).get('source_url', '')
+                if url and 'http' in url:
+                    main_url = url
+                    break
+        
         # Generate a description of what was analyzed
-        if sources:
+        if main_url:
+            description = f"**Data Source(s):** {main_url}\n\n"
+        elif sources:
             source_list = ', '.join(sources)
             description = f"**Data Source(s):** {source_list}\n\n"
         else:
             description = f"**Data Source(s):** Brand content analysis\n\n"
         
         # Add brief summary of what the source offers/contains
-        # This would ideally be LLM-generated, but for now we'll create a template
         if items:
             # Try to infer content types from items
             content_types = set()
@@ -424,11 +405,7 @@ class MarkdownReportGenerator:
         
         description += f"This report evaluates {len(items)} content items across five trust dimensions."
         
-        return f"""## Data Source Overview
-
-{description}
-
----"""
+        return description
     
     def _create_metadata(self, report_data: Dict[str, Any]) -> str:
         """Create metadata section (collapsible)"""

@@ -392,3 +392,36 @@ class LLMScoringClient:
         
         types = issue_types.get(dimension_lower, ['improvement_opportunity'])
         return '\n'.join(f'  - {t}' for t in types)
+
+    def generate(self, prompt: str, model: str = None, max_tokens: int = 500, temperature: float = 0.3) -> str:
+        """
+        Generate text response from LLM
+        
+        Args:
+            prompt: Input prompt
+            model: Optional model override
+            max_tokens: Max tokens for response
+            temperature: Temperature for response
+            
+        Returns:
+            Generated text string
+        """
+        try:
+            response = self.client.chat.completions.create(
+                model=model or self.model,
+                messages=[
+                    {"role": "system", "content": "You are an expert content authenticity evaluator. Always respond in English."},
+                    {"role": "user", "content": prompt}
+                ],
+                max_tokens=max_tokens,
+                temperature=temperature
+            )
+            
+            try:
+                return response.choices[0].message.content.strip()
+            except Exception:
+                return str(response.choices[0].message.get('content', '')).strip()
+                
+        except Exception as e:
+            logger.error(f"LLM generation error: {e}")
+            return ""

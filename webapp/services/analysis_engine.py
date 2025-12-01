@@ -107,15 +107,28 @@ def run_analysis(brand_id: str, keywords: List[str], sources: List[str], max_ite
 
                 for url_data in selected_web_urls:
                     try:
-                        page_data = fetch_page(url_data['url'])
-                        if page_data and page_data.get('body'):
-                            # Add brand-owned flag to metadata
-                            page_data['is_brand_owned'] = url_data.get('is_brand_owned', False)
+                        # Check if content was already fetched in the orchestration step
+                        if url_data.get('fetched') and url_data.get('body'):
+                            page_data = {
+                                'url': url_data['url'],
+                                'title': url_data.get('title', ''),
+                                'body': url_data.get('body', ''),
+                                'is_brand_owned': url_data.get('is_brand_owned', False),
+                                'source_type': url_data.get('source_type', 'unknown'),
+                                'source_tier': url_data.get('source_tier', 'unknown')
+                            }
                             collected.append(page_data)
+                        else:
+                            # Fallback to fetching if not already fetched
+                            page_data = fetch_page(url_data['url'])
+                            if page_data and page_data.get('body'):
+                                # Add brand-owned flag to metadata
+                                page_data['is_brand_owned'] = url_data.get('is_brand_owned', False)
+                                collected.append(page_data)
                     except Exception as e:
                         st.warning(f"⚠️ Could not fetch {url_data['url']}: {str(e)}")
 
-                st.info(f"✓ Fetched {len(collected)} of {len(selected_web_urls)} selected web pages")
+                st.info(f"✓ Processed {len(collected)} of {len(selected_web_urls)} selected web pages")
             else:
                 # Original behavior: search and fetch automatically
                 query = ' '.join(keywords)

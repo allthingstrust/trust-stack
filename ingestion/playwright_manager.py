@@ -295,7 +295,7 @@ def get_browser_manager() -> PlaywrightBrowserManager:
     with _GLOBAL_LOCK:
         if _GLOBAL_MANAGER is None:
             _GLOBAL_MANAGER = PlaywrightBrowserManager()
-            # Register atexit handler to ensure clean shutdown
+            # Register cleanup on exit to ensure terminal is restored
             import atexit
             atexit.register(_cleanup_browser_manager)
     return _GLOBAL_MANAGER
@@ -305,6 +305,7 @@ def _cleanup_browser_manager():
     global _GLOBAL_MANAGER
     if _GLOBAL_MANAGER:
         try:
+            # Use a short timeout to avoid hanging if the thread is stuck
             _GLOBAL_MANAGER.close()
         except Exception:
             pass

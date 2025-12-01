@@ -52,11 +52,15 @@ from webapp.utils.recommendations import (
 
 # Import service modules
 from webapp.services.social_search import search_social_media_channels
-from webapp.services.search_orchestration import search_for_urls
+from webapp.services.search_orchestration import perform_initial_search, fetch_and_process_selected_urls
 from webapp.services.analysis_engine import run_analysis
 
 # Import page modules
+# Import page modules
 from webapp.pages.brand_guidelines import show_brand_guidelines_page
+
+# Import report generator
+from reporting.trust_stack_report import generate_trust_stack_report
 
 # Configure logging for the webapp
 import logging
@@ -1319,7 +1323,7 @@ def show_analyze_page():
 
         col_search, col_submit, col_clear = st.columns([1, 1, 3])
         with col_search:
-            search_urls = st.button("🔍 Search URLs", width='stretch')
+            search_urls = st.button("🔍 Search for URLs", width='stretch')
         with col_submit:
             submit = st.button("▶️ Run Analysis", type="primary", width='stretch')
         with col_clear:
@@ -1359,7 +1363,7 @@ def show_analyze_page():
             return
 
         # Search for URLs without running analysis
-        search_for_urls(brand_id, keywords.split(), sources, web_pages, search_provider,
+        perform_initial_search(brand_id, keywords.split(), sources, web_pages, search_provider,
                        brand_domains, brand_subdomains, brand_social_handles,
                        collection_strategy, brand_owned_ratio)
 
@@ -1518,6 +1522,10 @@ def show_analyze_page():
             if not selected_urls:
                 st.error("⚠️ Please select at least one URL to analyze")
                 return
+
+        # Fetch content for selected URLs
+        if selected_urls:
+            selected_urls = fetch_and_process_selected_urls(selected_urls)
 
         # Run pipeline
         run_analysis(brand_id, keywords.split(), sources, max_items, web_pages, include_comments, selected_urls, search_provider,
@@ -1798,308 +1806,40 @@ Engaging description:"""
 
     st.divider()
 
-    # Key Metrics
-    st.markdown("### 🎯 Key Metrics")
+    # =========================================================================
+    # TRUST STACK REPORT SECTION
+    # =========================================================================
+    
+    # Check if we already have the generated report in the run data
+    trust_stack_text = run_data.get('trust_stack_report_text')
+    
+    if not trust_stack_text:
+        with st.spinner("Generating detailed Trust Stack Analysis..."):
+            try:
+                # Generate the report text using the new module
+                trust_stack_text = generate_trust_stack_report(report, model=summary_model_used)
+                
+                # Store it in run_data and session state so we don't re-generate on every rerun
+                run_data['trust_stack_report_text'] = trust_stack_text
+                st.session_state['last_run'] = run_data
+                
+                # Optionally save to disk if we can find the file
+                # (This is a best-effort attempt to persist the generated text)
+                if '_file_path' in run_data:
+                    try:
+                        with open(run_data['_file_path'], 'w') as f:
+                            json.dump(run_data, f, indent=2, default=str)
+                    except Exception as e:
+                        logger.warning(f"Could not save generated report text to file: {e}")
+                        
+            except Exception as e:
+                st.error(f"Failed to generate Trust Stack Report: {e}")
+                trust_stack_text = "Error generating report."
 
-    col1, col2, col3, col4 = st.columns(4)
-
-    with col1:
-        st.metric(
-            label="Average Trust Score",
-            value=f"{avg_rating_display:.1f} / 10",
-            delta=None
-        )
-
-    with col2:
-        st.metric(
-            label="Total Content",
-            value=f"{len(items):,}"
-        )
-
-    with col3:
-        st.metric(
-            label="Excellent (80+)",
-            value=f"{excellent:,}",
-            delta=f"{(excellent/len(items)*100):.0f}%" if items else "0%"
-        )
-
-    with col4:
-        st.metric(
-            label="Poor (<40)",
-            value=f"{poor:,}",
-            delta=f"{(poor/len(items)*100):.0f}%" if items else "0%"
-        )
-
-    # Generate Executive Summary using new module
-    dimension_breakdown = report.get('dimension_breakdown', {})
-    sources = report.get('sources', ['unknown'])
-
-    # Import the new executive summary module
-    from reporting.executive_summary import generate_executive_summary
-
-    # Generate summary using models that were selected before analysis
-    # Pass the display score (0-10 scale) for better summary generation
-    try:
-        recommendation = generate_executive_summary(
-            avg_rating=avg_rating_display * 10,  # Convert 0-10 to 0-100 for the function
-            dimension_breakdown=dimension_breakdown,
-            items=items,
-            sources=sources,
-            model=summary_model_used,
-            use_llm=True  # Always use LLM for web app
-        )
-    except Exception as e:
-        st.error(f"Executive summary generation failed: {e}")
-        # Fallback to template
-        recommendation = generate_rating_recommendation(avg_rating_display * 10, dimension_breakdown, items)
-
-    # Use display score for status determination (8.0+ = Excellent, 6.0+ = Good, etc.)
-    if avg_rating_display >= 8.0:
-        st.markdown(f'<div class="success-box">🟢 <b>Excellent</b> - {recommendation}</div>', unsafe_allow_html=True)
-    elif avg_rating_display >= 6.0:
-        st.markdown(f'<div class="info-box">🟡 <b>Good</b> - {recommendation}</div>', unsafe_allow_html=True)
-    elif avg_rating_display >= 4.0:
-        st.markdown(f'<div class="warning-box">🟠 <b>Fair</b> - {recommendation}</div>', unsafe_allow_html=True)
-    else:
-        st.markdown(f'<div class="warning-box">🔴 <b>Poor</b> - {recommendation}</div>', unsafe_allow_html=True)
+    # Render the Markdown Report
+    st.markdown(trust_stack_text, unsafe_allow_html=True)
 
     st.divider()
-
-    # Remedies Section - NEW!
-    st.markdown("### 🔧 Detailed Analysis: Remedies & Successes")
-
-    dimension_issues = extract_issues_from_items(items)
-    dimension_successes = extract_successes_from_items(items)
-
-    # Also check dimension scores to ensure we show remedies for low-scoring dimensions
-    # even if no specific attributes were detected
-    dimension_breakdown = report.get('dimension_breakdown', {})
-
-    # Count total issues per dimension
-    issue_counts = {dim: len(issues) for dim, issues in dimension_issues.items()}
-
-    total_issues = sum(issue_counts.values())
-    dimensions_with_issues = len([c for c in issue_counts.values() if c > 0])
-
-    if dimensions_with_issues > 0 or any(dimension_breakdown.get(k, {}).get('average', 0) >= 0.8 for k in ['provenance', 'verification', 'transparency', 'coherence', 'resonance']):
-        st.markdown(f"**Found {total_issues} specific issues across {dimensions_with_issues} dimensions**")
-
-        # Display remedies for each dimension with detected issues
-        for dimension_key in ['provenance', 'verification', 'transparency', 'coherence', 'resonance']:
-            issues = dimension_issues.get(dimension_key, [])
-            successes = dimension_successes.get(dimension_key, [])
-            
-            dim_score_internal = dimension_breakdown.get(dimension_key, {}).get('average', 1.0)
-            dim_score_display = to_display_score(dim_score_internal)
-            is_high_score = dim_score_display >= 8.0
-
-            # Only show dimensions that have detected issues OR are high scoring
-            # (even if no specific successes were extracted, the high score itself is a success)
-            if not issues and not is_high_score:
-                continue
-
-            dimension_names = {
-                'provenance': ('🔗 Provenance', 'Origin & Metadata Issues'),
-                'verification': ('✓ Verification', 'Accuracy & Verification Issues'),
-                'transparency': ('👁 Transparency', 'Disclosure & Attribution Issues'),
-                'coherence': ('🔄 Coherence', 'Consistency Issues'),
-                'resonance': ('📢 Resonance', 'Engagement & Relevance Issues')
-            }
-
-            dim_emoji_name, dim_subtitle = dimension_names[dimension_key]
-
-            # Show issue count with score (0-10 scale)
-            if is_high_score:
-                if successes:
-                    expander_label = f"{dim_emoji_name}: {len(successes)} strengths, {len(issues)} issues (Score {dim_score_display:.1f} / 10)"
-                else:
-                    expander_label = f"{dim_emoji_name}: No issues found (Score {dim_score_display:.1f} / 10)"
-            else:
-                expander_label = f"{dim_emoji_name}: {len(issues)} issues found (Score {dim_score_display:.1f} / 10)"
-
-            # Determine if expanded: expand if it has the most issues OR if it's the highest scoring one with successes (if no issues)
-            is_expanded = False
-            if issue_counts and dimension_key == min(issue_counts, key=lambda k: (issue_counts[k], -dimension_breakdown.get(k, {}).get('average', 1.0)*100)):
-                is_expanded = True
-            elif not issue_counts and is_high_score:
-                is_expanded = True
-
-            with st.expander(expander_label, expanded=is_expanded):
-                st.markdown(f"**{dim_subtitle}**")
-                st.markdown("---")
-
-                # Display Successes for high-scoring dimensions
-                if is_high_score:
-                    st.markdown("### 🌟 Successes & Strengths")
-                    st.markdown(f"**Great job! This content scores highly in {dimension_key.title()}.**")
-                    
-                    if successes:
-                        for success in successes:
-                            st.success(f"**{success['success']}**: {success['evidence']}")
-                    elif not issues:
-                        st.success(f"**No specific issues detected**: The content performs well in this dimension.")
-                    
-                    st.markdown("---")
-
-                # Group issues by type
-                if issues:
-                    st.markdown("### ⚠️ Areas for Improvement")
-                    issues_by_type = {}
-                    for issue in issues:
-                        issue_type = issue['issue']
-                        if issue_type not in issues_by_type:
-                            issues_by_type[issue_type] = []
-                        issues_by_type[issue_type].append(issue)
-
-                    # Display each issue type with affected pages
-                    for issue_type, type_issues in issues_by_type.items():
-                        st.markdown(f"**⚠️ {issue_type}** ({len(type_issues)} occurrence{'s' if len(type_issues) > 1 else ''})")
-
-                        # Show remedy recommendation with specific examples from detected issues
-                        remedy_data = get_remedy_for_issue(issue_type, dimension_key, issue_items=type_issues)
-                        if remedy_data:
-                            # Display specific fix in a white box
-                            recommended_fix = remedy_data.get('recommended_fix', '')
-                            if recommended_fix:
-                                st.markdown(f"""
-                                <div style="background-color: white; color: #333333; padding: 1rem; border-radius: 0.5rem; border: 1px solid #e0e0e0; margin-bottom: 1rem;">
-                                    <strong>💡 Recommended Fix:</strong><br><br>
-                                    {recommended_fix.replace(chr(10), '<br>')}
-                                </div>
-                                """, unsafe_allow_html=True)
-
-                            # Display general best practice in a dropdown
-                            general_practice = remedy_data.get('general_best_practice', '')
-                            if general_practice:
-                                with st.expander(f"💡 General Best Practice for {issue_type.lower()}"):
-                                    st.info(general_practice)
-
-                        st.markdown("")  # Spacing
-    else:
-        st.success("✅ No major issues detected! Your content shows strong trust signals across all dimensions.")
-
-    st.divider()
-
-    # Visualizations
-    col1, col2 = st.columns(2)
-
-    with col1:
-        # Rating Distribution Pie Chart
-        st.markdown("#### Rating Distribution")
-
-        fig_pie = px.pie(
-            values=[excellent, good, fair, poor],
-            names=['Excellent (80+)', 'Good (60-79)', 'Fair (40-59)', 'Poor (<40)'],
-            color_discrete_map={
-                'Excellent (80+)': '#2ecc71',
-                'Good (60-79)': '#3498db',
-                'Fair (40-59)': '#f39c12',
-                'Poor (<40)': '#e74c3c'
-            },
-            hole=0.3
-        )
-        fig_pie.update_traces(textposition='inside', textinfo='percent+label')
-        st.plotly_chart(fig_pie, use_container_width=True, config={'displayModeBar': False})
-
-    with col2:
-        # Rating Score Distribution Histogram
-        st.markdown("#### Score Distribution")
-
-        scores = [item.get('final_score', 0) for item in items]
-
-        fig_hist = go.Figure(data=[
-            go.Histogram(
-                x=scores,
-                nbinsx=20,
-                marker_color='#3498db',
-                opacity=0.7
-            )
-        ])
-        fig_hist.update_layout(
-            xaxis_title="Rating Score (0-100)",
-            yaxis_title="Number of Items",
-            showlegend=False,
-            height=350
-        )
-        # Add threshold lines
-        fig_hist.add_vline(x=80, line_dash="dash", line_color="green", annotation_text="Excellent")
-        fig_hist.add_vline(x=60, line_dash="dash", line_color="blue", annotation_text="Good")
-        fig_hist.add_vline(x=40, line_dash="dash", line_color="orange", annotation_text="Fair")
-        st.plotly_chart(fig_hist, use_container_width=True, config={'displayModeBar': False})
-
-    st.divider()
-
-    # 5D Trust Dimensions Analysis
-    st.markdown("### 🔍 5D Trust Dimensions Breakdown")
-
-    dimension_breakdown = report.get('dimension_breakdown', {})
-
-    col1, col2 = st.columns([2, 1])
-
-    with col1:
-        # Radar Chart with dimension-specific colors
-        dimensions = ['Provenance', 'Verification', 'Transparency', 'Coherence', 'Resonance']
-        dimension_keys = ['provenance', 'verification', 'transparency', 'coherence', 'resonance']
-
-        scores = [dimension_breakdown.get(key, {}).get('average', 0) for key in dimension_keys]
-
-        # Create individual bar chart for each dimension with its color
-        fig_radar = go.Figure()
-        
-        fig_radar.add_trace(go.Scatterpolar(
-            r=scores,
-            theta=dimensions,
-            fill='toself',
-            name='Trust Dimensions',
-            line=dict(color='#667eea', width=2),
-            fillcolor='rgba(102, 126, 234, 0.3)',
-            marker=dict(
-                size=8,
-                color=[DIMENSION_COLORS.get(key, '#3498db') for key in dimension_keys],
-                line=dict(color='white', width=2)
-            )
-        ))
-
-        fig_radar.update_layout(
-            polar=dict(
-                radialaxis=dict(
-                    visible=True,
-                    range=[0, 1],
-                    tickfont=dict(size=10, color='#333333')
-                ),
-                angularaxis=dict(
-                    tickfont=dict(size=11, color='white')
-                )
-            ),
-            showlegend=False,
-            height=400
-        )
-
-        st.plotly_chart(fig_radar, use_container_width=True, config={'displayModeBar': False})
-
-    with col2:
-        st.markdown("#### Dimension Scores")
-
-        for dim_name, dim_key in zip(dimensions, dimension_keys):
-            dim_data = dimension_breakdown.get(dim_key, {})
-            avg_score = dim_data.get('average', 0)
-            
-            # Convert to display scores (0-10 scale)
-            avg_display = to_display_score(avg_score)
-            min_display = to_display_score(dim_data.get('min', 0))
-            max_display = to_display_score(dim_data.get('max', 0))
-            
-            # Get dimension-specific color
-            dim_color = DIMENSION_COLORS.get(dim_key, '#3498db')
-
-            # Status indicator based on display score
-            status = get_score_status(avg_score)
-
-            # Display with dimension color
-            st.markdown(f"**{status} <span style='color: {dim_color}'>{dim_name}</span>**", unsafe_allow_html=True)
-            # Progress bar still uses 0-1 scale internally
-            st.progress(avg_score)
-            st.caption(f"Score: {avg_display:.1f} / 10 | Range: {min_display:.1f} - {max_display:.1f}")
 
     st.divider()
 
