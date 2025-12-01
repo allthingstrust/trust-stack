@@ -1283,6 +1283,7 @@ def show_analyze_page():
                         "gpt-4o-mini",
                         "gpt-3.5-turbo",
                         "gpt-4o",
+                        "claude-sonnet-4-5-20250929",
                         "claude-sonnet-4-20250514",
                         "claude-3-5-haiku-20241022",
                         "claude-3-haiku-20240307",
@@ -1302,6 +1303,7 @@ def show_analyze_page():
                         "gpt-4o-mini",
                         "gpt-3.5-turbo",
                         "gpt-4o",
+                        "claude-sonnet-4-5-20250929",
                         "claude-sonnet-4-20250514",
                         "claude-3-5-haiku-20241022",
                         "claude-3-haiku-20240307",
@@ -1319,6 +1321,7 @@ def show_analyze_page():
                 'gpt-3.5-turbo': '💰 Budget',
                 'gpt-4o-mini': '⚖️ Balanced',
                 'gpt-4o': '⭐ Premium',
+                'claude-sonnet-4-5-20250929': '⭐ Premium',
                 'claude-sonnet-4-20250514': '⭐ Premium',
                 'claude-3-5-haiku-20241022': '💰 Budget',
                 'claude-3-haiku-20240307': '💰 Budget',
@@ -1759,15 +1762,34 @@ def show_results_page():
         try:
             from scoring.scoring_llm_client import LLMScoringClient
             
-            # Use first few descriptions to generate brand summary
-            sample_text = ' '.join(sample_descriptions[:3])[:500]
+            # Prepare context for the summary: list of URLs and sample content
+            urls_list = []
+            for item in items[:20]:
+                m = item.get('meta', {})
+                if isinstance(m, str):
+                    try:
+                        m = json.loads(m)
+                    except:
+                        m = {}
+                u = m.get('source_url') or m.get('url') or m.get('link')
+                if u:
+                    urls_list.append(u)
             
-            prompt = f"""Based on this content from {brand_id}, write a detail-rich summary of the brand in less than 3 sentences. Capture what makes this brand special and what they offer. Make it vivid and specific, not generic.
+            urls_text = '\n'.join(urls_list)
+            sample_text = ' '.join(sample_descriptions[:5])[:1000]
+            
+            prompt = f"""You are writing a summary for a "Trust Stack" analysis report for {brand_id}.
+Instead of a generic brand description, write a 2-3 sentence summary of the SPECIFIC websites and content that were analyzed in this report.
+Mention the types of pages (e.g. "Analysis covers the main corporate homepage, investor relations site, and 3 product pages...").
+Be specific about what was looked at.
 
-Content samples:
+Analyzed URLs:
+{urls_text}
+
+Content Samples:
 {sample_text}
 
-Brand Summary:"""
+Summary of Analyzed Content:"""
             
             client = LLMScoringClient()
             brand_description = client.generate(
