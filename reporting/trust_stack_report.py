@@ -192,7 +192,7 @@ INSTRUCTIONS:
         response = client.chat(
             model=model,
             messages=[{"role": "user", "content": prompt}],
-            max_tokens=1500,
+            max_tokens=2000,
             temperature=0.7
         )
         return response.get('content') or response.get('text') or f"Error generating analysis for {dimension}"
@@ -279,7 +279,7 @@ INSTRUCTIONS:
         response = client.chat(
             model=model,
             messages=[{"role": "user", "content": prompt}],
-            max_tokens=1000,
+            max_tokens=2500,
             temperature=0.7
         )
         return response.get('content') or response.get('text') or "Error generating audit report"

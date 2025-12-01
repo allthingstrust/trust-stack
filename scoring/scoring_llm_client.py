@@ -3,13 +3,13 @@ LLM Scoring Client for Trust Stack Rating Tool
 Centralizes all OpenAI API interactions for content scoring
 """
 
-from openai import OpenAI
 from typing import Dict, Any
 import logging
 import json
 
 from config.settings import APIConfig
 from data.models import NormalizedContent
+from scoring.llm_client import ChatClient
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +27,13 @@ class LLMScoringClient:
         Args:
             model: OpenAI model to use (default: gpt-3.5-turbo)
         """
-        self.client = OpenAI(api_key=APIConfig.openai_api_key)
+        self.client = ChatClient(
+            api_key=APIConfig.openai_api_key,
+            anthropic_api_key=APIConfig.anthropic_api_key,
+            google_api_key=APIConfig.google_api_key,
+            deepseek_api_key=APIConfig.deepseek_api_key,
+            default_model=model
+        )
         self.model = model
     
     def get_score(self, prompt: str) -> float:
@@ -41,7 +47,7 @@ class LLMScoringClient:
             Score between 0.0 and 1.0
         """
         try:
-            response = self.client.chat.completions.create(
+            response = self.client.chat(
                 model=self.model,
                 messages=[
                     {"role": "system", "content": "You are an expert content authenticity evaluator. Always respond in English, regardless of the language of the content being analyzed. Respond with only a number between 0.0 and 1.0."},
@@ -52,10 +58,7 @@ class LLMScoringClient:
             )
             
             # Parse response
-            try:
-                score_text = response.choices[0].message.content.strip()
-            except Exception:
-                score_text = str(response.choices[0].message.get('content', '')).strip()
+            score_text = response.get('content', '').strip()
             
             score = float(score_text)
             
@@ -77,24 +80,32 @@ class LLMScoringClient:
             Dictionary with 'score' (float) and 'issues' (list of dicts)
         """
         try:
-            response = self.client.chat.completions.create(
+            response = self.client.chat(
                 model=self.model,
                 messages=[
                     {"role": "system", "content": "You are an expert content authenticity evaluator. Always respond in English with valid JSON, regardless of the language of the content being analyzed."},
                     {"role": "user", "content": prompt}
                 ],
                 max_tokens=500,
-                temperature=0.1,
-                response_format={"type": "json_object"}
+                temperature=0.1
             )
             
             # Parse JSON response
             try:
-                response_text = response.choices[0].message.content.strip()
+                response_text = response.get('content', '').strip()
                 result = json.loads(response_text)
             except Exception:
-                response_text = str(response.choices[0].message.get('content', '{}')).strip()
-                result = json.loads(response_text)
+                # Try to extract JSON from markdown block if present
+                response_text = response.get('content', '').strip()
+                if '```json' in response_text:
+                    import re
+                    match = re.search(r'```json\s*(\{.*?\})\s*```', response_text, re.DOTALL)
+                    if match:
+                        result = json.loads(match.group(1))
+                    else:
+                        result = {}
+                else:
+                    result = {}
             
             # Validate and normalize
             score = float(result.get('score', 0.5))
@@ -325,19 +336,32 @@ class LLMScoringClient:
         
         # Get feedback from LLM
         try:
-            response = self.client.chat.completions.create(
+            response = self.client.chat(
                 model=self.model,
                 messages=[
                     {"role": "system", "content": "You are an expert content evaluator. Always respond in English with valid JSON, regardless of the language of the content being analyzed."},
                     {"role": "user", "content": feedback_prompt}
                 ],
                 max_tokens=500,
-                temperature=0.3,
-                response_format={"type": "json_object"}
+                temperature=0.3
             )
             
-            feedback_text = response.choices[0].message.content.strip()
-            feedback_data = json.loads(feedback_text)
+            feedback_text = response.get('content', '').strip()
+            
+            # Try to parse JSON
+            try:
+                feedback_data = json.loads(feedback_text)
+            except Exception:
+                # Try to extract JSON from markdown block if present
+                if '```json' in feedback_text:
+                    import re
+                    match = re.search(r'```json\s*(\{.*?\})\s*```', feedback_text, re.DOTALL)
+                    if match:
+                        feedback_data = json.loads(match.group(1))
+                    else:
+                        feedback_data = {}
+                else:
+                    feedback_data = {}
             
             return {
                 'score': score,
@@ -407,7 +431,7 @@ class LLMScoringClient:
             Generated text string
         """
         try:
-            response = self.client.chat.completions.create(
+            response = self.client.chat(
                 model=model or self.model,
                 messages=[
                     {"role": "system", "content": "You are an expert content authenticity evaluator. Always respond in English."},
@@ -417,10 +441,7 @@ class LLMScoringClient:
                 temperature=temperature
             )
             
-            try:
-                return response.choices[0].message.content.strip()
-            except Exception:
-                return str(response.choices[0].message.get('content', '')).strip()
+            return response.get('content', '').strip()
                 
         except Exception as e:
             logger.error(f"LLM generation error: {e}")

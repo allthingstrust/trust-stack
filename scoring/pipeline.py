@@ -895,7 +895,9 @@ class ScoringPipeline:
                 'source': getattr(s, 'src', ''),
                 'final_score': final_score,
                 'label': getattr(s, 'class_label', '') or '',
-                'meta': meta_obj
+                'meta': meta_obj,
+                'title': meta_obj.get('title') or getattr(s, 'title', None),
+                'body': getattr(s, 'body', None) or meta_obj.get('description') or meta_obj.get('snippet')
             })
 
         report['items'] = per_items
