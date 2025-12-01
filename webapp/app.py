@@ -1754,25 +1754,26 @@ def show_results_page():
     brand_description = ""
     
     # Try to use LLM for brand description if we have sample content
+    summary_model_used = report.get('llm_model', 'gpt-4o-mini')
     if sample_descriptions:
         try:
-            from scoring.scoring_llm_client import ScoringLLMClient
+            from scoring.scoring_llm_client import LLMScoringClient
             
             # Use first few descriptions to generate brand summary
             sample_text = ' '.join(sample_descriptions[:3])[:500]
             
-            prompt = f"""Based on this content from {brand_id}, write a single engaging sentence (20-30 words) that captures what makes this brand special and what they offer. Make it vivid and specific, not generic.
+            prompt = f"""Based on this content from {brand_id}, write a detail-rich summary of the brand in less than 3 sentences. Capture what makes this brand special and what they offer. Make it vivid and specific, not generic.
 
 Content samples:
 {sample_text}
 
-Engaging description:"""
+Brand Summary:"""
             
-            client = ScoringLLMClient()
+            client = LLMScoringClient()
             brand_description = client.generate(
                 prompt=prompt,
                 model=summary_model_used,
-                max_tokens=60,
+                max_tokens=150,
                 temperature=0.5
             ).strip()
             
