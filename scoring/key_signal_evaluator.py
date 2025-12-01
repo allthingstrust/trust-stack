@@ -249,10 +249,14 @@ Overall {dimension.title()} Score: {score_display} / 10
 Content Analysis:
 {context}
 
-Provide a concise assessment (2-3 sentences) of how well the content performs on this specific signal. Focus on:
-1. Whether the signal is present and strong
-2. Specific evidence or gaps observed
-3. Impact on overall trust
+Provide a concise assessment (2-3 sentences) of how well the content performs on this specific signal. 
+CRITICAL: You MUST include concrete details and direct quotes from the content analysis to support your assessment. 
+Do not use generic phrases like "the content lacks clear authorship". Instead, say "The 'About Us' page does not list any team members" or "The article by 'Jane Doe' establishes clear authorship".
+
+Focus on:
+1. Specific evidence found (quote it!) or specific gaps observed
+2. How this specific evidence impacts trust
+3. Whether the signal is present and strong
 
 Assessment:"""
         
