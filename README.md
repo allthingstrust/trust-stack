@@ -335,3 +335,7 @@ This project is proprietary. See LICENSE file for details.
 
 **Questions?** Check the [docs/](docs/) directory or open an issue on GitHub.
 
+
+## 🧭 PR creation guidance
+
+If you see a `failed to create PR` message when using the automation, make sure you have staged and committed your latest changes first. The `make_pr` helper only works on a clean branch with at least one new commit. See [docs/PR_GUIDE.md](docs/PR_GUIDE.md) for a short checklist and a note that tests should be run in this hosted workspace (the helper does not run them for you).
