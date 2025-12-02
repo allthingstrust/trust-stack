@@ -45,20 +45,16 @@ See [webapp/README.md](webapp/README.md) for detailed usage instructions.
 For programmatic or batch processing:
 
 ```bash
-# Run the full pipeline with custom parameters
-python scripts/run_pipeline.py \
-  --brand-id myBrand \
-  --keywords "brand name" \
-  --sources brave reddit youtube \
-  --max-items 50
+# Run the Trust Stack pipeline with explicit sources and keywords
+python scripts/run_pipeline.py my-brand web "brand keyword" --sources serper brave reddit --limit 25 --export-to-s3
 ```
 
-Available data sources: `brave`, `reddit`, `youtube`
+You can optionally point to a JSON file of pre-collected assets via `--assets` to avoid hitting external networks during testing. Available data sources today: `serper`, `brave`, `reddit`, `youtube`.
 
 ## 📊 Project Architecture
 
 ### Pipeline Stages
-1. **Ingestion**: Collect content from configured data sources (Brave Search, Reddit, YouTube)
+1. **Ingestion**: Collect content from configured data sources (Serper, Brave Search, Reddit, YouTube)
 2. **Normalization**: Standardize content format across sources
 3. **Enrichment**: Extract metadata, detect attributes (SSL, schema markup, author info, etc.)
 4. **Scoring**: Apply 5D rubric using LLM-based analysis for each dimension
@@ -71,6 +67,7 @@ Available data sources: `brave`, `reddit`, `youtube`
 authenticity-ratio/
 ├── webapp/                 # Streamlit web application
 ├── ingestion/              # Data collection from various sources
+│   ├── serper_search.py    # Serper (Google) Search API wrapper
 │   ├── brave_search.py     # Brave Search API/HTML scraping
 │   ├── reddit_crawler.py   # Reddit API integration
 │   ├── youtube_scraper.py  # YouTube Data API v3
@@ -90,6 +87,7 @@ authenticity-ratio/
 ├── data/                   # Data storage
 ├── tests/                  # Unit and integration tests
 ├── scripts/                # Utility scripts
+├── experiments/            # Repro/debug notebooks and tmp smoke runs (non-production)
 └── docs/                   # Documentation
 ```
 
@@ -335,3 +333,7 @@ This project is proprietary. See LICENSE file for details.
 
 **Questions?** Check the [docs/](docs/) directory or open an issue on GitHub.
 
+
+## 🧭 PR creation guidance
+
+If you see a `failed to create PR` message when using the automation, make sure you have staged and committed your latest changes first. The `make_pr` helper only works on a clean branch with at least one new commit. See [docs/PR_GUIDE.md](docs/PR_GUIDE.md) for a short checklist and a note that tests should be run in this hosted workspace (the helper does not run them for you).
