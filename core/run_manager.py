@@ -86,8 +86,9 @@ class RunManager:
         ``run_config['assets']`` to keep tests deterministic. Each asset dict
         should map to :class:`data.models.ContentAsset` fields. When assets are
         not supplied, this method attempts a lightweight integration with the
-        existing ingestion utilities (Brave, Reddit, YouTube) based on
+        existing ingestion utilities (Brave, Serper, Reddit, YouTube) based on
         configured sources and keywords.
+        should map to :class:`data.models.ContentAsset` fields.
         """
 
         assets = run_config.get("assets")
@@ -232,6 +233,9 @@ class RunManager:
                     }
                 )
         return assets
+        # TODO: integrate ingestion modules (brave, reddit, youtube) based on scenario config
+        logger.info("No assets supplied; proceeding with empty dataset")
+        return []
 
     def _score_assets(self, assets: List[ContentAsset], run_config: dict) -> List[dict]:
         """Score a list of persisted assets.

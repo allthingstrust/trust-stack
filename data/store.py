@@ -20,6 +20,7 @@ from data.models import (
     TrustStackSummary,
 )
 
+
 def get_engine(database_url: Optional[str] = None):
     """Create a SQLAlchemy engine for the configured database."""
 
