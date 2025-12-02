@@ -1,20 +1,32 @@
 #!/usr/bin/env python3
-"""End-to-end test to verify search performance improvement"""
+"""End-to-end test to verify search performance improvement."""
 import time
 import os
-import sys
 
-# Set up environment
-os.environ.setdefault('SERPER_API_KEY', os.getenv('SERPER_API_KEY', ''))
-os.environ.setdefault('SERPER_REQUEST_INTERVAL', '1.0')  # 1s interval for faster testing
-
-# Add project to path
-sys.path.insert(0, '/Users/andrewdeutsch/Documents/AR/authenticity-ratio')
+import pytest
 
 from ingestion.serper_search import collect_serper_pages
 
+
+RUN_SERPER_LIVE_TESTS = os.getenv("RUN_SERPER_LIVE_TESTS") == "1"
+SERPER_API_KEY_SET = bool(os.getenv("SERPER_API_KEY"))
+RUNNING_IN_CI = bool(os.getenv("CI"))
+
+pytestmark = [
+    pytest.mark.integration,
+    pytest.mark.skipif(
+        RUNNING_IN_CI,
+        reason="Skipped in CI; enable locally with RUN_SERPER_LIVE_TESTS=1",
+    ),
+    pytest.mark.skipif(
+        not RUN_SERPER_LIVE_TESTS or not SERPER_API_KEY_SET,
+        reason="Requires RUN_SERPER_LIVE_TESTS=1 and SERPER_API_KEY for live Serper calls",
+    ),
+]
+
+
 def test_search_performance():
-    """Test that search completes in reasonable time with parallelization"""
+    """Test that search completes in reasonable time with parallelization."""
     
     print("=" * 60)
     print("SEARCH PERFORMANCE TEST")

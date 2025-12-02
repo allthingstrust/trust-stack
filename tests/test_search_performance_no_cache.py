@@ -1,20 +1,20 @@
 #!/usr/bin/env python3
-"""End-to-end test to verify search performance WITHOUT caching
+"""End-to-end test to verify search performance WITHOUT caching.
 
 This test clears all caches before running to get accurate performance metrics.
+It is marked as an integration test and requires explicit opt-in plus a valid
+SERPER_API_KEY to avoid accidental live calls in CI.
 """
-import time
 import os
-import sys
+import time
 
-# Set up environment
-os.environ.setdefault('SERPER_API_KEY', os.getenv('SERPER_API_KEY', ''))
-os.environ.setdefault('SERPER_REQUEST_INTERVAL', '1.0')  # 1s interval for faster testing
-
-# Add project to path
-sys.path.insert(0, '/Users/andrewdeutsch/Documents/AR/authenticity-ratio')
+import pytest
 
 from ingestion.serper_search import collect_serper_pages
+
+RUN_SERPER_LIVE_TESTS = os.getenv("RUN_SERPER_LIVE_TESTS") == "1"
+SERPER_API_KEY = os.getenv("SERPER_API_KEY")
+IN_CI = os.getenv("CI") == "true" or os.getenv("CI") == "1" or os.getenv("GITHUB_ACTIONS")
 
 def clear_all_caches():
     """Clear all search-related caches for accurate testing."""
@@ -61,6 +61,18 @@ def clear_all_caches():
     
     print("=" * 60 + "\n")
 
+
+pytestmark = [
+    pytest.mark.integration,
+    pytest.mark.skipif(
+        IN_CI,
+        reason="Skipped in CI to avoid live Serper calls",
+    ),
+    pytest.mark.skipif(
+        not (SERPER_API_KEY and RUN_SERPER_LIVE_TESTS),
+        reason="Requires RUN_SERPER_LIVE_TESTS=1 and SERPER_API_KEY for live Serper calls",
+    ),
+]
 
 def test_search_performance_no_cache():
     """Test search performance with all caches cleared."""
