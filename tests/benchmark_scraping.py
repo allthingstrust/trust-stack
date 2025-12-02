@@ -2,14 +2,15 @@
 import time
 import logging
 import os
-import sys
-from typing import List, Dict
 
-# Add project root to path
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import pytest
 
 from ingestion.serper_search import collect_serper_pages
 from ingestion.page_fetcher import DomainConfigCache
+
+RUN_SERPER_LIVE_TESTS = os.getenv("RUN_SERPER_LIVE_TESTS") == "1"
+SERPER_API_KEY = os.getenv("SERPER_API_KEY")
+IN_CI = os.getenv("CI") == "true" or os.getenv("CI") == "1" or os.getenv("GITHUB_ACTIONS")
 
 # Configure logging
 logging.basicConfig(
@@ -18,7 +19,27 @@ logging.basicConfig(
 )
 logger = logging.getLogger('benchmark')
 
+pytestmark = [
+    pytest.mark.integration,
+    pytest.mark.skipif(
+        IN_CI,
+        reason="Skipped in CI to avoid live Serper calls",
+    ),
+    pytest.mark.skipif(
+        not (SERPER_API_KEY and RUN_SERPER_LIVE_TESTS),
+        reason="Requires RUN_SERPER_LIVE_TESTS=1 and SERPER_API_KEY for live Serper calls",
+    ),
+]
+
 def run_benchmark():
+    if IN_CI:
+        logger.info("Skipping benchmark in CI to avoid live Serper calls.")
+        return
+
+    if not (SERPER_API_KEY and RUN_SERPER_LIVE_TESTS):
+        logger.info("Skipping benchmark without RUN_SERPER_LIVE_TESTS=1 and SERPER_API_KEY.")
+        return
+
     queries = [
         "latest sustainable fashion trends 2024",
         "nike sustainability report 2023", # Known to have some tricky pages

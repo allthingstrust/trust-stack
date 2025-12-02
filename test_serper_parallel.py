@@ -2,9 +2,26 @@
 import time
 import logging
 import os
-from dotenv import load_dotenv
-load_dotenv()
+
+import pytest
+
 from ingestion.serper_search import collect_serper_pages
+
+RUN_SERPER_LIVE_TESTS = os.getenv("RUN_SERPER_LIVE_TESTS") == "1"
+SERPER_API_KEY = os.getenv("SERPER_API_KEY")
+IN_CI = os.getenv("CI") == "true" or os.getenv("CI") == "1" or os.getenv("GITHUB_ACTIONS")
+
+pytestmark = [
+    pytest.mark.integration,
+    pytest.mark.skipif(
+        IN_CI,
+        reason="Skipped in CI to avoid live Serper calls",
+    ),
+    pytest.mark.skipif(
+        not (SERPER_API_KEY and RUN_SERPER_LIVE_TESTS),
+        reason="Requires RUN_SERPER_LIVE_TESTS=1 and SERPER_API_KEY for live Serper calls",
+    ),
+]
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -27,8 +44,9 @@ def test_search():
         print(f"{i+1}. {page.get('title', 'No Title')} ({len(page.get('body', ''))} chars)")
 
 if __name__ == "__main__":
-    # Ensure API key is present
-    if not os.getenv('SERPER_API_KEY'):
-        print("Error: SERPER_API_KEY not found in environment")
+    if IN_CI:
+        print("Skipping parallel Serper test in CI to avoid live calls.")
+    elif not (SERPER_API_KEY and RUN_SERPER_LIVE_TESTS):
+        print("Skipping parallel Serper test without RUN_SERPER_LIVE_TESTS=1 and SERPER_API_KEY.")
     else:
         test_search()
