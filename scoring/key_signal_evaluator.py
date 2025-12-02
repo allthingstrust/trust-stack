@@ -260,16 +260,24 @@ Overall {dimension.title()} Score: {score_display} / 10
 Content Analysis:
 {context}
 
-Provide a concise assessment (2-3 sentences) of how well the content performs on this specific signal. 
+Instructions:
+1. First, infer the PRIMARY INTENT of the site based on the content (e.g., E-commerce/Promotional, News/Journalism, Corporate/Informational, Personal/Blog).
+2. Contextualize your evaluation based on this intent. 
+   - If the site is PROMOTIONAL (e.g., selling products), do NOT criticize it for "prioritizing sales messaging" or "promotional focus" - that is its purpose. Instead, evaluate how it builds trust WITHIN that context (e.g., are claims substantiated? is pricing transparent? is the "About Us" informative?).
+   - If the site is INFORMATIONAL, expect higher standards of neutrality and sourcing.
+3. Provide a concise assessment (2-3 sentences) of how well the content performs on this specific signal ({signal_name}).
+
 CRITICAL: You MUST include concrete details and direct quotes from the content analysis to support your assessment. 
 Do not use generic phrases like "the content lacks clear authorship". Instead, say "The 'About Us' page does not list any team members" or "The article by 'Jane Doe' establishes clear authorship".
 
 Focus on:
 1. Specific evidence found (quote it!) or specific gaps observed
-2. How this specific evidence impacts trust
+2. How this specific evidence impacts trust given the site's context
 3. Whether the signal is present and strong
 
 Assessment:"""
+        
+        return prompt
         
         return prompt
     
