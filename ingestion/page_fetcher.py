@@ -698,6 +698,7 @@ def _fetch_with_playwright(url: str, user_agent: str, browser_manager=None) -> D
     page = None
     browser = None
     pw_context = None
+    pw_cleanup = None
     
     try:
         # Use persistent browser if available
@@ -719,8 +720,33 @@ def _fetch_with_playwright(url: str, user_agent: str, browser_manager=None) -> D
             # Fallback to per-page browser launch
             if not _PLAYWRIGHT_AVAILABLE:
                 return {"title": "", "body": "", "url": url, "terms": "", "privacy": ""}
-            pw_context = sync_playwright().start()
-            browser = pw_context.chromium.launch(headless=True)
+
+            pw_context = sync_playwright()
+
+            # Support both context-manager style and explicit .start() to remain
+            # compatible with tests that monkeypatch sync_playwright.
+            if hasattr(pw_context, '__enter__'):
+                pw = pw_context.__enter__()
+
+                def _cleanup():
+                    try:
+                        pw_context.__exit__(None, None, None)
+                    except Exception:
+                        pass
+
+                pw_cleanup = _cleanup
+            else:
+                pw = pw_context.start()
+
+                def _cleanup():
+                    try:
+                        pw_context.stop()
+                    except Exception:
+                        pass
+
+                pw_cleanup = _cleanup
+
+            browser = pw.chromium.launch(headless=True)
             page = browser.new_page(user_agent=user_agent)
         
         # Navigate to page
@@ -806,11 +832,8 @@ def _fetch_with_playwright(url: str, user_agent: str, browser_manager=None) -> D
                 browser.close()
             except Exception:
                 pass
-        if pw_context:
-            try:
-                pw_context.stop()
-            except Exception:
-                pass
+        if pw_cleanup:
+            pw_cleanup()
 
 
 def fetch_page(url: str, timeout: int = 10, browser_manager=None) -> Dict[str, str]:
