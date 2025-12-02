@@ -12,6 +12,10 @@ import pytest
 
 from ingestion.serper_search import collect_serper_pages
 
+RUN_SERPER_LIVE_TESTS = os.getenv("RUN_SERPER_LIVE_TESTS") == "1"
+SERPER_API_KEY = os.getenv("SERPER_API_KEY")
+IN_CI = os.getenv("CI") == "true" or os.getenv("CI") == "1" or os.getenv("GITHUB_ACTIONS")
+
 def clear_all_caches():
     """Clear all search-related caches for accurate testing."""
     print("\n" + "=" * 60)
@@ -58,11 +62,18 @@ def clear_all_caches():
     print("=" * 60 + "\n")
 
 
-@pytest.mark.integration
-@pytest.mark.skipif(
-    not (os.getenv("SERPER_API_KEY") and os.getenv("RUN_SERPER_LIVE_TESTS") == "1"),
-    reason="Requires RUN_SERPER_LIVE_TESTS=1 and SERPER_API_KEY for live Serper calls",
-)
+pytestmark = [
+    pytest.mark.integration,
+    pytest.mark.skipif(
+        IN_CI,
+        reason="Skipped in CI to avoid live Serper calls",
+    ),
+    pytest.mark.skipif(
+        not (SERPER_API_KEY and RUN_SERPER_LIVE_TESTS),
+        reason="Requires RUN_SERPER_LIVE_TESTS=1 and SERPER_API_KEY for live Serper calls",
+    ),
+]
+
 def test_search_performance_no_cache():
     """Test search performance with all caches cleared."""
     

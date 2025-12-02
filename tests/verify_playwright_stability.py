@@ -1,15 +1,35 @@
 
+import importlib.util
 import logging
-import time
-import threading
-import queue
-import sys
 import os
+import queue
+import threading
+import time
 
-# Add project root to path
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import pytest
 
-from ingestion.playwright_manager import get_browser_manager
+PLAYWRIGHT_AVAILABLE = importlib.util.find_spec("playwright.sync_api") is not None
+RUN_STABILITY_TESTS = os.getenv("RUN_PLAYWRIGHT_STABILITY_TESTS") == "1"
+IN_CI = os.getenv("CI") in {"true", "1"} or os.getenv("GITHUB_ACTIONS")
+
+pytestmark = [
+    pytest.mark.integration,
+    pytest.mark.skipif(
+        IN_CI,
+        reason="Skipped in CI to avoid live Playwright stability checks",
+    ),
+    pytest.mark.skipif(
+        not PLAYWRIGHT_AVAILABLE,
+        reason="Playwright is not installed; install playwright to run stability test",
+    ),
+    pytest.mark.skipif(
+        not RUN_STABILITY_TESTS,
+        reason="Requires RUN_PLAYWRIGHT_STABILITY_TESTS=1 to run",
+    ),
+]
+
+if PLAYWRIGHT_AVAILABLE:
+    from ingestion.playwright_manager import get_browser_manager
 
 # Configure logging
 logging.basicConfig(
