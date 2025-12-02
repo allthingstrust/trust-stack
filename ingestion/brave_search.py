@@ -37,7 +37,12 @@ _rate_limiter = PerDomainRateLimiter(
 )
 
 # Import page fetching functions from dedicated module
-from ingestion.page_fetcher import fetch_page, _extract_internal_links
+from ingestion.page_fetcher import (
+    fetch_page,
+    _extract_internal_links,
+    _extract_structured_body_text,
+    _extract_body_text,
+)
 
 logger = logging.getLogger(__name__)
 

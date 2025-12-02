@@ -1,6 +1,6 @@
 
 import logging
-from typing import Dict, Any, Optional, Tuple
+from typing import Dict, Any, Iterable, List, Optional, Tuple
 from data.models import NormalizedContent
 
 logger = logging.getLogger(__name__)
@@ -50,3 +50,58 @@ class TriageScorer:
              
         # Default: Content passes triage
         return True, "Passed triage", 0.0
+
+
+def _word_count(text: str) -> int:
+    return len(text.split())
+
+
+def triage_score_item(content: Any, brand_keywords: Iterable[str]) -> float:
+    """Score a content item between 0 and 1 using lightweight heuristics.
+
+    The scorer intentionally favors recall over precision to ensure potentially
+    relevant items are not prematurely filtered out before LLM analysis.
+    """
+
+    body = getattr(content, "body", "") or ""
+    title = getattr(content, "title", "") or ""
+
+    body_lower = body.lower()
+    title_lower = title.lower()
+    keywords = [kw.lower() for kw in brand_keywords]
+
+    score = 0.5  # neutral baseline
+
+    # Boost if any brand keyword appears in the title or body.
+    if keywords and any(kw in body_lower or kw in title_lower for kw in keywords):
+        score += 0.2
+
+    # Reward longer, information-rich content and lightly penalize very short text.
+    word_len = _word_count(body)
+    if word_len < 30:
+        score -= 0.1
+    elif word_len > 80:
+        score += 0.1
+
+    # Ensure score stays in [0, 1]
+    return max(0.0, min(1.0, score))
+
+
+def triage_filter(
+    contents: Iterable[Any],
+    brand_keywords: Iterable[str],
+    promote_threshold: float = 0.6,
+) -> Tuple[List[Any], List[Any]]:
+    """Split content into promoted and demoted buckets based on triage score."""
+
+    promoted: List[Any] = []
+    demoted: List[Any] = []
+
+    for content in contents:
+        score = triage_score_item(content, brand_keywords)
+        if score >= promote_threshold:
+            promoted.append(content)
+        else:
+            demoted.append(content)
+
+    return promoted, demoted
