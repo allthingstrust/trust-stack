@@ -9,6 +9,7 @@ from typing import Dict, Iterable, List, Optional
 
 from data import models
 from data import store
+from data import export_s3
 from data.models import ContentAsset, DimensionScores, Run
 
 logger = logging.getLogger(__name__)
@@ -61,6 +62,9 @@ class RunManager:
                 )
                 store.update_run_status(session, run.id, "completed")
                 run = session.get(models.Run, run.id) if hasattr(session, "get") else session.query(models.Run).get(run.id)
+
+            if run_config.get("export_to_s3"):
+                export_s3.export_run_to_s3(self.engine, run.id, bucket=run_config.get("s3_bucket"))
         except Exception as exc:  # pragma: no cover - safety net
             logger.exception("Run %s failed", external_id)
             with store.session_scope(self.engine) as session:
@@ -80,6 +84,10 @@ class RunManager:
 
         During the refactor we allow callers to pass pre-built assets via
         ``run_config['assets']`` to keep tests deterministic. Each asset dict
+        should map to :class:`data.models.ContentAsset` fields. When assets are
+        not supplied, this method attempts a lightweight integration with the
+        existing ingestion utilities (Brave, Serper, Reddit, YouTube) based on
+        configured sources and keywords.
         should map to :class:`data.models.ContentAsset` fields.
         """
 
@@ -87,6 +95,144 @@ class RunManager:
         if assets:
             return list(assets)
 
+        sources = run_config.get("sources") or []
+        keywords = run_config.get("keywords") or []
+        limit = int(run_config.get("limit", 10))
+        collected: List[dict] = []
+
+        if not sources or not keywords:
+            logger.info("No sources/keywords specified; proceeding with empty dataset")
+            return collected
+
+        for source in sources:
+            source = (source or "").lower()
+            if source == "brave":
+                collected.extend(self._collect_from_brave(keywords, limit))
+            elif source == "serper":
+                collected.extend(self._collect_from_serper(keywords, limit))
+            elif source == "reddit":
+                collected.extend(self._collect_from_reddit(keywords, limit))
+            elif source == "youtube":
+                collected.extend(self._collect_from_youtube(keywords, limit))
+            else:
+                logger.info("Unsupported source '%s' - skipping", source)
+
+        return collected
+
+    # ------------------------------------------------------------------
+    # Source collectors (lightweight wrappers around existing ingestion code)
+    # ------------------------------------------------------------------
+    def _collect_from_brave(self, keywords: List[str], limit: int) -> List[dict]:
+        try:
+            from ingestion.brave_search import collect_brave_pages
+        except Exception as exc:  # pragma: no cover - optional dependency
+            logger.warning("Brave ingestion unavailable: %s", exc)
+            return []
+
+        assets: List[dict] = []
+        for kw in keywords:
+            pages = collect_brave_pages(query=kw, target_count=limit)
+            for page in pages:
+                assets.append(
+                    {
+                        "source_type": "brave",
+                        "channel": "web",
+                        "url": page.get("url"),
+                        "title": page.get("title"),
+                        "raw_content": page.get("body") or page.get("content") or page.get("snippet"),
+                        "normalized_content": page.get("body") or page.get("content") or page.get("snippet"),
+                        "metadata": {"query": kw},
+                    }
+                )
+        return assets
+
+    def _collect_from_serper(self, keywords: List[str], limit: int) -> List[dict]:
+        try:
+            from ingestion.serper_search import collect_serper_pages
+        except Exception as exc:  # pragma: no cover - optional dependency
+            logger.warning("Serper ingestion unavailable: %s", exc)
+            return []
+
+        assets: List[dict] = []
+        for kw in keywords:
+            pages = collect_serper_pages(query=kw, target_count=limit)
+            for page in pages:
+                assets.append(
+                    {
+                        "source_type": "serper",
+                        "channel": "web",
+                        "url": page.get("url"),
+                        "title": page.get("title"),
+                        "raw_content": page.get("body") or page.get("content") or page.get("snippet"),
+                        "normalized_content": page.get("body") or page.get("content") or page.get("snippet"),
+                        "metadata": {"query": kw},
+                    }
+                )
+        return assets
+
+    def _collect_from_reddit(self, keywords: List[str], limit: int) -> List[dict]:
+        try:
+            from ingestion.reddit_crawler import RedditCrawler
+        except Exception as exc:  # pragma: no cover - optional dependency
+            logger.warning("Reddit ingestion unavailable: %s", exc)
+            return []
+
+        crawler = RedditCrawler()
+        assets: List[dict] = []
+        for kw in keywords:
+            try:
+                posts = crawler.search_posts(query=kw, limit=limit)
+            except Exception as exc:  # pragma: no cover - network/credential failures
+                logger.warning("Reddit search failed for %s: %s", kw, exc)
+                continue
+
+            for post in posts:
+                assets.append(
+                    {
+                        "source_type": "reddit",
+                        "channel": "social",
+                        "url": getattr(post, "url", None) or post.get("url") if hasattr(post, "get") else None,
+                        "external_id": getattr(post, "id", None) or post.get("id") if hasattr(post, "get") else None,
+                        "title": getattr(post, "title", None) or post.get("title") if hasattr(post, "get") else None,
+                        "raw_content": getattr(post, "selftext", None) or post.get("selftext") if hasattr(post, "get") else None,
+                        "normalized_content": getattr(post, "selftext", None) or post.get("selftext") if hasattr(post, "get") else None,
+                        "metadata": {"query": kw},
+                    }
+                )
+        return assets
+
+    def _collect_from_youtube(self, keywords: List[str], limit: int) -> List[dict]:
+        try:
+            from ingestion.youtube_scraper import YouTubeScraper
+        except Exception as exc:  # pragma: no cover - optional dependency
+            logger.warning("YouTube ingestion unavailable: %s", exc)
+            return []
+
+        scraper = YouTubeScraper()
+        assets: List[dict] = []
+        for kw in keywords:
+            try:
+                videos = scraper.search_videos(query=kw, max_results=limit)
+            except Exception as exc:  # pragma: no cover - network/credential failures
+                logger.warning("YouTube search failed for %s: %s", kw, exc)
+                continue
+
+            for video in videos:
+                transcript = video.get("transcript") if isinstance(video, dict) else None
+                assets.append(
+                    {
+                        "source_type": "youtube",
+                        "channel": "video",
+                        "url": video.get("url") if isinstance(video, dict) else None,
+                        "external_id": video.get("id") if isinstance(video, dict) else None,
+                        "title": video.get("title") if isinstance(video, dict) else None,
+                        "raw_content": transcript or video.get("description") if isinstance(video, dict) else None,
+                        "normalized_content": transcript or video.get("description") if isinstance(video, dict) else None,
+                        "modality": "video",
+                        "metadata": {"query": kw},
+                    }
+                )
+        return assets
         # TODO: integrate ingestion modules (brave, reddit, youtube) based on scenario config
         logger.info("No assets supplied; proceeding with empty dataset")
         return []
