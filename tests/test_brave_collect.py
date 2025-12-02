@@ -8,7 +8,14 @@ def test_collect_skips_thin_and_reaches_target(monkeypatch):
 
     # Prepare fake search results (5 URLs)
     urls = [f"https://site{i}.com/page{i}" for i in range(5)]
-    monkeypatch.setattr(brave_search, 'search_brave', lambda q, size: [{'url': u, 'title': f't{i}'} for i, u in enumerate(urls)])
+    monkeypatch.setattr(
+        brave_search,
+        'search_brave',
+        lambda q, size, start_offset=0: [
+            {'url': u, 'title': f't{i}'}
+            for i, u in enumerate(urls[start_offset:start_offset + size], start=start_offset)
+        ],
+    )
 
     # Fake fetch_page: first two are thin (simulate 403/blocked body), later ones are full
     def fake_fetch(url, browser_manager=None):
@@ -17,6 +24,7 @@ def test_collect_skips_thin_and_reaches_target(monkeypatch):
         return {'title': 'Good', 'body': 'x' * 500, 'url': url}
 
     monkeypatch.setattr(page_fetcher, 'fetch_page', fake_fetch)
+    monkeypatch.setattr(brave_search, 'fetch_page', fake_fetch)
 
     # Mock robots.txt fetch to be permissive (200 but empty body -> treated permissive by code)
     class FakeResp:
@@ -25,6 +33,7 @@ def test_collect_skips_thin_and_reaches_target(monkeypatch):
             self.text = text
 
     monkeypatch.setattr('ingestion.brave_search.requests.get', lambda url, headers=None, timeout=None: FakeResp(200, ''))
+    monkeypatch.setattr(brave_search, 'is_allowed_by_robots', lambda url: True, raising=False)
 
     collected = brave_search.collect_brave_pages('query', target_count=2, pool_size=5, min_body_length=200)
     assert isinstance(collected, list)
@@ -38,7 +47,14 @@ def test_collect_respects_robots_disallow(monkeypatch):
     from ingestion import brave_search, page_fetcher
 
     urls = ['https://example.com/blocked', 'https://example.com/allowed']
-    monkeypatch.setattr(brave_search, 'search_brave', lambda q, size: [{'url': u} for u in urls])
+    monkeypatch.setattr(
+        brave_search,
+        'search_brave',
+        lambda q, size, start_offset=0: [
+            {'url': u}
+            for u in urls[start_offset:start_offset + size]
+        ],
+    )
 
     called = []
     def fake_fetch(url, browser_manager=None):
@@ -46,6 +62,7 @@ def test_collect_respects_robots_disallow(monkeypatch):
         return {'title': 'OK', 'body': 'x' * 300, 'url': url}
 
     monkeypatch.setattr(page_fetcher, 'fetch_page', fake_fetch)
+    monkeypatch.setattr(brave_search, 'fetch_page', fake_fetch)
 
     # robots.txt returns a Disallow for /blocked path
     def fake_requests_get(url, headers=None, timeout=None):
@@ -57,6 +74,7 @@ def test_collect_respects_robots_disallow(monkeypatch):
         return r
 
     monkeypatch.setattr('ingestion.brave_search.requests.get', fake_requests_get)
+    monkeypatch.setattr(brave_search, 'is_allowed_by_robots', lambda url: not url.endswith('/blocked'), raising=False)
 
     collected = brave_search.collect_brave_pages('query', target_count=1, pool_size=2, min_body_length=100)
     assert len(collected) == 1
