@@ -53,7 +53,8 @@ from webapp.utils.recommendations import (
 # Import service modules
 from webapp.services.social_search import search_social_media_channels
 from webapp.services.search_orchestration import perform_initial_search, fetch_and_process_selected_urls
-from webapp.services.analysis_engine import run_analysis
+from core.run_manager import RunManager
+from data import store
 
 # Import page modules
 # Import page modules
@@ -1542,10 +1543,112 @@ def show_analyze_page():
         if selected_urls:
             selected_urls = fetch_and_process_selected_urls(selected_urls)
 
-        # Run pipeline
-        run_analysis(brand_id, keywords.split(), sources, max_items, web_pages, include_comments, selected_urls, search_provider,
-                    brand_domains, brand_subdomains, brand_social_handles,
-                    summary_model=summary_model, recommendations_model=recommendations_model, project_root=PROJECT_ROOT)
+        # Run pipeline via RunManager
+        with st.spinner("Initializing analysis run..."):
+            try:
+                engine = store.init_db()
+                manager = RunManager(engine=engine)
+                
+                # Prepare assets from selected URLs if any
+                assets_config = []
+                if selected_urls:
+                    for url_data in selected_urls:
+                        assets_config.append({
+                            "url": url_data.get('url'),
+                            "title": url_data.get('title'),
+                            "source_type": "web", # Default to web for now
+                            "metadata": url_data
+                        })
+
+                run_config = {
+                    "sources": sources,
+                    "keywords": keywords.split(),
+                    "limit": max_items,
+                    "assets": assets_config if assets_config else None,
+                    "brand_name": brand_id, # Use ID as name for now
+                    "scenario_name": "Web Analysis",
+                    "scenario_description": f"Analysis of {brand_id} via {', '.join(sources)}",
+                    "scenario_config": {
+                        "include_comments": include_comments,
+                        "search_provider": search_provider,
+                        "brand_domains": brand_domains,
+                        "brand_subdomains": brand_subdomains,
+                        "brand_social_handles": brand_social_handles,
+                        "summary_model": summary_model,
+                        "recommendations_model": recommendations_model
+                    }
+                }
+
+                run = manager.run_analysis(brand_id, "web-analysis", run_config)
+                
+                # Adapt Run object to legacy dict format for UI compatibility
+                # This ensures show_results_page works without major rewrite
+                legacy_run_data = {
+                    "run_id": run.external_id,
+                    "brand_id": run.brand.slug,
+                    "timestamp": run.started_at.isoformat(),
+                    "sources": sources,
+                    "scoring_report": {
+                        "items": [],
+                        "dimension_breakdown": {},
+                        "llm_model": summary_model,
+                        "recommendations_model": recommendations_model
+                    }
+                }
+                
+                # Convert assets and scores
+                items = []
+                if run.assets:
+                    for asset in run.assets:
+                        item = {
+                            "final_score": 0, # Default
+                            "dimension_scores": {},
+                            "meta": asset.metadata or {},
+                            "source": asset.source_type
+                        }
+                        # Populate meta with essential fields if missing
+                        if not item["meta"].get("url"):
+                            item["meta"]["url"] = asset.url
+                        if not item["meta"].get("title"):
+                            item["meta"]["title"] = asset.title
+                            
+                        if asset.scores:
+                            # Assuming 1:1 relationship for now
+                            score = asset.scores[0]
+                            item["final_score"] = (score.overall_score or 0) * 100
+                            item["dimension_scores"] = {
+                                "provenance": score.score_provenance,
+                                "verification": score.score_verification,
+                                "transparency": score.score_transparency,
+                                "coherence": score.score_coherence,
+                                "resonance": score.score_resonance,
+                                "ai_readiness": score.score_ai_readiness
+                            }
+                        items.append(item)
+                
+                legacy_run_data["scoring_report"]["items"] = items
+                
+                # Populate summary stats if available
+                if run.summary:
+                    legacy_run_data["scoring_report"]["dimension_breakdown"] = {
+                        "provenance": {"average": run.summary.avg_provenance},
+                        "verification": {"average": run.summary.avg_verification},
+                        "transparency": {"average": run.summary.avg_transparency},
+                        "coherence": {"average": run.summary.avg_coherence},
+                        "resonance": {"average": run.summary.avg_resonance},
+                        "ai_readiness": {"average": run.summary.avg_ai_readiness}
+                    }
+                    legacy_run_data["authenticity_ratio"] = {
+                        "authenticity_ratio_pct": (run.summary.authenticity_ratio or 0) * 100
+                    }
+
+                st.session_state['last_run'] = legacy_run_data
+                st.session_state['page'] = 'results'
+                st.rerun()
+                
+            except Exception as e:
+                st.error(f"Analysis failed: {str(e)}")
+                logger.exception("RunManager analysis failed")
 
 
 def detect_brand_owned_url(url: str, brand_id: str, brand_domains: List[str] = None, brand_subdomains: List[str] = None, brand_social_handles: List[str] = None) -> Dict[str, Any]:

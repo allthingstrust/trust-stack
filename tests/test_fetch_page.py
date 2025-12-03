@@ -18,6 +18,8 @@ class DummyResponse:
 
 def test_fetch_page_http_success(monkeypatch, tmp_path):
     url = 'https://example.com/article'
+    # Clear session cache to ensure we use the mock
+    page_fetcher._SESSIONS_CACHE.clear()
     html = '<html><head><title>Test Title</title></head><body><article><p>Paragraph one.</p><p>Paragraph two.</p></article><footer><a href="/terms">Terms</a><a href="/privacy">Privacy</a></footer></body></html>'
 
     def fake_get(u, headers=None, timeout=None):
@@ -95,6 +97,9 @@ def test_fetch_page_playwright_fallback(monkeypatch, tmp_path):
 
         def __exit__(self, exc_type, exc, tb):
             return False
+
+        def start(self):
+            return self
 
         @property
         def chromium(self):

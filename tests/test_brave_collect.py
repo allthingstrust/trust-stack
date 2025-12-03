@@ -1,4 +1,5 @@
 import pytest
+import types
 
 
 def test_collect_skips_thin_and_reaches_target(monkeypatch):
@@ -8,7 +9,11 @@ def test_collect_skips_thin_and_reaches_target(monkeypatch):
 
     # Prepare fake search results (5 URLs)
     urls = [f"https://site{i}.com/page{i}" for i in range(5)]
-    monkeypatch.setattr(brave_search, 'search_brave', lambda q, size: [{'url': u, 'title': f't{i}'} for i, u in enumerate(urls)])
+    def mock_search(q, size, start_offset=0, **kwargs):
+        all_results = [{'url': u, 'title': f't{i}'} for i, u in enumerate(urls)]
+        return all_results[start_offset : start_offset + size]
+
+    monkeypatch.setattr(brave_search, 'search_brave', mock_search)
 
     # Fake fetch_page: first two are thin (simulate 403/blocked body), later ones are full
     def fake_fetch(url, browser_manager=None):
@@ -16,7 +21,7 @@ def test_collect_skips_thin_and_reaches_target(monkeypatch):
             return {'title': '', 'body': '', 'url': url}
         return {'title': 'Good', 'body': 'x' * 500, 'url': url}
 
-    monkeypatch.setattr(page_fetcher, 'fetch_page', fake_fetch)
+    monkeypatch.setattr(brave_search, 'fetch_page', fake_fetch)
 
     # Mock robots.txt fetch to be permissive (200 but empty body -> treated permissive by code)
     class FakeResp:
@@ -24,9 +29,12 @@ def test_collect_skips_thin_and_reaches_target(monkeypatch):
             self.status_code = status
             self.text = text
 
-    monkeypatch.setattr('ingestion.brave_search.requests.get', lambda url, headers=None, timeout=None: FakeResp(200, ''))
+    monkeypatch.setattr(page_fetcher, 'requests', types.SimpleNamespace(get=lambda url, headers=None, timeout=None: FakeResp(200, '')))
 
     collected = brave_search.collect_brave_pages('query', target_count=2, pool_size=5, min_body_length=200)
+    print(f"DEBUG: collected {len(collected)} items")
+    for item in collected:
+        print(f"DEBUG: item url: {item.get('url')}")
     assert isinstance(collected, list)
     assert len(collected) == 2
     # Ensure we skipped the thin ones and returned later ones
@@ -38,14 +46,14 @@ def test_collect_respects_robots_disallow(monkeypatch):
     from ingestion import brave_search, page_fetcher
 
     urls = ['https://example.com/blocked', 'https://example.com/allowed']
-    monkeypatch.setattr(brave_search, 'search_brave', lambda q, size: [{'url': u} for u in urls])
+    monkeypatch.setattr(brave_search, 'search_brave', lambda q, size, **kwargs: [{'url': u} for u in urls])
 
     called = []
     def fake_fetch(url, browser_manager=None):
         called.append(url)
         return {'title': 'OK', 'body': 'x' * 300, 'url': url}
 
-    monkeypatch.setattr(page_fetcher, 'fetch_page', fake_fetch)
+    monkeypatch.setattr(brave_search, 'fetch_page', fake_fetch)
 
     # robots.txt returns a Disallow for /blocked path
     def fake_requests_get(url, headers=None, timeout=None):
@@ -56,7 +64,7 @@ def test_collect_respects_robots_disallow(monkeypatch):
         r.text = "User-agent: *\nDisallow: /blocked\n"
         return r
 
-    monkeypatch.setattr('ingestion.brave_search.requests.get', fake_requests_get)
+    monkeypatch.setattr(page_fetcher, 'requests', types.SimpleNamespace(get=fake_requests_get))
 
     collected = brave_search.collect_brave_pages('query', target_count=1, pool_size=2, min_body_length=100)
     assert len(collected) == 1

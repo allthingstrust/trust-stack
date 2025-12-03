@@ -7,7 +7,13 @@ import argparse
 import json
 import logging
 from pathlib import Path
-from typing import List, Optional
+import sys
+import os
+
+# Ensure project root is on PYTHONPATH
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
 
 from core.run_manager import RunManager
 from data import store

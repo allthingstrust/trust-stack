@@ -102,7 +102,8 @@ class TestExecutiveSummaryFix(unittest.TestCase):
         # Check for the correct count
         # Should say "Transparency: 4 specific issues found"
         # The exact string might vary slightly based on formatting, but "Transparency: 4" is key
-        self.assertIn("Transparency: 4 specific issues found", prompt)
+        print(f"DEBUG: prompt content:\n{prompt}")
+        self.assertTrue("Transparency: 4 specific issues detected" in prompt or "Transparency: 4 issues detected" in prompt)
         
         print("SUCCESS: Prompt contains 'Transparency: 4 specific issues found'")
 

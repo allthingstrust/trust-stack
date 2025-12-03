@@ -1,5 +1,5 @@
 import pytest
-from ingestion import brave_search
+from ingestion import brave_search, page_fetcher
 
 
 def test_extract_footer_links_footer_present():
@@ -13,7 +13,7 @@ def test_extract_footer_links_footer_present():
       </body>
     </html>
     """
-    links = brave_search._extract_footer_links(html, "https://example.com")
+    links = page_fetcher._extract_footer_links(html, "https://example.com")
     assert links["terms"].endswith('/terms')
     assert links["privacy"].endswith('/privacy')
 
@@ -27,7 +27,7 @@ def test_extract_footer_links_footer_absent_body_links():
       </body>
     </html>
     """
-    links = brave_search._extract_footer_links(html, "https://example.com")
+    links = page_fetcher._extract_footer_links(html, "https://example.com")
     assert links["terms"] == ""
     assert 'privacy' in links["privacy"].lower()
 
@@ -41,6 +41,6 @@ def test_extract_footer_links_no_links():
       </body>
     </html>
     """
-    links = brave_search._extract_footer_links(html, "https://example.com")
+    links = page_fetcher._extract_footer_links(html, "https://example.com")
     assert links["terms"] == ""
     assert links["privacy"] == ""

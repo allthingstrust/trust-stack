@@ -42,6 +42,7 @@ from ingestion.page_fetcher import (
     _extract_internal_links,
     _extract_structured_body_text,
     _extract_body_text,
+    _is_allowed_by_robots,
 )
 
 logger = logging.getLogger(__name__)
@@ -531,7 +532,7 @@ def collect_brave_pages(
 
                 # Robots check (cached)
                 try:
-                    allowed = is_allowed_by_robots(url)
+                    allowed = _is_allowed_by_robots(url)
                 except Exception:
                     allowed = True
                 if not allowed:
