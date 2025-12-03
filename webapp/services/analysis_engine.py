@@ -312,6 +312,16 @@ def run_analysis(brand_id: str, keywords: List[str], sources: List[str], max_ite
         # Store in session state
         st.session_state['last_run'] = run_data
 
+        # Shutdown Playwright browser if it's running
+        try:
+            from ingestion.playwright_manager import get_browser_manager
+            browser_manager = get_browser_manager()
+            if browser_manager.is_started:
+                browser_manager.close()
+                logger.info("Closed Playwright browser after analysis")
+        except Exception as e:
+            logger.warning(f"Error closing Playwright browser: {e}")
+
         # Switch to results view
         time.sleep(1)
         st.session_state['page'] = 'results'
