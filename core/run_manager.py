@@ -42,13 +42,14 @@ class RunManager:
             )
             run = store.create_run(session, brand=brand, scenario=scenario, external_id=external_id, config=run_config)
             session.flush()
-            store.update_run_status(session, run.id, "in_progress")
+            run_id = run.id
+            store.update_run_status(session, run_id, "in_progress")
 
         # Ingestion and scoring can be expensive; perform outside the session scope and re-open
         try:
             assets = self._collect_assets(run_config)
             with store.session_scope(self.engine) as session:
-                persisted_assets = store.bulk_insert_assets(session, run_id=run.id, assets=assets)
+                persisted_assets = store.bulk_insert_assets(session, run_id=run_id, assets=assets)
 
             scores = self._score_assets(persisted_assets, run_config)
             with store.session_scope(self.engine) as session:
@@ -56,12 +57,12 @@ class RunManager:
                 averages = self._calculate_averages(scores)
                 store.create_truststack_summary(
                     session,
-                    run_id=run.id,
+                    run_id=run_id,
                     averages=averages,
                     authenticity_ratio=averages.get("authenticity_ratio"),
                     overall_score=averages.get("overall_score"),
                 )
-                store.update_run_status(session, run.id, "completed")
+                store.update_run_status(session, run_id, "completed")
                 # Eagerly load relationships to prevent DetachedInstanceError or NoneType errors
                 run = (
                     session.query(models.Run)
@@ -70,15 +71,15 @@ class RunManager:
                         joinedload(models.Run.scenario),
                         joinedload(models.Run.summary)
                     )
-                    .get(run.id)
+                    .get(run_id)
                 )
 
             if run_config.get("export_to_s3"):
-                export_s3.export_run_to_s3(self.engine, run.id, bucket=run_config.get("s3_bucket"))
+                export_s3.export_run_to_s3(self.engine, run_id, bucket=run_config.get("s3_bucket"))
         except Exception as exc:  # pragma: no cover - safety net
             logger.exception("Run %s failed", external_id)
             with store.session_scope(self.engine) as session:
-                store.update_run_status(session, run.id, "failed", error_message=str(exc))
+                store.update_run_status(session, run_id, "failed", error_message=str(exc))
                 # Eagerly load relationships to prevent DetachedInstanceError or NoneType errors
                 run = (
                     session.query(models.Run)
@@ -87,7 +88,7 @@ class RunManager:
                         joinedload(models.Run.scenario),
                         joinedload(models.Run.summary)
                     )
-                    .get(run.id)
+                    .get(run_id)
                 )
         return run
 
