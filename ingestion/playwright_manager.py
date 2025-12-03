@@ -45,17 +45,7 @@ class PlaywrightBrowserManager:
                 return True
                 
             try:
-                # Try to attach Streamlit context to the thread to suppress warnings
-                try:
-                    from streamlit.runtime.scriptrunner import add_script_run_ctx
-                except ImportError:
-                    try:
-                        from streamlit.scriptrunner import add_script_run_ctx
-                    except ImportError:
-                        add_script_run_ctx = lambda x: x
-
                 self._thread = threading.Thread(target=self._run_browser_loop, daemon=True)
-                add_script_run_ctx(self._thread)
                 self._thread.start()
                 self._is_started = True
                 logger.info('Playwright browser thread started')
