@@ -132,7 +132,7 @@ def bulk_insert_assets(session: Session, run_id: int, assets: Iterable[dict]) ->
                 normalized_content=asset.get("normalized_content"),
                 modality=asset.get("modality", "text"),
                 language=asset.get("language"),
-                metadata=asset.get("metadata") or {},
+                meta_info=asset.get("meta_info") or asset.get("metadata") or {},
             )
         )
 

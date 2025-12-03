@@ -91,7 +91,7 @@ class ContentAsset(Base):
     normalized_content = Column(Text, nullable=True)
     modality = Column(String, default="text")
     language = Column(String, nullable=True)
-    metadata = Column(JSON, default=dict)
+    meta_info = Column(JSON, default=dict)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
     run = relationship("Run", back_populates="assets")

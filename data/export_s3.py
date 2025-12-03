@@ -75,7 +75,7 @@ def export_run_to_s3(engine, run_id: int, bucket: str | None = None) -> Tuple[Li
                 "normalized_content": asset.normalized_content,
                 "modality": asset.modality,
                 "language": asset.language,
-                "metadata": json.dumps(asset.metadata or {}),
+                "meta_info": json.dumps(asset.meta_info or {}),
                 "created_at": asset.created_at,
             }
             for asset in assets
@@ -128,7 +128,7 @@ def _upload_raw_assets(client, bucket: str, brand_slug: str, external_id: str, a
             "normalized_content": asset.get("normalized_content"),
             "modality": asset.get("modality"),
             "language": asset.get("language"),
-            "metadata": asset.get("metadata"),
+            "meta_info": asset.get("meta_info") or asset.get("metadata"),
             "created_at": asset.get("created_at").isoformat() if asset.get("created_at") else None,
         }
         key = f"raw/{brand_slug}/{external_id}/{asset.get('source_type')}/{asset.get('id')}.json"
