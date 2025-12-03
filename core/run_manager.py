@@ -11,6 +11,7 @@ from data import models
 from data import store
 from data import export_s3
 from data.models import ContentAsset, DimensionScores, Run
+from sqlalchemy.orm import joinedload
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +62,16 @@ class RunManager:
                     overall_score=averages.get("overall_score"),
                 )
                 store.update_run_status(session, run.id, "completed")
-                run = session.get(models.Run, run.id) if hasattr(session, "get") else session.query(models.Run).get(run.id)
+                # Eagerly load relationships to prevent DetachedInstanceError or NoneType errors
+                run = (
+                    session.query(models.Run)
+                    .options(
+                        joinedload(models.Run.brand),
+                        joinedload(models.Run.scenario),
+                        joinedload(models.Run.summary)
+                    )
+                    .get(run.id)
+                )
 
             if run_config.get("export_to_s3"):
                 export_s3.export_run_to_s3(self.engine, run.id, bucket=run_config.get("s3_bucket"))
@@ -69,7 +79,16 @@ class RunManager:
             logger.exception("Run %s failed", external_id)
             with store.session_scope(self.engine) as session:
                 store.update_run_status(session, run.id, "failed", error_message=str(exc))
-                run = session.get(models.Run, run.id) if hasattr(session, "get") else session.query(models.Run).get(run.id)
+                # Eagerly load relationships to prevent DetachedInstanceError or NoneType errors
+                run = (
+                    session.query(models.Run)
+                    .options(
+                        joinedload(models.Run.brand),
+                        joinedload(models.Run.scenario),
+                        joinedload(models.Run.summary)
+                    )
+                    .get(run.id)
+                )
         return run
 
     # ------------------------------------------------------------------
