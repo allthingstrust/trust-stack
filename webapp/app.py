@@ -805,7 +805,6 @@ st.markdown("""
     }
 
     /* Trust Stack Report Styling */
-
     .trust-stack-header {
         font-weight: bold;
         font-size: 1rem; /* Match body text size */
@@ -1964,7 +1963,7 @@ Summary of Analyzed Content:"""
     # Check if we already have the generated report in the run data
     trust_stack_text = run_data.get('trust_stack_report_text')
     
-    if not trust_stack_text:
+    if not trust_stack_text or "CUSTOM GPT" in trust_stack_text or "CUSTOM GTP" in trust_stack_text:
         with st.spinner("Generating detailed Trust Stack Analysis..."):
             try:
                 # Generate the report text using the new module
