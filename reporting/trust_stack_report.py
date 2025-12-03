@@ -150,17 +150,13 @@ You must output the analysis in the EXACT following format. Use the provided HTM
 *   **[Point 2]**: [Explanation]
 ... (3-5 bullet points explaining the score)
 
-<div class="trust-stack-blue">
-**CUSTOM GPT**
 **{dimension.upper()}**: Score: {score:.1f} / 10
 
 🗝️ **Key Signal Evaluation**
 
-(For each signal below, provide the status icon, the signal name as a header, bullet points, and a summary. All text inside this div will be blue.)
+(For each signal below, provide the status icon, the signal name as a header, bullet points, and a summary.)
 
 {_format_signals_for_prompt_new(signals)}
-
-</div>
 
 🧮 **Diagnostics Snapshot**
 (Create a markdown table with 2 columns: Metric, Value. Include 5-6 relevant metrics.)
@@ -174,17 +170,17 @@ Metric | Value
 [A 2-3 sentence summary paragraph]
 
 🛠️ **Recommendations to Improve {dimension.upper()}**
-(Provide 3-5 concrete, actionable steps based on the **Content Snippets** provided above. Do NOT be generic. Quote the content if relevant.)
-1. [Actionable Recommendation 1]
-2. [Actionable Recommendation 2]
-3. [Actionable Recommendation 3]
+(Provide 3-5 concrete, actionable steps based on the **Content Snippets** provided above. Do NOT be generic. You MUST quote the specific content or mention the specific URL that needs improvement.)
+1. [Actionable Recommendation 1 - citing specific content]
+2. [Actionable Recommendation 2 - citing specific content]
+3. [Actionable Recommendation 3 - citing specific content]
 
 INSTRUCTIONS:
 - Be professional, objective, and detailed.
 - Use the provided score to guide the tone.
 - Ensure the "Key Signal Evaluation" section covers ALL the signals listed above.
 - Do NOT use headers like # or ##. Use **bold** for headers to keep font size consistent.
-- CRITICAL: Recommendations must be specific and actionable. Use the provided content snippets to identify specific gaps (e.g., "The 'About' page text '...' lacks team member names").
+- CRITICAL: Recommendations must be specific and actionable. Use the provided content snippets to identify specific gaps (e.g., "The 'About' page text '...' lacks team member names"). Avoid generic advice like "Improve transparency". Instead say "Add author bylines to the blog posts at [URL]".
 """
 
     try:

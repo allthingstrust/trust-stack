@@ -805,9 +805,7 @@ st.markdown("""
     }
 
     /* Trust Stack Report Styling */
-    .trust-stack-blue {
-        color: #4472C4;
-    }
+
     .trust-stack-header {
         font-weight: bold;
         font-size: 1rem; /* Match body text size */
@@ -1603,7 +1601,7 @@ def show_analyze_page():
                         item = {
                             "final_score": 0, # Default
                             "dimension_scores": {},
-                            "meta": asset.metadata or {},
+                            "meta": asset.meta_info or {},
                             "source": asset.source_type
                         }
                         # Populate meta with essential fields if missing
@@ -1641,6 +1639,15 @@ def show_analyze_page():
                     legacy_run_data["authenticity_ratio"] = {
                         "authenticity_ratio_pct": (run.summary.authenticity_ratio or 0) * 100
                     }
+
+                # Ensure progress container is cleared before showing results
+                if 'progress_container_placeholder' in st.session_state:
+                    try:
+                        if st.session_state['progress_container_placeholder'] is not None:
+                            st.session_state['progress_container_placeholder'].empty()
+                    except:
+                        pass
+                    del st.session_state['progress_container_placeholder']
 
                 st.session_state['last_run'] = legacy_run_data
                 st.session_state['page'] = 'results'
