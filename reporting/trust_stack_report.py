@@ -51,6 +51,7 @@ TRUST_STACK_DIMENSIONS = {
             "Trust Recovery Mechanisms"
         ]
     },
+
     'verification': {
         'signals': [
             "Authentic Social Proof",
@@ -61,6 +62,45 @@ TRUST_STACK_DIMENSIONS = {
             "Secure & Tamper-Resistant Systems"
         ]
     }
+}
+
+# Define specific diagnostic metrics for each dimension
+DIMENSION_DIAGNOSTICS = {
+    'provenance': [
+        "Author Credibility",
+        "Source Attribution",
+        "Domain Authority",
+        "History Transparency",
+        "Citation Quality"
+    ],
+    'resonance': [
+        "Audience Connection",
+        "Emotional Engagement",
+        "Cultural Relevance",
+        "Value Proposition",
+        "Brand Voice Appeal"
+    ],
+    'coherence': [
+        "Content Narrative Alignment",
+        "Audience Engagement Clarity",
+        "Brand Messaging Consistency",
+        "Product Relevance Connection",
+        "Overall Content Cohesion"
+    ],
+    'transparency': [
+        "Disclosure Clarity",
+        "Intent Revelation",
+        "Policy Accessibility",
+        "Sourcing Transparency",
+        "Limitation Acknowledgement"
+    ],
+    'verification': [
+        "Claim Accuracy",
+        "Evidence Strength",
+        "Peer Corroboration",
+        "Fallacy Freedom",
+        "Fact-Check Status"
+    ]
 }
 
 def generate_trust_stack_report(report_data: Dict[str, Any], model: str = 'gpt-4o-mini') -> str:
@@ -111,15 +151,29 @@ def _generate_dimension_analysis(
     """Generate the detailed analysis for a single dimension"""
     
     signals = TRUST_STACK_DIMENSIONS.get(dimension, {}).get('signals', [])
+    diagnostics = DIMENSION_DIAGNOSTICS.get(dimension, [])
+    
+    # Format diagnostics for prompt
+    diagnostics_list = "\n".join([f"- {d}" for d in diagnostics])
     
     # Prepare context for LLM
     # We summarize the top 5 and bottom 5 items for this dimension to give the LLM concrete data
     sorted_items = sorted(items, key=lambda x: x.get('dimension_scores', {}).get(dimension, 0), reverse=True)
-    top_items = sorted_items[:3]
-    bottom_items = sorted_items[-3:] if len(items) > 3 else []
+    top_items = sorted_items[:5]
+    bottom_items = sorted_items[-5:] if len(items) > 5 else []
     
-    items_context = "Sample Content Items:\n"
+    # Deduplicate if overlap
+    unique_items = []
+    seen_ids = set()
     for item in top_items + bottom_items:
+        # Use title or url as id if no id field
+        iid = item.get('id', item.get('url', item.get('title', '')))
+        if iid not in seen_ids:
+            unique_items.append(item)
+            seen_ids.add(iid)
+
+    items_context = "Sample Content Items:\n"
+    for item in unique_items:
         title = item.get('title', 'Untitled')
         item_score = item.get('dimension_scores', {}).get(dimension, 0) * 10
         url = item.get('meta', {}).get('source_url', 'No URL')
@@ -128,7 +182,38 @@ def _generate_dimension_analysis(
         body = item.get('body', '') or item.get('meta', {}).get('description', '')
         snippet = body[:600].replace('\n', ' ') + "..." if body else "No content available."
         
-        items_context += f"- [{item_score:.1f}/10] {title} ({url})\n  Content Snippet: \"{snippet}\"\n"
+        # Get detected attributes for this dimension
+        meta = item.get('meta', {})
+        if isinstance(meta, str):
+            try:
+                import json
+                meta = json.loads(meta)
+            except:
+                meta = {}
+                
+        detected_attrs = meta.get('detected_attributes', [])
+        relevant_attrs = [
+            f"{attr.get('label')} ({attr.get('value')}/10)" 
+            for attr in detected_attrs 
+            if attr.get('dimension') == dimension
+        ]
+        attrs_str = ", ".join(relevant_attrs) if relevant_attrs else "None detected"
+
+        # Get specific issues/recommendations if available
+        # Note: 'issues' might be stored in different places depending on the pipeline stage
+        # We check common locations
+        issues = item.get('issues', []) or meta.get('issues', [])
+        relevant_issues = [
+            issue.get('issue', issue.get('description', '')) 
+            for issue in issues 
+            if issue.get('dimension') == dimension or issue.get('category') == dimension
+        ]
+        issues_str = "; ".join(relevant_issues[:3]) if relevant_issues else "None flagged"
+
+        items_context += f"- [{item_score:.1f}/10] {title} ({url})\n"
+        items_context += f"  Attributes: {attrs_str}\n"
+        items_context += f"  Issues: {issues_str}\n"
+        items_context += f"  Content Snippet: \"{snippet}\"\n"
 
     prompt = f"""
 You are an expert Trust Stack analyst. Generate a detailed analysis for the '{dimension.title()}' dimension of a brand's content.
@@ -159,18 +244,20 @@ You must output the analysis in the EXACT following format. Use the provided HTM
 {_format_signals_for_prompt_new(signals)}
 
 🧮 **Diagnostics Snapshot**
-(Create a markdown table with 2 columns: Metric, Value. Include 5-6 relevant metrics.)
+(Create a markdown table with 2 columns: Metric, Value. Score each of the following specific metrics on a 1/10 scale based on your analysis.)
 
 Metric | Value
 --- | ---
-[Metric Name] | [Value]
-...
+[Metric Name] | [Score]/10
+
+Required Metrics to Score:
+{diagnostics_list}
 
 📊 **Final {dimension.title()} Score: {score:.1f} / 10**
 [A 2-3 sentence summary paragraph]
 
 🛠️ **Recommendations to Improve {dimension.upper()}**
-(Provide 3-5 concrete, actionable steps based on the **Content Snippets** provided above. Do NOT be generic. You MUST quote the specific content or mention the specific URL that needs improvement.)
+(Provide 3-5 concrete, actionable steps based on the **Content Snippets** and **Issues** provided above. Do NOT be generic. You MUST quote the specific content or mention the specific URL that needs improvement.)
 1. [Actionable Recommendation 1 - citing specific content]
 2. [Actionable Recommendation 2 - citing specific content]
 3. [Actionable Recommendation 3 - citing specific content]
@@ -180,6 +267,7 @@ INSTRUCTIONS:
 - Use the provided score to guide the tone.
 - Ensure the "Key Signal Evaluation" section covers ALL the signals listed above.
 - Do NOT use headers like # or ##. Use **bold** for headers to keep font size consistent.
+- CRITICAL: You MUST use the provided "Attributes" and "Issues" data in your Rationale and Key Signal Evaluation.
 - CRITICAL: Recommendations must be specific and actionable. Use the provided content snippets to identify specific gaps (e.g., "The 'About' page text '...' lacks team member names"). Avoid generic advice like "Improve transparency". Instead say "Add author bylines to the blog posts at [URL]".
 """
 
