@@ -50,6 +50,7 @@ class RunManager:
             assets = self._collect_assets(run_config)
             with store.session_scope(self.engine) as session:
                 persisted_assets = store.bulk_insert_assets(session, run_id=run_id, assets=assets)
+                session.expunge_all()
 
             scores = self._score_assets(persisted_assets, run_config)
             with store.session_scope(self.engine) as session:
@@ -69,10 +70,12 @@ class RunManager:
                     .options(
                         joinedload(models.Run.brand),
                         joinedload(models.Run.scenario),
-                        joinedload(models.Run.summary)
+                        joinedload(models.Run.summary),
+                        joinedload(models.Run.assets).joinedload(models.ContentAsset.scores)
                     )
                     .get(run_id)
                 )
+                session.expunge_all()
 
             if run_config.get("export_to_s3"):
                 export_s3.export_run_to_s3(self.engine, run_id, bucket=run_config.get("s3_bucket"))
@@ -86,10 +89,12 @@ class RunManager:
                     .options(
                         joinedload(models.Run.brand),
                         joinedload(models.Run.scenario),
-                        joinedload(models.Run.summary)
+                        joinedload(models.Run.summary),
+                        joinedload(models.Run.assets).joinedload(models.ContentAsset.scores)
                     )
                     .get(run_id)
                 )
+                session.expunge_all()
         return run
 
     # ------------------------------------------------------------------
