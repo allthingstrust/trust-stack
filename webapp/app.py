@@ -1589,7 +1589,11 @@ def show_analyze_page():
                         "items": [],
                         "dimension_breakdown": {},
                         "llm_model": summary_model,
-                        "recommendations_model": recommendations_model
+                        "recommendations_model": recommendations_model,
+                        # Inject fields required by trust_stack_report.py
+                        "brand_id": run.brand.name,  # Use name for display
+                        "generated_at": run.started_at.strftime("%B %d, %Y"),
+                        "total_items_analyzed": len(run.assets) if run.assets else 0
                     }
                 }
                 
@@ -1601,7 +1605,9 @@ def show_analyze_page():
                             "final_score": 0, # Default
                             "dimension_scores": {},
                             "meta": asset.meta_info or {},
-                            "source": asset.source_type
+                            "source": asset.source_type,
+                            # Critical: Pass content body for analysis context
+                            "body": asset.normalized_content or asset.raw_content or ""
                         }
                         # Populate meta with essential fields if missing
                         if not item["meta"].get("url"):
