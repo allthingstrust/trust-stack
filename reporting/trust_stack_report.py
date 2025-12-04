@@ -174,15 +174,7 @@ def _generate_dimension_analysis(
 
     items_context = "Sample Content Items:\n"
     for item in unique_items:
-        title = item.get('title', 'Untitled')
-        item_score = item.get('dimension_scores', {}).get(dimension, 0) * 10
-        url = item.get('meta', {}).get('source_url', 'No URL')
-        
-        # Extract a snippet of the body content to give the LLM context
-        body = item.get('body', '') or item.get('meta', {}).get('description', '')
-        snippet = body[:600].replace('\n', ' ') + "..." if body else "No content available."
-        
-        # Get detected attributes for this dimension
+        # Ensure meta is a dict
         meta = item.get('meta', {})
         if isinstance(meta, str):
             try:
@@ -190,6 +182,18 @@ def _generate_dimension_analysis(
                 meta = json.loads(meta)
             except:
                 meta = {}
+
+        # Improved title extraction
+        title = item.get('title') or meta.get('title', 'Untitled')
+        item_score = item.get('dimension_scores', {}).get(dimension, 0) * 10
+        
+        # Improved URL extraction
+        url = meta.get('source_url') or meta.get('url') or 'No URL'
+        
+        # Extract a snippet of the body content to give the LLM context
+        # INCREASED CONTEXT WINDOW: 600 -> 4000 chars
+        body = item.get('body', '') or meta.get('description', '')
+        snippet = body[:4000].replace('\n', ' ') + "..." if body else "No content available."
                 
         detected_attrs = meta.get('detected_attributes', [])
         relevant_attrs = [

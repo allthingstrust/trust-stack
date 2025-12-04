@@ -1602,6 +1602,7 @@ def show_analyze_page():
                 if run.assets:
                     for asset in run.assets:
                         item = {
+                            "title": asset.title or "Untitled",
                             "final_score": 0, # Default
                             "dimension_scores": {},
                             "meta": asset.meta_info or {},
@@ -1612,6 +1613,8 @@ def show_analyze_page():
                         # Populate meta with essential fields if missing
                         if not item["meta"].get("url"):
                             item["meta"]["url"] = asset.url
+                        if not item["meta"].get("source_url"):
+                            item["meta"]["source_url"] = asset.url
                         if not item["meta"].get("title"):
                             item["meta"]["title"] = asset.title
                             

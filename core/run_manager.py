@@ -166,7 +166,12 @@ class RunManager:
                         "title": page.get("title"),
                         "raw_content": page.get("body") or page.get("content") or page.get("snippet"),
                         "normalized_content": page.get("body") or page.get("content") or page.get("snippet"),
-                        "meta_info": {"query": kw},
+                        "meta_info": {
+                            "query": kw,
+                            "source_url": page.get("url"),
+                            "title": page.get("title"),
+                            "description": (page.get("body") or "")[:500]
+                        },
                     }
                 )
         return assets
@@ -190,7 +195,12 @@ class RunManager:
                         "title": page.get("title"),
                         "raw_content": page.get("body") or page.get("content") or page.get("snippet"),
                         "normalized_content": page.get("body") or page.get("content") or page.get("snippet"),
-                        "meta_info": {"query": kw},
+                        "meta_info": {
+                            "query": kw,
+                            "source_url": page.get("url"),
+                            "title": page.get("title"),
+                            "description": (page.get("body") or "")[:500]
+                        },
                     }
                 )
         return assets
@@ -221,7 +231,11 @@ class RunManager:
                         "title": getattr(post, "title", None) or post.get("title") if hasattr(post, "get") else None,
                         "raw_content": getattr(post, "selftext", None) or post.get("selftext") if hasattr(post, "get") else None,
                         "normalized_content": getattr(post, "selftext", None) or post.get("selftext") if hasattr(post, "get") else None,
-                        "meta_info": {"query": kw},
+                        "meta_info": {
+                            "query": kw,
+                            "source_url": getattr(post, "url", None) or post.get("url") if hasattr(post, "get") else None,
+                            "title": getattr(post, "title", None) or post.get("title") if hasattr(post, "get") else None,
+                        },
                     }
                 )
         return assets
@@ -254,7 +268,11 @@ class RunManager:
                         "raw_content": transcript or video.get("description") if isinstance(video, dict) else None,
                         "normalized_content": transcript or video.get("description") if isinstance(video, dict) else None,
                         "modality": "video",
-                        "meta_info": {"query": kw},
+                        "meta_info": {
+                            "query": kw,
+                            "source_url": video.get("url") if isinstance(video, dict) else None,
+                            "title": video.get("title") if isinstance(video, dict) else None,
+                        },
                     }
                 )
         return assets
