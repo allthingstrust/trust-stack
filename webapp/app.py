@@ -31,6 +31,7 @@ from urllib.parse import urlparse
 from config.settings import APIConfig, SETTINGS
 from scoring.llm_client import ChatClient
 from ingestion.fetch_config import get_realistic_headers, get_random_delay
+from ingestion.playwright_manager import get_browser_manager
 from utils.score_formatter import to_display_score, format_score_display, get_score_status
 
 # Import utility modules
@@ -1664,6 +1665,12 @@ def show_analyze_page():
             except Exception as e:
                 st.error(f"Analysis failed: {str(e)}")
                 logger.exception("RunManager analysis failed")
+            finally:
+                # Ensure browser is closed to free resources
+                try:
+                    get_browser_manager().close()
+                except Exception as e:
+                    logger.warning(f"Failed to close browser manager: {e}")
 
 
 def detect_brand_owned_url(url: str, brand_id: str, brand_domains: List[str] = None, brand_subdomains: List[str] = None, brand_social_handles: List[str] = None) -> Dict[str, Any]:

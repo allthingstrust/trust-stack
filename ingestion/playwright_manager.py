@@ -260,12 +260,19 @@ class PlaywrightBrowserManager:
 
     def close(self):
         """Stop the browser thread."""
+        thread_to_join = None
         with self._lock:
             if not self._is_started:
                 return
             self._request_queue.put(None)
-            if self._thread:
-                self._thread.join(timeout=5)
+            thread_to_join = self._thread
+            
+        # Release lock before joining to avoid deadlock with thread's cleanup
+        if thread_to_join:
+            thread_to_join.join(timeout=5)
+            
+        # Ensure state is cleared
+        with self._lock:
             self._is_started = False
             self._thread = None
     
