@@ -4,7 +4,7 @@ Scores content on Provenance, Verification, Transparency, Coherence, Resonance
 Integrates with TrustStackAttributeDetector for comprehensive ratings
 """
 
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Tuple
 import logging
 import json
 from dataclasses import dataclass
@@ -37,7 +37,7 @@ class ContentScorer:
     def __init__(self, use_attribute_detection: bool = True):
         """
         Initialize scorer
-
+        
         Args:
             use_attribute_detection: If True, combine LLM scores with attribute detection
         """
@@ -45,6 +45,15 @@ class ContentScorer:
         self.llm_client = LLMScoringClient()
         self.rubric_version = SETTINGS['rubric_version']
         self.use_attribute_detection = use_attribute_detection
+
+        # Load trust signals config
+        from scoring.rubric import load_rubric
+        rubric = load_rubric()
+        self.trust_signals_config = rubric.get('trust_signals', {})
+        
+        # Initialize Aggregator
+        from scoring.aggregator import ScoringAggregator
+        self.aggregator = ScoringAggregator(self.trust_signals_config)
 
         # Initialize attribute detector if enabled
         if self.use_attribute_detection:
@@ -63,10 +72,10 @@ class ContentScorer:
         self.linguistic_analyzer = LinguisticAnalyzer()
         self.triage_scorer = TriageScorer()
     
-    def score_content(self, content: NormalizedContent, brand_context: Dict[str, Any]) -> DimensionScores:
+    def score_content(self, content: NormalizedContent, brand_context: Dict[str, Any]) -> 'TrustScore':
         """
         Score content on all 5 dimensions
-
+        
         Args:
             content: Content to score
             brand_context: Brand-specific context and keywords
@@ -96,42 +105,105 @@ class ContentScorer:
                     )
 
             # Get LLM scores for each dimension
-            provenance_score = self._score_provenance(content, brand_context)
-            verification_score = self._score_verification(content, brand_context)
-            transparency_score = self._score_transparency(content, brand_context)
-            coherence_score = self._score_coherence(content, brand_context)
-            resonance_score = self._score_resonance(content, brand_context)
+            # TRANSITIONAL LOGIC:
+            # We still use the legacy _score_* methods to get the raw values (0.0-1.0),
+            # but we now wrap them as "SignalScores" and pass them to the aggregator.
+            # This allows us to use the new infrastructure while we migrate the individual
+            # scoring methods to return rich signals in future steps.
+            
+            from scoring.types import SignalScore
+            
+            signals = []
+            
+            # 1. Provenance
+            prov_val, prov_conf = self._score_provenance(content, brand_context)
+            signals.append(SignalScore(
+                id="legacy_provenance_llm",
+                label="Legacy Provenance Score",
+                dimension="Provenance",
+                value=prov_val,
+                weight=1.0,
+                evidence=[],
+                rationale="Legacy LLM score",
+                confidence=prov_conf
+            ))
+            
+            # 2. Verification
+            ver_val, ver_conf = self._score_verification(content, brand_context)
+            signals.append(SignalScore(
+                id="legacy_verification_llm",
+                label="Legacy Verification Score",
+                dimension="Verification",
+                value=ver_val,
+                weight=1.0,
+                evidence=[],
+                rationale="Legacy LLM score",
+                confidence=ver_conf
+            ))
+            
+            # 3. Transparency
+            trans_val, trans_conf = self._score_transparency(content, brand_context)
+            signals.append(SignalScore(
+                id="legacy_transparency_llm",
+                label="Legacy Transparency Score",
+                dimension="Transparency",
+                value=trans_val,
+                weight=1.0,
+                evidence=[],
+                rationale="Legacy LLM score",
+                confidence=trans_conf
+            ))
+            
+            # 4. Coherence
+            coh_val, coh_conf = self._score_coherence(content, brand_context)
+            signals.append(SignalScore(
+                id="legacy_coherence_llm",
+                label="Legacy Coherence Score",
+                dimension="Coherence",
+                value=coh_val,
+                weight=1.0,
+                evidence=[],
+                rationale="Legacy LLM score",
+                confidence=coh_conf
+            ))
+            
+            # 5. Resonance
+            res_val, res_conf = self._score_resonance(content, brand_context)
+            signals.append(SignalScore(
+                id="legacy_resonance_llm",
+                label="Legacy Resonance Score",
+                dimension="Resonance",
+                value=res_val,
+                weight=1.0,
+                evidence=[],
+                rationale="Legacy LLM score",
+                confidence=res_conf
+            ))
 
             # Serialize score debug info to meta
             score_debug = getattr(content, '_score_debug', {})
-            score_debug = getattr(content, '_score_debug', {})
-            # import json - removed, using global import
-            meta_json = json.dumps(score_debug) if score_debug else ""
-            
             if score_debug:
-                # Update content.meta with score debug info so it persists
                 if content.meta is None:
                     content.meta = {}
                 content.meta['score_debug'] = json.dumps(score_debug)
 
-            return DimensionScores(
-                provenance=provenance_score,
-                verification=verification_score,
-                transparency=transparency_score,
-                coherence=coherence_score,
-                resonance=resonance_score
-            ) # Note: ContentScores creation happens in the caller (Pipeline), 
-              # but we need to ensure the metadata is passed along. 
-              # The caller typically uses content.meta. 
-              # So we should update content.meta here.
+            # Calculate TrustScore using Aggregator
+            # This is the new "Source of Truth" for the score
+            dim_scores = []
+            for dim_name in ["Provenance", "Verification", "Transparency", "Coherence", "Resonance"]:
+                dim_score = self.aggregator.aggregate_dimension(dim_name, signals)
+                dim_scores.append(dim_score)
+                
+            trust_score = self.aggregator.calculate_trust_score(dim_scores, metadata=content.meta)
             
+            return trust_score
 
         except Exception as e:
             logger.error(f"Error scoring content {content.content_id}: {e}")
             # Return neutral scores on error
             return DimensionScores(0.5, 0.5, 0.5, 0.5, 0.5)
     
-    def _score_provenance(self, content: NormalizedContent, brand_context: Dict[str, Any]) -> float:
+    def _score_provenance(self, content: NormalizedContent, brand_context: Dict[str, Any]) -> Tuple[float, float]:
         """Score Provenance dimension: origin, traceability, metadata"""
         
         prompt = f"""
@@ -158,9 +230,24 @@ class ContentScorer:
         Return only a number between 0.0 and 1.0:
         """
         
-        return self._get_llm_score(prompt)
+        score = self._get_llm_score(prompt)
+        
+        # Calculate confidence
+        confidence = 1.0
+        
+        # Penalize confidence for very short content
+        if not content.body or len(content.body) < 200:
+            confidence *= 0.6
+            logger.debug(f"Provenance confidence reduced due to short content ({len(content.body) if content.body else 0} chars)")
+            
+        # Penalize confidence for missing metadata
+        if not content.author and not content.src:
+            confidence *= 0.8
+            logger.debug("Provenance confidence reduced due to missing author/source")
+            
+        return score, confidence
     
-    def _score_verification(self, content: NormalizedContent, brand_context: Dict[str, Any]) -> float:
+    def _score_verification(self, content: NormalizedContent, brand_context: Dict[str, Any]) -> Tuple[float, float]:
         """Score Verification dimension: factual accuracy vs trusted DBs (Fact-Checked)"""
         
         # Detect if content is from brand's own domain
@@ -219,9 +306,21 @@ class ContentScorer:
             'content_type': content_type
         }
                 
-        return adjusted_score
+        # Calculate confidence based on RAG results
+        confidence = 1.0
+        rag_count = verification_result.get('rag_count', 0)
+        
+        if rag_count == 0:
+            # If we couldn't find any documents to verify against, confidence is low
+            confidence = 0.3
+            logger.debug("Verification confidence low: No RAG documents found")
+        elif rag_count < 3:
+            # Few documents found
+            confidence = 0.7
+            
+        return adjusted_score, confidence
     
-    def _score_transparency(self, content: NormalizedContent, brand_context: Dict[str, Any]) -> float:
+    def _score_transparency(self, content: NormalizedContent, brand_context: Dict[str, Any]) -> Tuple[float, float]:
         """Score Transparency dimension: disclosures, clarity"""
         
         prompt = f"""
@@ -270,9 +369,18 @@ class ContentScorer:
             content._llm_issues = {}
         content._llm_issues['transparency'] = result.get('issues', [])
         
-        return result.get('score', 0.5)
+        score = result.get('score', 0.5)
+        
+        # Calculate confidence
+        confidence = 1.0
+        
+        # Transparency is hard to judge on very short content
+        if not content.body or len(content.body) < 300:
+            confidence *= 0.7
+            
+        return score, confidence
     
-    def _score_coherence(self, content: NormalizedContent, brand_context: Dict[str, Any]) -> float:
+    def _score_coherence(self, content: NormalizedContent, brand_context: Dict[str, Any]) -> Tuple[float, float]:
         """Score Coherence dimension: consistency across channels with brand guidelines"""
         
         # Check if user wants to use guidelines (from session state/brand context)
@@ -466,7 +574,15 @@ class ContentScorer:
             'content_type': content_type
         }
             
-        return adjusted_score
+        # Calculate confidence
+        confidence = 1.0
+        
+        if not brand_guidelines and use_guidelines:
+            # If we wanted guidelines but couldn't find them, confidence is lower
+            confidence = 0.6
+            logger.debug("Coherence confidence reduced: Missing brand guidelines")
+            
+        return adjusted_score, confidence
     
     def _determine_content_type(self, content: NormalizedContent) -> str:
         """
@@ -562,7 +678,7 @@ class ContentScorer:
             logger.warning(f"Failed to load brand guidelines for {brand_id}: {e}")
             return None
     
-    def _score_resonance(self, content: NormalizedContent, brand_context: Dict[str, Any]) -> float:
+    def _score_resonance(self, content: NormalizedContent, brand_context: Dict[str, Any]) -> Tuple[float, float]:
         """Score Resonance dimension: cultural fit, organic engagement"""
         
         # Use engagement metrics for resonance scoring
@@ -599,7 +715,21 @@ class ContentScorer:
         # Combine LLM score with engagement metrics (70% LLM, 30% engagement)
         combined_score = (0.7 * llm_score) + (0.3 * engagement_score)
         
-        return min(1.0, max(0.0, combined_score))
+        combined_score = min(1.0, max(0.0, combined_score))
+        
+        # Calculate confidence
+        confidence = 1.0
+        
+        # If we have no engagement metrics, we are relying 100% on LLM guess
+        has_metrics = (content.rating is not None or 
+                      content.upvotes is not None or 
+                      content.helpful_count is not None)
+                      
+        if not has_metrics:
+            confidence = 0.5
+            logger.debug("Resonance confidence reduced: No engagement metrics available")
+            
+        return combined_score, confidence
     
     def _calculate_engagement_resonance(self, content: NormalizedContent) -> float:
         """Calculate engagement-based resonance score"""
@@ -939,8 +1069,14 @@ class ContentScorer:
                 # Don't add to scores_list - effectively filters it out
                 continue
 
-            # Step 1: Get base LLM scores
-            dimension_scores = self.score_content(content, brand_context)
+            # Step 1: Get TrustScore (was DimensionScores)
+            trust_score = self.score_content(content, brand_context)
+            
+            # Helper to safely get dimension value (0-10) and convert to 0-1
+            def get_dim_val(ts, name):
+                if name.lower() in ts.dimensions:
+                    return ts.dimensions[name.lower()].value / 10.0
+                return 0.0
 
             # Step 2: Detect Trust Stack attributes (if enabled)
             detected_attrs = []
@@ -953,8 +1089,13 @@ class ContentScorer:
                     detected_attrs = self._merge_llm_and_detector_issues(content, detected_attrs)
                     logger.debug(f"After merging: {len(detected_attrs)} total attributes")
 
-                    # Adjust LLM scores with attribute signals
-                    dimension_scores = self._adjust_scores_with_attributes(dimension_scores, detected_attrs)
+                    # Note: We skip _adjust_scores_with_attributes here because the aggregator
+                    # should handle signal integration. However, since we are in a transitional state
+                    # where attributes are not yet fully "signals" in the aggregator, we might miss them.
+                    # For now, we accept that the TrustScore is driven by the "Legacy" signals we created above.
+                    # In the next iteration, we should convert detected_attrs into SignalScores and pass them
+                    # to the aggregator in step 1.
+                    
                 except Exception as e:
                     logger.warning(f"Attribute detection failed for {content.content_id}: {e}")
 
@@ -964,11 +1105,11 @@ class ContentScorer:
                 brand=brand_context.get('brand_name', 'unknown'),
                 src=content.src,
                 event_ts=content.event_ts,
-                score_provenance=dimension_scores.provenance,
-                score_resonance=dimension_scores.resonance,
-                score_coherence=dimension_scores.coherence,
-                score_transparency=dimension_scores.transparency,
-                score_verification=dimension_scores.verification,
+                score_provenance=get_dim_val(trust_score, 'provenance'),
+                score_resonance=get_dim_val(trust_score, 'resonance'),
+                score_coherence=get_dim_val(trust_score, 'coherence'),
+                score_transparency=get_dim_val(trust_score, 'transparency'),
+                score_verification=get_dim_val(trust_score, 'verification'),
                 class_label="",  # Optional - for backward compatibility
                 is_authentic=False,  # Optional - for backward compatibility
                 rubric_version=self.rubric_version,

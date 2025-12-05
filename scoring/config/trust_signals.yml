@@ -1,0 +1,137 @@
+# Trust Signals Configuration
+# Defines explicit signals for each dimension, their weights, and detection methods.
+
+dimensions:
+  Provenance:
+    weight: 0.20
+    description: "Origin clarity, traceability, and metadata completeness."
+  Resonance:
+    weight: 0.20
+    description: "Cultural fit, authentic engagement, and organic appeal."
+  Coherence:
+    weight: 0.20
+    description: "Consistency of voice, terminology, and design patterns."
+  Transparency:
+    weight: 0.20
+    description: "Clear disclosures, honest communication, no hidden agendas."
+  Verification:
+    weight: 0.20
+    description: "Factual accuracy, third-party validation, and security."
+
+signals:
+  # --- PROVENANCE ---
+  prov_author_bylines:
+    dimension: Provenance
+    label: "Clear Authorship/Bylines"
+    weight: 0.25
+    detection: "heuristic" # or "llm"
+    description: "Presence of clear author names, bios, or verified profiles."
+  
+  prov_metadata_c2pa:
+    dimension: Provenance
+    label: "C2PA/Content Credentials"
+    weight: 0.25
+    detection: "heuristic"
+    description: "Presence of C2PA manifest or other cryptographic provenance."
+
+  prov_source_clarity:
+    dimension: Provenance
+    label: "Source Attribution"
+    weight: 0.25
+    detection: "llm"
+    description: "Clear citation of sources and data origins."
+
+  prov_date_freshness:
+    dimension: Provenance
+    label: "Content Freshness"
+    weight: 0.25
+    detection: "heuristic"
+    description: "Content has recent publication or modification dates."
+
+  # --- RESONANCE ---
+  res_personalization:
+    dimension: Resonance
+    label: "Personalization Signals"
+    weight: 0.30
+    detection: "llm"
+    description: "Content adapts to user context (location, history) if applicable."
+
+  res_engagement_metrics:
+    dimension: Resonance
+    label: "Organic Engagement"
+    weight: 0.30
+    detection: "heuristic"
+    description: "Presence of genuine comments, reviews, or shares."
+
+  res_cultural_fit:
+    dimension: Resonance
+    label: "Cultural/Audience Fit"
+    weight: 0.40
+    detection: "llm"
+    description: "Language and tone match the target audience expectations."
+
+  # --- COHERENCE ---
+  coh_voice_consistency:
+    dimension: Coherence
+    label: "Voice Consistency"
+    weight: 0.40
+    detection: "llm"
+    description: "Consistent tone and style across all content items."
+
+  coh_design_patterns:
+    dimension: Coherence
+    label: "Visual/Design Coherence"
+    weight: 0.30
+    detection: "llm" # Placeholder for vision model
+    description: "Consistent visual identity and UI patterns."
+
+  coh_cross_channel:
+    dimension: Coherence
+    label: "Cross-Channel Alignment"
+    weight: 0.30
+    detection: "llm"
+    description: "Messaging is consistent between web, social, and other channels."
+
+  # --- TRANSPARENCY ---
+  trans_disclosures:
+    dimension: Transparency
+    label: "Clear Disclosures"
+    weight: 0.40
+    detection: "llm"
+    description: "Presence of terms, privacy policy, and pricing clarity."
+
+  trans_ai_labeling:
+    dimension: Transparency
+    label: "AI Usage Disclosure"
+    weight: 0.30
+    detection: "heuristic"
+    description: "Explicit labeling of AI-generated content."
+
+  trans_contact_info:
+    dimension: Transparency
+    label: "Contact/Business Info"
+    weight: 0.30
+    detection: "heuristic"
+    description: "Clear physical address, email, or support channels."
+
+  # --- VERIFICATION ---
+  ver_fact_accuracy:
+    dimension: Verification
+    label: "Factual Accuracy"
+    weight: 0.40
+    detection: "llm" # RAG-based
+    description: "Claims are supported by verifiable facts or consensus."
+
+  ver_trust_badges:
+    dimension: Verification
+    label: "Trust Badges/Certs"
+    weight: 0.30
+    detection: "heuristic"
+    description: "Presence of security seals, industry certs, or awards."
+
+  ver_social_proof:
+    dimension: Verification
+    label: "External Social Proof"
+    weight: 0.30
+    detection: "llm"
+    description: "Mentions or validation from reputable third parties."
