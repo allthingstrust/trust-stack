@@ -1,13 +1,93 @@
 """
 Key Signal Evaluation Generator
-Generates structured key signal assessments for each trust dimension using LLM analysis
+Generates structured key signal assessments for each trust dimension.
+Computes status DETERMINISTICALLY from detected attributes, then uses LLM for explanatory text.
 """
 
 import logging
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any, Optional, Tuple
 from data.models import NormalizedContent
 
 logger = logging.getLogger(__name__)
+
+
+# Mapping from detected attribute IDs to key signal names
+# This bridges the attribute detector output to the report's key signal categories
+ATTRIBUTE_TO_KEY_SIGNAL = {
+    # Provenance
+    'author_brand_identity_verified': 'Authorship & Attribution',
+    'c2pa_cai_manifest_present': 'Metadata & Technical Provenance',
+    'exif_metadata_integrity': 'Metadata & Technical Provenance',
+    'canonical_url_matches_declared_source': 'Metadata & Technical Provenance',
+    'source_domain_trust_baseline': 'Brand Presence & Continuity',
+    'digital_watermark_fingerprint_detected': 'Metadata & Technical Provenance',
+    
+    # Resonance
+    'personalization_relevance_embedding_similarity': 'Dynamic Personalization',
+    'engagement_authenticity_ratio': 'Opt-in & Accessible Personalization',
+    'language_locale_match': 'Cultural Fluency & Inclusion',
+    'readability_grade_level_fit': 'Creative Relevance',
+    
+    # Coherence
+    'brand_voice_consistency_score': 'Narrative Alignment Across Channels',
+    'multimodal_consistency_score': 'Design System & Interaction Patterns',
+    'claim_consistency_across_pages': 'Behavioral Consistency',
+    'broken_link_rate': 'Feedback Loops & Adaptive Clarity',
+    
+    # Transparency
+    'privacy_policy_link_availability_clarity': 'Plain Language Disclosures',
+    'ai_generated_assisted_disclosure_present': 'AI/ML & Automation Clarity',
+    'ai_vs_human_labeling_clarity': 'AI/ML & Automation Clarity',
+    'bot_disclosure_response_audit': 'AI/ML & Automation Clarity',
+    'contact_info_availability': 'User Control & Consent Management',
+    'ad_sponsored_label_consistency': 'Provenance Labeling & Source Integrity',
+    
+    # Verification
+    'claim_to_source_traceability': 'Third-Party Trust Layers',
+    'seller_product_verification_rate': 'Third-Party Trust Layers',
+    'verified_purchaser_review_rate': 'Authentic Social Proof',
+    'review_authenticity_confidence': 'Authentic Social Proof',
+}
+
+# Also map by LABEL string (what appears in the diagnostics table)
+# This ensures we match attributes regardless of whether they have attribute_id set
+LABEL_TO_KEY_SIGNAL = {
+    # Provenance
+    'Author/Brand Identity Verified': 'Authorship & Attribution',
+    'C2PA/CAI Manifest Present': 'Metadata & Technical Provenance',
+    'EXIF/Metadata Integrity': 'Metadata & Technical Provenance',
+    'Canonical URL Matches Declared Source': 'Metadata & Technical Provenance',
+    'Source Domain Trust Baseline': 'Brand Presence & Continuity',
+    'Digital Watermark Detected': 'Metadata & Technical Provenance',
+    
+    # Resonance
+    'Personalization Relevance': 'Dynamic Personalization',
+    'Engagement Authenticity Ratio': 'Opt-in & Accessible Personalization',
+    'Language/Locale Match': 'Cultural Fluency & Inclusion',
+    'Readability Grade Level Fit': 'Creative Relevance',
+    
+    # Coherence
+    'Brand Voice Consistency Score': 'Narrative Alignment Across Channels',
+    'Multimodal Consistency Score': 'Design System & Interaction Patterns',
+    'Claim Consistency Across Pages': 'Behavioral Consistency',
+    'Broken Link Rate': 'Feedback Loops & Adaptive Clarity',
+    
+    # Transparency
+    'Privacy Policy Link Availability & Clarity': 'Plain Language Disclosures',
+    'AI-Generated/Assisted Disclosure Present': 'AI/ML & Automation Clarity',
+    'AI vs Human Labeling Clarity': 'AI/ML & Automation Clarity',
+    'Bot Disclosure Response Audit': 'AI/ML & Automation Clarity',
+    'Contact/Business Info Availability': 'User Control & Consent Management',
+    'Ad/Sponsored Label Consistency': 'Provenance Labeling & Source Integrity',
+    'Data Source Citations for Claims': 'Provenance Labeling & Source Integrity',
+    
+    # Verification
+    'Claim Traceability': 'Third-Party Trust Layers',
+    'Claim to Source Traceability': 'Third-Party Trust Layers',
+    'Seller/Product Verification Rate': 'Third-Party Trust Layers',
+    'Verified Purchaser Review Rate': 'Authentic Social Proof',
+    'Review Authenticity Confidence': 'Authentic Social Proof',
+}
 
 
 class KeySignalEvaluator:
@@ -56,6 +136,90 @@ class KeySignalEvaluator:
                 'Secure & Tamper-Resistant Systems'
             ]
         }
+    
+    def compute_signal_statuses(
+        self,
+        dimension: str,
+        items: List[Dict[str, Any]]
+    ) -> Dict[str, Tuple[str, float, List[str]]]:
+        """
+        Compute key signal statuses DETERMINISTICALLY from detected attributes.
+        
+        Args:
+            dimension: Dimension name (provenance, resonance, etc.)
+            items: List of content items with 'meta.detected_attributes'
+            
+        Returns:
+            Dict mapping signal_name -> (status_icon, avg_score, evidence_list)
+            Status icons: ✅ (>=7), ⚠️ (4-6.9), ❌ (<4 or no data)
+        """
+        if dimension not in self.dimension_signals:
+            return {}
+        
+        # Collect all detected attributes from all items
+        all_attributes = []
+        for item in items:
+            meta = item.get('meta', {})
+            if isinstance(meta, str):
+                try:
+                    import json
+                    meta = json.loads(meta) if meta else {}
+                except:
+                    meta = {}
+            detected = meta.get('detected_attributes', [])
+            all_attributes.extend(detected)
+        
+        # Aggregate scores per key signal
+        signal_scores: Dict[str, List[Tuple[float, str]]] = {}
+        for attr in all_attributes:
+            attr_id = attr.get('attribute_id', '')
+            attr_label = attr.get('label', '')
+            attr_dimension = attr.get('dimension', '').lower()
+            
+            # Only process attributes for this dimension
+            if attr_dimension != dimension.lower():
+                continue
+            
+            # Map to key signal - try by ID first, then by label
+            key_signal = ATTRIBUTE_TO_KEY_SIGNAL.get(attr_id)
+            if not key_signal:
+                key_signal = LABEL_TO_KEY_SIGNAL.get(attr_label)
+            if not key_signal:
+                # Log unmapped attribute for debugging
+                logger.debug(f"Unmapped attribute: id='{attr_id}', label='{attr_label}'")
+                continue
+            
+            # Record score and evidence
+            score = float(attr.get('value', 0))
+            evidence = attr.get('evidence', '')
+            
+            if key_signal not in signal_scores:
+                signal_scores[key_signal] = []
+            signal_scores[key_signal].append((score, evidence))
+        
+        # Compute status for each key signal
+        results = {}
+        for signal_name in self.dimension_signals.get(dimension, []):
+            scores_evidence = signal_scores.get(signal_name, [])
+            
+            if not scores_evidence:
+                # No data for this signal
+                results[signal_name] = ('❌', 0.0, ['No attributes detected'])
+            else:
+                scores = [s for s, _ in scores_evidence]
+                evidence = [e for _, e in scores_evidence if e][:3]  # Limit to 3
+                avg_score = sum(scores) / len(scores)
+                
+                if avg_score >= 7.0:
+                    status = '✅'
+                elif avg_score >= 4.0:
+                    status = '⚠️'
+                else:
+                    status = '❌'
+                
+                results[signal_name] = (status, avg_score, evidence)
+        
+        return results
     
     def generate_key_signals(
         self,

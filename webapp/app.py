@@ -1543,142 +1543,181 @@ def show_analyze_page():
             selected_urls = fetch_and_process_selected_urls(selected_urls)
 
         # Run pipeline via RunManager
-        with st.spinner("Initializing analysis run..."):
-            try:
-                engine = store.init_db()
-                # Initialize scoring pipeline
-                scorer = ContentScorer(use_attribute_detection=True)
-                manager = RunManager(engine=engine, scoring_pipeline=scorer)
-                
-                # Prepare assets from selected URLs if any
-                assets_config = []
-                if selected_urls:
-                    for url_data in selected_urls:
-                        assets_config.append({
-                            "url": url_data.get('url'),
-                            "title": url_data.get('title'),
-                            "source_type": "web", # Default to web for now
-                            "metadata": url_data
-                        })
+        # Initialize progress indicator (same format as web search)
+        if 'progress_container_placeholder' in st.session_state and st.session_state['progress_container_placeholder'] is not None:
+            progress_container = st.session_state['progress_container_placeholder']
+        else:
+            progress_container = st.empty()
+        
+        progress_animator = ProgressAnimator(container=progress_container)
+        progress_bar = st.progress(0)
+        
+        try:
+            progress_animator.show("Initializing analysis pipeline...", "🚀")
+            progress_bar.progress(5)
+            
+            engine = store.init_db()
+            # Initialize scoring pipeline
+            scorer = ContentScorer(use_attribute_detection=True)
+            manager = RunManager(engine=engine, scoring_pipeline=scorer)
+            
+            progress_animator.show("Preparing assets for analysis...", "📦")
+            progress_bar.progress(10)
+            
+            # Prepare assets from selected URLs if any
+            assets_config = []
+            if selected_urls:
+                for url_data in selected_urls:
+                    assets_config.append({
+                        "url": url_data.get('url'),
+                        "title": url_data.get('title'),
+                        "source_type": "web", # Default to web for now
+                        "metadata": url_data
+                    })
 
-                run_config = {
-                    "sources": sources,
-                    "keywords": keywords.split(),
-                    "limit": max_items,
-                    "assets": assets_config if assets_config else None,
-                    "brand_name": brand_id, # Use ID as name for now
-                    "scenario_name": "Web Analysis",
-                    "scenario_description": f"Analysis of {brand_id} via {', '.join(sources)}",
-                    "scenario_config": {
-                        "include_comments": include_comments,
-                        "search_provider": search_provider,
-                        "brand_domains": brand_domains,
-                        "brand_subdomains": brand_subdomains,
-                        "brand_social_handles": brand_social_handles,
-                        "summary_model": summary_model,
-                        "recommendations_model": recommendations_model
-                    }
+            progress_animator.show(f"Configuring analysis for {brand_id}...", "⚙️")
+            progress_bar.progress(20)
+            
+            run_config = {
+                "sources": sources,
+                "keywords": keywords.split(),
+                "limit": max_items,
+                "assets": assets_config if assets_config else None,
+                "brand_name": brand_id, # Use ID as name for now
+                "scenario_name": "Web Analysis",
+                "scenario_description": f"Analysis of {brand_id} via {', '.join(sources)}",
+                "scenario_config": {
+                    "include_comments": include_comments,
+                    "search_provider": search_provider,
+                    "brand_domains": brand_domains,
+                    "brand_subdomains": brand_subdomains,
+                    "brand_social_handles": brand_social_handles,
+                    "summary_model": summary_model,
+                    "recommendations_model": recommendations_model
                 }
+            }
 
-                run = manager.run_analysis(brand_id, "web-analysis", run_config)
+            progress_animator.show("Scoring content across 5 trust dimensions...", "🔍")
+            progress_bar.progress(30)
+            
+            run = manager.run_analysis(brand_id, "web-analysis", run_config)
+            
+            progress_animator.show("Aggregating scores and generating summary...", "📊")
+            progress_bar.progress(70)
                 
-                # Adapt Run object to legacy dict format for UI compatibility
-                # This ensures show_results_page works without major rewrite
-                legacy_run_data = {
-                    "run_id": run.external_id,
-                    "brand_id": run.brand.slug,
-                    "timestamp": run.started_at.isoformat(),
-                    "sources": sources,
-                    "scoring_report": {
-                        "items": [],
-                        "dimension_breakdown": {},
-                        "llm_model": summary_model,
-                        "recommendations_model": recommendations_model,
-                        # Inject fields required by trust_stack_report.py
-                        "brand_id": run.brand.name,  # Use name for display
-                        "generated_at": run.started_at.strftime("%B %d, %Y"),
-                        "total_items_analyzed": len(run.assets) if run.assets else 0
-                    }
+            # Adapt Run object to legacy dict format for UI compatibility
+            # This ensures show_results_page works without major rewrite
+            legacy_run_data = {
+                "run_id": run.external_id,
+                "brand_id": run.brand.slug,
+                "timestamp": run.started_at.isoformat(),
+                "sources": sources,
+                "scoring_report": {
+                    "items": [],
+                    "dimension_breakdown": {},
+                    "llm_model": summary_model,
+                    "recommendations_model": recommendations_model,
+                    # Inject fields required by trust_stack_report.py
+                    "brand_id": run.brand.name,  # Use name for display
+                    "generated_at": run.started_at.strftime("%B %d, %Y"),
+                    "total_items_analyzed": len(run.assets) if run.assets else 0
                 }
-                
-                # Convert assets and scores
-                items = []
-                if run.assets:
-                    for asset in run.assets:
-                        item = {
-                            "title": asset.title or "Untitled",
-                            "final_score": 0, # Default
-                            "dimension_scores": {},
-                            "meta": asset.meta_info or {},
-                            "source": asset.source_type,
-                            # Critical: Pass content body for analysis context
-                            "body": asset.normalized_content or asset.raw_content or ""
+            }
+            
+            progress_animator.show("Processing scored assets...", "📝")
+            progress_bar.progress(80)
+            
+            # Convert assets and scores
+            items = []
+            if run.assets:
+                for asset in run.assets:
+                    item = {
+                        "title": asset.title or "Untitled",
+                        "final_score": 0, # Default
+                        "dimension_scores": {},
+                        "meta": asset.meta_info or {},
+                        "source": asset.source_type,
+                        # Critical: Pass content body for analysis context
+                        "body": asset.normalized_content or asset.raw_content or ""
+                    }
+                    # Populate meta with essential fields if missing
+                    if not item["meta"].get("url"):
+                        item["meta"]["url"] = asset.url
+                    if not item["meta"].get("source_url"):
+                        item["meta"]["source_url"] = asset.url
+                    if not item["meta"].get("title"):
+                        item["meta"]["title"] = asset.title
+                        
+                    if asset.scores:
+                        # Assuming 1:1 relationship for now
+                        score = asset.scores[0]
+                        item["final_score"] = (score.overall_score or 0) * 100
+                        item["dimension_scores"] = {
+                            "provenance": score.score_provenance,
+                            "verification": score.score_verification,
+                            "transparency": score.score_transparency,
+                            "coherence": score.score_coherence,
+                            "resonance": score.score_resonance,
+                            "ai_readiness": score.score_ai_readiness
                         }
-                        # Populate meta with essential fields if missing
-                        if not item["meta"].get("url"):
-                            item["meta"]["url"] = asset.url
-                        if not item["meta"].get("source_url"):
-                            item["meta"]["source_url"] = asset.url
-                        if not item["meta"].get("title"):
-                            item["meta"]["title"] = asset.title
-                            
-                        if asset.scores:
-                            # Assuming 1:1 relationship for now
-                            score = asset.scores[0]
-                            item["final_score"] = (score.overall_score or 0) * 100
-                            item["dimension_scores"] = {
-                                "provenance": score.score_provenance,
-                                "verification": score.score_verification,
-                                "transparency": score.score_transparency,
-                                "coherence": score.score_coherence,
-                                "resonance": score.score_resonance,
-                                "ai_readiness": score.score_ai_readiness
-                            }
-                            # Merge detected_attributes from score.rationale into meta
-                            # This enables the report generator to show actual attribute values
-                            rationale = score.rationale or {}
-                            if isinstance(rationale, dict) and rationale.get('detected_attributes'):
-                                item["meta"]["detected_attributes"] = rationale["detected_attributes"]
-                        items.append(item)
-                
-                legacy_run_data["scoring_report"]["items"] = items
-                
-                # Populate summary stats if available
-                if run.summary:
-                    legacy_run_data["scoring_report"]["dimension_breakdown"] = {
-                        "provenance": {"average": run.summary.avg_provenance or 0},
-                        "verification": {"average": run.summary.avg_verification or 0},
-                        "transparency": {"average": run.summary.avg_transparency or 0},
-                        "coherence": {"average": run.summary.avg_coherence or 0},
-                        "resonance": {"average": run.summary.avg_resonance or 0},
-                        "ai_readiness": {"average": run.summary.avg_ai_readiness or 0}
-                    }
-                    legacy_run_data["authenticity_ratio"] = {
-                        "authenticity_ratio_pct": (run.summary.authenticity_ratio or 0) * 100
-                    }
+                        # Merge detected_attributes from score.rationale into meta
+                        # This enables the report generator to show actual attribute values
+                        rationale = score.rationale or {}
+                        if isinstance(rationale, dict) and rationale.get('detected_attributes'):
+                            item["meta"]["detected_attributes"] = rationale["detected_attributes"]
+                    items.append(item)
+            
+            legacy_run_data["scoring_report"]["items"] = items
+            
+            # Populate summary stats if available
+            if run.summary:
+                legacy_run_data["scoring_report"]["dimension_breakdown"] = {
+                    "provenance": {"average": run.summary.avg_provenance or 0},
+                    "verification": {"average": run.summary.avg_verification or 0},
+                    "transparency": {"average": run.summary.avg_transparency or 0},
+                    "coherence": {"average": run.summary.avg_coherence or 0},
+                    "resonance": {"average": run.summary.avg_resonance or 0},
+                    "ai_readiness": {"average": run.summary.avg_ai_readiness or 0}
+                }
+                legacy_run_data["authenticity_ratio"] = {
+                    "authenticity_ratio_pct": (run.summary.authenticity_ratio or 0) * 100
+                }
 
-                # Ensure progress container is cleared before showing results
-                if 'progress_container_placeholder' in st.session_state:
-                    try:
-                        if st.session_state['progress_container_placeholder'] is not None:
-                            st.session_state['progress_container_placeholder'].empty()
-                    except:
-                        pass
-                    del st.session_state['progress_container_placeholder']
-
-                st.session_state['last_run'] = legacy_run_data
-                st.session_state['page'] = 'results'
-                st.rerun()
-                
-            except Exception as e:
-                st.error(f"Analysis failed: {str(e)}")
-                logger.exception("RunManager analysis failed")
-            finally:
-                # Ensure browser is closed to free resources
+            progress_animator.show("Analysis complete! ✅", "✨")
+            progress_bar.progress(100)
+            
+            # Clear progress indicators before showing results
+            progress_bar.empty()
+            progress_animator.clear()
+            
+            # Ensure progress container placeholder is also cleared
+            if 'progress_container_placeholder' in st.session_state:
                 try:
-                    get_browser_manager().close()
-                except Exception as e:
-                    logger.warning(f"Failed to close browser manager: {e}")
+                    if st.session_state['progress_container_placeholder'] is not None:
+                        st.session_state['progress_container_placeholder'].empty()
+                except:
+                    pass
+                del st.session_state['progress_container_placeholder']
+
+            st.session_state['last_run'] = legacy_run_data
+            st.session_state['page'] = 'results'
+            st.rerun()
+            
+        except Exception as e:
+            # Clear progress on error
+            try:
+                progress_bar.empty()
+                progress_animator.clear()
+            except:
+                pass
+            st.error(f"Analysis failed: {str(e)}")
+            logger.exception("RunManager analysis failed")
+        finally:
+            # Ensure browser is closed to free resources
+            try:
+                get_browser_manager().close()
+            except Exception as e:
+                logger.warning(f"Failed to close browser manager: {e}")
 
 
 def detect_brand_owned_url(url: str, brand_id: str, brand_domains: List[str] = None, brand_subdomains: List[str] = None, brand_social_handles: List[str] = None) -> Dict[str, Any]:

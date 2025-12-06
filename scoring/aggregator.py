@@ -43,7 +43,18 @@ class ScoringAggregator:
         
         for signal in dimension_signals:
             weight = signal.weight
-            total_weighted_score += signal.value * weight
+            
+            # Validate signal value is within expected range
+            if signal.value < 0 or signal.value > 10:
+                logger.warning(
+                    f"Signal '{signal.id}' has out-of-range value {signal.value} "
+                    f"(expected 0-10). Clamping to valid range."
+                )
+                signal_value = max(0.0, min(10.0, signal.value))
+            else:
+                signal_value = signal.value
+                
+            total_weighted_score += signal_value * weight
             total_weight += weight
             total_confidence += signal.confidence * weight # Weighted confidence
 

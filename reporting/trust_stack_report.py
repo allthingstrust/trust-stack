@@ -211,6 +211,7 @@ def _generate_dimension_analysis(
     model: str
 ) -> str:
     """Generate the detailed analysis for a single dimension"""
+    from scoring.key_signal_evaluator import KeySignalEvaluator
     
     signals = TRUST_STACK_DIMENSIONS.get(dimension, {}).get('signals', [])
     diagnostics = DIMENSION_DIAGNOSTICS.get(dimension, [])
@@ -220,6 +221,32 @@ def _generate_dimension_analysis(
     
     # Compute actual diagnostics from detected attributes
     diagnostics_table = _render_diagnostics_table(dimension, items, score)
+    
+    # ===== NEW: Compute key signal statuses DETERMINISTICALLY =====
+    evaluator = KeySignalEvaluator()
+    computed_statuses = evaluator.compute_signal_statuses(dimension, items)
+    
+    # Format signals with pre-computed statuses for the LLM prompt
+    signals_with_status = []
+    for signal_name in signals:
+        if signal_name in computed_statuses:
+            status, avg_score, evidence_list = computed_statuses[signal_name]
+            evidence_str = "; ".join(evidence_list) if evidence_list else "No evidence"
+            signals_with_status.append(
+                f"**{signal_name}**\n"
+                f"   Status: {status} (Score: {avg_score:.1f}/10)\n"
+                f"   Evidence: {evidence_str}"
+            )
+        else:
+            # Signal has no mapped attributes - mark as unknown
+            signals_with_status.append(
+                f"**{signal_name}**\n"
+                f"   Status: ❌ (No data)\n"
+                f"   Evidence: No attributes detected for this signal"
+            )
+    
+    signals_formatted = "\n\n".join(signals_with_status)
+    # ===== END NEW =====
     
     # Prepare context for LLM
     # We summarize the top 5 and bottom 5 items for this dimension to give the LLM concrete data
@@ -300,17 +327,18 @@ You must output the analysis in the EXACT following format. Use the provided HTM
 
 *Rationale:*
 
-*   **[Point 1]**: [Explanation]
-*   **[Point 2]**: [Explanation]
+*   **[Point 1]**: [Explanation - MUST reference specific content from the snippets above]
+*   **[Point 2]**: [Explanation - MUST reference specific content from the snippets above]
 ... (3-5 bullet points explaining the score)
 
 **{dimension.upper()}**: Score: {score:.1f} / 10
 
 🗝️ **Key Signal Evaluation**
 
-(For each signal below, provide the status icon, the signal name as a header, bullet points, and a summary.)
+IMPORTANT: The status icons and scores below are PRE-COMPUTED from actual detected attributes. 
+You MUST use these EXACT statuses. Do NOT change them. Only add 2-3 bullet points explaining each.
 
-{_format_signals_for_prompt_new(signals)}
+{signals_formatted}
 
 🧮 **Diagnostics Snapshot**
 (Include this EXACT pre-computed table in your output - do NOT modify or regenerate these values)
@@ -318,7 +346,7 @@ You must output the analysis in the EXACT following format. Use the provided HTM
 {diagnostics_table}
 
 📊 **Final {dimension.title()} Score: {score:.1f} / 10**
-[A 2-3 sentence summary paragraph]
+[A 2-3 sentence summary paragraph that reflects the diagnostic data above]
 
 🛠️ **Recommendations to Improve {dimension.upper()}**
 (Provide 3-5 concrete, actionable steps based on the **Content Snippets** and **Issues** provided above. Do NOT be generic. You MUST quote the specific content or mention the specific URL that needs improvement.)
@@ -329,10 +357,9 @@ You must output the analysis in the EXACT following format. Use the provided HTM
 INSTRUCTIONS:
 - Be professional, objective, and detailed.
 - Use the provided score to guide the tone.
-- Ensure the "Key Signal Evaluation" section covers ALL the signals listed above.
-- Do NOT use headers like # or ##. Use **bold** for headers to keep font size consistent.
-- CRITICAL: You MUST use the provided "Attributes" and "Issues" data in your Rationale and Key Signal Evaluation.
-- CRITICAL: Recommendations must be specific and actionable. Use the provided content snippets to identify specific gaps (e.g., "The 'About' page text '...' lacks team member names"). Avoid generic advice like "Improve transparency". Instead say "Add author bylines to the blog posts at [URL]".
+- CRITICAL: The Key Signal statuses are FIXED. Copy them exactly as provided above.
+- CRITICAL: You MUST use the provided "Attributes" and "Issues" data in your Rationale.
+- CRITICAL: Recommendations must be specific and actionable. Use the provided content snippets to identify specific gaps.
 """
 
     try:
@@ -389,12 +416,11 @@ Generated on {generated_at}
 [A paragraph summarizing the overall trust posture, strengths, and weaknesses.]
 
 📊 Trust Profile Snapshot
-● ✅ Provenance: {scores.get('provenance', 0):.1f}/10
-● ✅ Resonance: {scores.get('resonance', 0):.1f}/10
-● ✅ Coherence: {scores.get('coherence', 0):.1f}/10
-● ✅ Transparency: {scores.get('transparency', 0):.1f}/10
-● ⚠️ Verification: {scores.get('verification', 0):.1f}/10
-(Use ✅ for scores >= 7.0, ⚠️ for 4.0-6.9, ❌ for < 4.0)
+● {'✅' if scores.get('provenance', 0) >= 7.0 else '⚠️' if scores.get('provenance', 0) >= 4.0 else '❌'} Provenance: {scores.get('provenance', 0):.1f}/10
+● {'✅' if scores.get('resonance', 0) >= 7.0 else '⚠️' if scores.get('resonance', 0) >= 4.0 else '❌'} Resonance: {scores.get('resonance', 0):.1f}/10
+● {'✅' if scores.get('coherence', 0) >= 7.0 else '⚠️' if scores.get('coherence', 0) >= 4.0 else '❌'} Coherence: {scores.get('coherence', 0):.1f}/10
+● {'✅' if scores.get('transparency', 0) >= 7.0 else '⚠️' if scores.get('transparency', 0) >= 4.0 else '❌'} Transparency: {scores.get('transparency', 0):.1f}/10
+● {'✅' if scores.get('verification', 0) >= 7.0 else '⚠️' if scores.get('verification', 0) >= 4.0 else '❌'} Verification: {scores.get('verification', 0):.1f}/10
 
 🔍 Strategic Observations
 **Strengths**
@@ -418,6 +444,7 @@ Verification: {scores.get('verification', 0):.1f} / 10
 
 INSTRUCTIONS:
 - Synthesize the scores into a cohesive narrative.
+- CRITICAL: Copy the Trust Profile Snapshot section EXACTLY as shown above. Do NOT change the status icons.
 - Highlight the most critical issues in "Areas of Concern".
 - CRITICAL: "Recommended Actions" must be detailed and actionable. Provide specific remedies for the identified weaknesses.
 """
