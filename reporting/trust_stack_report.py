@@ -5,11 +5,73 @@ This module generates the detailed "Trust Stack" analysis section of the report,
 matching the specific format with Rationale, Key Signal Evaluation, and Diagnostics.
 """
 
+import json
 import logging
 from typing import Dict, Any, List, Optional
 from scoring.llm_client import ChatClient
 
 logger = logging.getLogger(__name__)
+
+
+def _compute_diagnostics_from_attributes(dimension: str, items: List[Dict]) -> Dict[str, List[float]]:
+    """
+    Aggregate detected attribute values by label for a given dimension.
+    
+    Returns:
+        Dict mapping attribute label to list of scores (e.g., {'Author Verified': [7, 8, 6]})
+    """
+    attribute_scores = {}  # label -> list of scores
+    
+    for item in items:
+        meta = item.get('meta', {})
+        if isinstance(meta, str):
+            try:
+                meta = json.loads(meta)
+            except:
+                meta = {}
+        
+        detected_attrs = meta.get('detected_attributes', [])
+        for attr in detected_attrs:
+            if attr.get('dimension', '').lower() == dimension.lower():
+                label = attr.get('label', 'Unknown')
+                value = attr.get('value')
+                if value is not None:
+                    if label not in attribute_scores:
+                        attribute_scores[label] = []
+                    attribute_scores[label].append(float(value))
+    
+    return attribute_scores
+
+
+def _render_diagnostics_table(dimension: str, items: List[Dict], fallback_score: float) -> str:
+    """
+    Render the diagnostics snapshot table from actual detected attributes.
+    
+    Args:
+        dimension: The dimension being analyzed
+        items: List of content items with detected_attributes in meta
+        fallback_score: Score to use if no attributes detected
+    
+    Returns:
+        Markdown table string
+    """
+    attr_scores = _compute_diagnostics_from_attributes(dimension, items)
+    
+    if not attr_scores:
+        # No attributes detected - show fallback
+        return f"""| Metric | Value |
+|---|---|
+| No attributes detected | {fallback_score:.0f}/10 |
+| (Based on heuristic scoring) | - |"""
+    
+    # Build table rows
+    rows = ["| Metric | Value |", "|---|---|"]
+    for label, scores in sorted(attr_scores.items()):
+        avg_score = sum(scores) / len(scores) if scores else fallback_score
+        count = len(scores)
+        rows.append(f"| {label} | {avg_score:.1f}/10 ({count} items) |")
+    
+    return "\n".join(rows)
 
 # Define the standard Key Signal categories for each dimension
 TRUST_STACK_DIMENSIONS = {
@@ -153,8 +215,11 @@ def _generate_dimension_analysis(
     signals = TRUST_STACK_DIMENSIONS.get(dimension, {}).get('signals', [])
     diagnostics = DIMENSION_DIAGNOSTICS.get(dimension, [])
     
-    # Format diagnostics for prompt
+    # Format diagnostics for prompt (legacy, kept for reference)
     diagnostics_list = "\n".join([f"- {d}" for d in diagnostics])
+    
+    # Compute actual diagnostics from detected attributes
+    diagnostics_table = _render_diagnostics_table(dimension, items, score)
     
     # Prepare context for LLM
     # We summarize the top 5 and bottom 5 items for this dimension to give the LLM concrete data
@@ -248,14 +313,9 @@ You must output the analysis in the EXACT following format. Use the provided HTM
 {_format_signals_for_prompt_new(signals)}
 
 🧮 **Diagnostics Snapshot**
-(Create a markdown table with 2 columns: Metric, Value. Score each of the following specific metrics on a 1/10 scale based on your analysis.)
+(Include this EXACT pre-computed table in your output - do NOT modify or regenerate these values)
 
-Metric | Value
---- | ---
-[Metric Name] | [Score]/10
-
-Required Metrics to Score:
-{diagnostics_list}
+{diagnostics_table}
 
 📊 **Final {dimension.title()} Score: {score:.1f} / 10**
 [A 2-3 sentence summary paragraph]
