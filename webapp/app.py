@@ -30,6 +30,7 @@ from urllib.parse import urlparse
 
 from config.settings import APIConfig, SETTINGS
 from scoring.llm_client import ChatClient
+from scoring.scorer import ContentScorer
 from ingestion.fetch_config import get_realistic_headers, get_random_delay
 from ingestion.playwright_manager import get_browser_manager
 from utils.score_formatter import to_display_score, format_score_display, get_score_status
@@ -1545,7 +1546,9 @@ def show_analyze_page():
         with st.spinner("Initializing analysis run..."):
             try:
                 engine = store.init_db()
-                manager = RunManager(engine=engine)
+                # Initialize scoring pipeline
+                scorer = ContentScorer(use_attribute_detection=True)
+                manager = RunManager(engine=engine, scoring_pipeline=scorer)
                 
                 # Prepare assets from selected URLs if any
                 assets_config = []

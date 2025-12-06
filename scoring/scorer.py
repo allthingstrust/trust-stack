@@ -116,6 +116,7 @@ class ContentScorer:
             # 1. Provenance
             # LLM Score -> prov_source_clarity
             prov_val, prov_conf = self._score_provenance(content, brand_context)
+            logger.info(f"DEBUG: Raw Provenance LLM score for {content.content_id}: {prov_val}, Conf: {prov_conf}")
             signals.append(SignalScore(
                 id="prov_source_clarity",
                 label="Source Attribution",
@@ -143,6 +144,7 @@ class ContentScorer:
             # 2. Verification
             # LLM/RAG Score -> ver_fact_accuracy
             ver_val, ver_conf = self._score_verification(content, brand_context)
+            logger.info(f"DEBUG: Raw Verification LLM score for {content.content_id}: {ver_val}, Conf: {ver_conf}")
             signals.append(SignalScore(
                 id="ver_fact_accuracy",
                 label="Factual Accuracy",
@@ -157,6 +159,7 @@ class ContentScorer:
             # 3. Transparency
             # LLM Score -> trans_disclosures
             trans_val, trans_conf = self._score_transparency(content, brand_context)
+            logger.info(f"DEBUG: Raw Transparency LLM score for {content.content_id}: {trans_val}, Conf: {trans_conf}")
             signals.append(SignalScore(
                 id="trans_disclosures",
                 label="Clear Disclosures",
@@ -171,6 +174,7 @@ class ContentScorer:
             # 4. Coherence
             # LLM Score -> coh_voice_consistency
             coh_val, coh_conf = self._score_coherence(content, brand_context)
+            logger.info(f"DEBUG: Raw Coherence LLM score for {content.content_id}: {coh_val}, Conf: {coh_conf}")
             signals.append(SignalScore(
                 id="coh_voice_consistency",
                 label="Voice Consistency",
@@ -185,6 +189,7 @@ class ContentScorer:
             # 5. Resonance
             # LLM Score -> res_cultural_fit
             res_val, res_conf = self._score_resonance(content, brand_context)
+            logger.info(f"DEBUG: Raw Resonance LLM score for {content.content_id}: {res_val}, Conf: {res_conf}")
             signals.append(SignalScore(
                 id="res_cultural_fit",
                 label="Cultural/Audience Fit",
@@ -223,6 +228,8 @@ class ContentScorer:
                 content.meta['score_debug'] = json.dumps(score_debug)
 
             # Calculate TrustScore using Aggregator
+            # This is the new "Source of Truth" for the score
+            logger.info(f"DEBUG: Sending {len(signals)} signals to aggregator for {content.content_id}: {[s.id for s in signals]}")
             dim_scores = []
             for dim_name in ["Provenance", "Verification", "Transparency", "Coherence", "Resonance"]:
                 dim_score = self.aggregator.aggregate_dimension(dim_name, signals)

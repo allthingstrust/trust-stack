@@ -35,6 +35,7 @@ class ScoringAggregator:
 
         # Filter signals for this dimension
         dimension_signals = [s for s in signals if s.dimension.lower() == dimension_name.lower()]
+        logger.info(f"DEBUG: Aggregating {dimension_name} with {len(dimension_signals)} signals: {[s.id for s in dimension_signals]}")
         
         total_weighted_score = 0.0
         total_weight = 0.0
@@ -59,6 +60,7 @@ class ScoringAggregator:
                 present_signal_ids = {s.id for s in dimension_signals}
                 # Note: signals list might contain multiple instances if we allow duplicates, so set is safer
                 coverage_ratio = min(1.0, len(present_signal_ids) / expected_signals)
+                logger.info(f"DEBUG: Coverage for {dimension_name}: {coverage_ratio} ({len(present_signal_ids)}/{expected_signals}). Present: {present_signal_ids}")
                 
                 # Blend signal confidence with coverage ratio (50/50)
                 normalized_confidence = (normalized_confidence * 0.5) + (coverage_ratio * 0.5)
@@ -69,6 +71,7 @@ class ScoringAggregator:
 
         # Clamp
         normalized_score = max(0.0, min(10.0, normalized_score))
+        logger.info(f"DEBUG: Final score for {dimension_name}: {normalized_score} (Conf: {normalized_confidence})")
         
         return DimensionScore(
             name=dimension_name,
