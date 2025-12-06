@@ -289,23 +289,25 @@ class ContentScorer:
         prompt = f"""
         Score the PROVENANCE of this content on a scale of 0.0 to 1.0.
         
-        Provenance evaluates: origin clarity, traceability, metadata completeness
+        Provenance evaluates: Is the content origin clear and trustworthy?
         
         Content:
         Title: {content.title}
-        Body: {content.body}
+        Body: {content.body[:2000]}
         Author: {content.author}
         Source: {content.src}
         Platform ID: {content.platform_id}
         
         Brand Context: {brand_context.get('keywords', [])}
         
-        Scoring criteria:
-        - 0.8-1.0: Clear origin, verifiable author, complete metadata
-        - 0.6-0.8: Good origin info, some metadata present
-        - 0.4-0.6: Basic origin info, limited metadata
-        - 0.2-0.4: Unclear origin, minimal metadata
-        - 0.0-0.2: No clear origin, no verifiable metadata
+        Scoring criteria (brand content perspective):
+        - 0.8-1.0: Content from official brand domain with consistent branding and messaging
+        - 0.6-0.8: Professional brand presence, clear organizational source
+        - 0.4-0.6: Third-party site with clear attribution to brand
+        - 0.2-0.4: User-generated or unclear sourcing  
+        - 0.0-0.2: Suspicious origin, potential impersonation, or misleading source
+        
+        NOTE: Brand landing pages and product pages from official domains should score 0.7-0.9 even without explicit author bylines, as the brand itself is the verified source.
         
         Return only a number between 0.0 and 1.0:
         """
@@ -406,11 +408,11 @@ class ContentScorer:
         prompt = f"""
         Score the TRANSPARENCY of this content and identify specific issues.
         
-        Transparency evaluates: clear disclosures, honest communication, no hidden agendas
+        Transparency evaluates: Is the brand being honest and upfront with customers?
         
         Content:
         Title: {content.title}
-        Body: {content.body}
+        Body: {content.body[:2000]}
         Author: {content.author}
         
         Respond with JSON in this exact format:
@@ -426,18 +428,16 @@ class ContentScorer:
             ]
         }}
         
-        Scoring criteria:
-        - 0.8-1.0: Clear disclosures, honest communication, transparent intent
-        - 0.6-0.8: Mostly transparent, minor omissions
-        - 0.4-0.6: Some transparency, some unclear aspects
-        - 0.2-0.4: Limited transparency, hidden elements
-        - 0.0-0.2: No transparency, deceptive or manipulative
+        Scoring criteria (brand content perspective):
+        - 0.8-1.0: Clear honest messaging, no misleading claims, straightforward about product/service
+        - 0.6-0.8: Professional brand content with standard disclosures expected on main website
+        - 0.4-0.6: Some unclear pricing, terms, or promotional conditions
+        - 0.2-0.4: Misleading claims or hidden terms
+        - 0.0-0.2: Deceptive, manipulative, or fraudulent content
         
-        Common transparency issues to check for:
-        - Missing privacy policy links
-        - Unclear AI-generated content disclosure
-        - Missing data source citations
-        - Hidden sponsored content
+        NOTE: Standard brand marketing pages, product listings, and landing pages should score 0.7-0.9 if they honestly represent products/services, even without visible privacy links in the main content (these are typically in footers).
+        
+        Only flag issues that represent genuine transparency problems, not standard web conventions.
         
         Return valid JSON with score (0.0-1.0) and issues array.
         """
@@ -571,7 +571,7 @@ class ContentScorer:
         score_prompt = f"""
         Score the COHERENCE of this content on a scale of 0.0 to 1.0.
         
-        Coherence evaluates: consistency with brand messaging, logical flow, professional quality
+        Coherence evaluates: Does the content maintain consistent brand voice and messaging?
         
         Content:
         Title: {content.title}
@@ -580,12 +580,14 @@ class ContentScorer:
         
         Brand Context: {brand_context.get('keywords', [])}
         
-        Scoring criteria:
-        - 0.8-1.0: Highly coherent, consistent with brand, professional quality
-        - 0.6-0.8: Mostly coherent, good consistency
-        - 0.4-0.6: Some coherence, minor inconsistencies
-        - 0.2-0.4: Limited coherence, noticeable inconsistencies
-        - 0.0-0.2: Incoherent, inconsistent, unprofessional
+        Scoring criteria (brand content perspective):
+        - 0.8-1.0: Professional brand content with consistent voice and clear messaging
+        - 0.6-0.8: Good brand consistency, minor stylistic variations acceptable
+        - 0.4-0.6: Mixed messaging or inconsistent tone
+        - 0.2-0.4: Significant voice/tone conflicts within content
+        - 0.0-0.2: Incoherent, contradictory, or unprofessional
+        
+        NOTE: Normal variations between headlines, body text, and CTAs are expected in professional marketing. Product listings and structured content should score 0.7-0.9 if professionally presented. Only flag genuine inconsistencies, not standard formatting conventions.
         
         Return only a number between 0.0 and 1.0:
         """
@@ -773,25 +775,27 @@ class ContentScorer:
         prompt = f"""
         Score the RESONANCE of this content on a scale of 0.0 to 1.0.
         
-        Resonance evaluates: cultural fit, authentic engagement, organic appeal
+        Resonance evaluates: Does this content connect authentically with the target audience?
         
         Content:
         Title: {content.title}
-        Body: {content.body}
+        Body: {content.body[:2000]}
         
-        Engagement Metrics:
+        Engagement Metrics (if available):
         Rating: {content.rating}
         Upvotes: {content.upvotes}
         Helpful Count: {content.helpful_count}
         
         Brand Context: {brand_context.get('keywords', [])}
         
-        Scoring criteria:
-        - 0.8-1.0: High cultural fit, strong organic engagement
-        - 0.6-0.8: Good resonance, positive engagement
-        - 0.4-0.6: Moderate resonance, mixed engagement
-        - 0.2-0.4: Low resonance, limited engagement
-        - 0.0-0.2: No resonance, negative or artificial engagement
+        Scoring criteria (brand content perspective):
+        - 0.8-1.0: Content clearly designed for and relevant to target audience
+        - 0.6-0.8: Professional content that serves audience needs
+        - 0.4-0.6: Generic content with limited audience connection
+        - 0.2-0.4: Content that seems off-target or misaligned with audience
+        - 0.0-0.2: Content that feels inauthentic, manipulative, or disconnected
+        
+        NOTE: Brand landing pages, product descriptions, and marketing content should score 0.6-0.8 by default if they are professionally written and relevant to the brand's audience. Higher scores for content that shows genuine understanding of customer needs.
         
         Return only a number between 0.0 and 1.0:
         """
