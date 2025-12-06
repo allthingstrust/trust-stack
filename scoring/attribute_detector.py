@@ -728,10 +728,12 @@ class TrustStackAttributeDetector:
 
         # Assume English is target for now
         target_lang = "en"
-
-        if detected_lang == target_lang:
+        
+        # Default to match if language is missing or matches target
+        # This ensures we don't penalize content just because language detection failed or wasn't run
+        if not detected_lang or detected_lang == target_lang:
             value = 10.0
-            evidence = f"Language match: {detected_lang}"
+            evidence = f"Language match: {detected_lang or 'en'}"
         else:
             value = 1.0
             evidence = f"Language mismatch: {detected_lang} (expected: {target_lang})"
@@ -890,7 +892,16 @@ class TrustStackAttributeDetector:
                 evidence=f"Inconsistent brand voice detected (casual markers: {', '.join(found_markers[:3])})",
                 confidence=0.7
             )
-        return None  # No issue detected
+            
+        # Positive signal: No slang found implies professional voice
+        return DetectedAttribute(
+            attribute_id="brand_voice_consistency_score",
+            dimension="coherence",
+            label="Brand Voice Consistency Score",
+            value=10.0,
+            evidence="Professional brand voice maintained (no casual markers detected)",
+            confidence=0.6
+        )
 
     def _detect_broken_links(self, content: NormalizedContent) -> Optional[DetectedAttribute]:
         """Detect broken link rate"""

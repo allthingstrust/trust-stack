@@ -68,7 +68,12 @@ signals:
     label: "Cultural/Audience Fit"
     weight: 0.40
     detection: "llm"
-    description: "Language and tone match the target audience expectations."
+  res_readability:
+    dimension: Resonance
+    label: "Readability"
+    weight: 0.30
+    detection: "heuristic"
+    description: "Content is easy to read and suitable for the audience."
 
   # --- COHERENCE ---
   coh_voice_consistency:
@@ -77,6 +82,13 @@ signals:
     weight: 0.40
     detection: "llm"
     description: "Consistent tone and style across all content items."
+
+  coh_technical_health:
+    dimension: Coherence
+    label: "Technical Health"
+    weight: 0.30
+    detection: "heuristic"
+    description: "Absence of broken links and technical errors."
 
   coh_design_patterns:
     dimension: Coherence

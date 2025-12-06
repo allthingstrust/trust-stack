@@ -77,12 +77,35 @@ def verify_calibration():
     verification = trust_score.dimensions.get('verification')
     ver_signals = [s.id for s in verification.signals]
     
-    # Note: ver_social_proof is mapped from verified_purchaser_review_rate in SignalMapper?
-    # Wait, let's check SignalMapper for review_authenticity_confidence mapping.
-    # I need to check if review_authenticity_confidence is mapped to a signal.
-    # If not, I might need to update SignalMapper.
+    if "ver_social_proof" in ver_signals:
+        logger.info("✅ ver_social_proof detected from body text!")
+    else:
+        logger.error("❌ ver_social_proof NOT detected!")
+
+    # 4. Check Resonance (Readability & Cultural Fit)
+    resonance = trust_score.dimensions.get('resonance')
+    res_signals = [s.id for s in resonance.signals]
     
-    logger.info(f"Verification Signals: {ver_signals}")
+    if "res_readability" in res_signals:
+        logger.info("✅ res_readability detected!")
+    else:
+        logger.error("❌ res_readability NOT detected!")
+
+    if "res_cultural_fit" in res_signals:
+        logger.info("✅ res_cultural_fit detected (default/match)!")
+    else:
+        logger.error("❌ res_cultural_fit NOT detected!")
+
+    # 5. Check Coherence (Brand Voice)
+    coherence = trust_score.dimensions.get('coherence')
+    coh_signals = [s.id for s in coherence.signals]
+    
+    if "coh_voice_consistency" in coh_signals:
+        logger.info("✅ coh_voice_consistency detected (professional voice)!")
+    else:
+        logger.error("❌ coh_voice_consistency NOT detected!")
+
+    logger.info(f"All Signals: {prov_signals + trans_signals + ver_signals + res_signals + coh_signals}")
 
 if __name__ == "__main__":
     verify_calibration()

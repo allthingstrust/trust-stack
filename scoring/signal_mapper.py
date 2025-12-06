@@ -26,11 +26,13 @@ class SignalMapper:
         "personalization_relevance_embedding_similarity": "res_personalization",
         "engagement_authenticity_ratio": "res_engagement_metrics",
         "language_locale_match": "res_cultural_fit",
+        "readability_grade_level_fit": "res_readability",
         
         # Coherence
         "brand_voice_consistency_score": "coh_voice_consistency",
         "multimodal_consistency_score": "coh_design_patterns",
         "claim_consistency_across_pages": "coh_voice_consistency", # Roll into voice consistency
+        "broken_link_rate": "coh_technical_health",
         
         # Transparency
         "privacy_policy_link_availability_clarity": "trans_disclosures",
