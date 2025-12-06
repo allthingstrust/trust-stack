@@ -98,87 +98,101 @@ class ContentScorer:
                     content.meta['triage_reason'] = reason
                     content.meta['score_debug'] = json.dumps({'triage': {'status': 'skipped', 'reason': reason}})
                     
-                    return DimensionScores(
-                        provenance=default_score,
-                        verification=default_score,
-                        transparency=default_score,
-                        coherence=default_score,
-                        resonance=default_score
+                    # Return a neutral TrustScore
+                    from scoring.types import TrustScore
+                    return TrustScore(
+                        overall=default_score * 100,
+                        confidence=0.0,
+                        coverage=0.0,
+                        dimensions={},
+                        metadata=content.meta
                     )
 
             # Get LLM scores for each dimension
-            # TRANSITIONAL LOGIC:
-            # We still use the legacy _score_* methods to get the raw values (0.0-1.0),
-            # but we now wrap them as "SignalScores" and pass them to the aggregator.
-            # This allows us to use the new infrastructure while we migrate the individual
-            # scoring methods to return rich signals in future steps.
-            
-            from scoring.types import SignalScore
+            from scoring.types import SignalScore, TrustScore
             
             signals = []
             
             # 1. Provenance
+            # LLM Score -> prov_source_clarity
             prov_val, prov_conf = self._score_provenance(content, brand_context)
             signals.append(SignalScore(
-                id="legacy_provenance_llm",
-                label="Legacy Provenance Score",
+                id="prov_source_clarity",
+                label="Source Attribution",
                 dimension="Provenance",
                 value=prov_val,
-                weight=1.0,
+                weight=0.25,
                 evidence=[],
-                rationale="Legacy LLM score",
+                rationale="LLM analysis of source clarity",
                 confidence=prov_conf
             ))
             
+            # Heuristic: Content Freshness
+            freshness_val = self._score_freshness(content)
+            signals.append(SignalScore(
+                id="prov_date_freshness",
+                label="Content Freshness",
+                dimension="Provenance",
+                value=freshness_val,
+                weight=0.25,
+                evidence=[],
+                rationale="Heuristic date check",
+                confidence=1.0
+            ))
+            
             # 2. Verification
+            # LLM/RAG Score -> ver_fact_accuracy
             ver_val, ver_conf = self._score_verification(content, brand_context)
             signals.append(SignalScore(
-                id="legacy_verification_llm",
-                label="Legacy Verification Score",
+                id="ver_fact_accuracy",
+                label="Factual Accuracy",
                 dimension="Verification",
                 value=ver_val,
-                weight=1.0,
-                evidence=[],
-                rationale="Legacy LLM score",
+                weight=0.40,
+                evidence=content._llm_issues.get('verification', []) if hasattr(content, '_llm_issues') else [],
+                rationale="RAG-based verification",
                 confidence=ver_conf
             ))
             
             # 3. Transparency
+            # LLM Score -> trans_disclosures
             trans_val, trans_conf = self._score_transparency(content, brand_context)
             signals.append(SignalScore(
-                id="legacy_transparency_llm",
-                label="Legacy Transparency Score",
+                id="trans_disclosures",
+                label="Clear Disclosures",
                 dimension="Transparency",
                 value=trans_val,
-                weight=1.0,
-                evidence=[],
-                rationale="Legacy LLM score",
+                weight=0.40,
+                evidence=content._llm_issues.get('transparency', []) if hasattr(content, '_llm_issues') else [],
+                rationale="LLM analysis of disclosures",
                 confidence=trans_conf
             ))
             
             # 4. Coherence
+            # LLM Score -> coh_voice_consistency
             coh_val, coh_conf = self._score_coherence(content, brand_context)
             signals.append(SignalScore(
-                id="legacy_coherence_llm",
-                label="Legacy Coherence Score",
+                id="coh_voice_consistency",
+                label="Voice Consistency",
                 dimension="Coherence",
                 value=coh_val,
-                weight=1.0,
-                evidence=[],
-                rationale="Legacy LLM score",
+                weight=0.40,
+                evidence=content._llm_issues.get('coherence', []) if hasattr(content, '_llm_issues') else [],
+                rationale="LLM analysis of voice consistency",
                 confidence=coh_conf
             ))
             
             # 5. Resonance
+            # LLM Score -> res_cultural_fit
             res_val, res_conf = self._score_resonance(content, brand_context)
             signals.append(SignalScore(
-                id="legacy_resonance_llm",
-                label="Legacy Resonance Score",
+                id="res_cultural_fit",
+                label="Cultural/Audience Fit",
                 dimension="Resonance",
                 value=res_val,
-                weight=1.0,
+                weight=0.40,
                 evidence=[],
-                rationale="Legacy LLM score",
+                rationale="LLM analysis of cultural fit",
                 confidence=res_conf
             ))
 
@@ -187,6 +201,14 @@ class ContentScorer:
                 try:
                     detected_attrs = self.attribute_detector.detect_attributes(content)
                     mapped_signals = self.signal_mapper.map_attributes_to_signals(detected_attrs)
+                    
+                    # Override heuristic voice consistency if guidelines were used
+                    if content.meta and content.meta.get('guidelines_used'):
+                        original_count = len(mapped_signals)
+                        mapped_signals = [s for s in mapped_signals if s.id != 'coh_voice_consistency']
+                        if len(mapped_signals) < original_count:
+                            logger.info("Overriding heuristic 'coh_voice_consistency' signal because brand guidelines are active")
+
                     if mapped_signals:
                         logger.info(f"Adding {len(mapped_signals)} mapped signals from attribute detector")
                         signals.extend(mapped_signals)
@@ -201,7 +223,6 @@ class ContentScorer:
                 content.meta['score_debug'] = json.dumps(score_debug)
 
             # Calculate TrustScore using Aggregator
-            # This is the new "Source of Truth" for the score
             dim_scores = []
             for dim_name in ["Provenance", "Verification", "Transparency", "Coherence", "Resonance"]:
                 dim_score = self.aggregator.aggregate_dimension(dim_name, signals)
@@ -214,7 +235,46 @@ class ContentScorer:
         except Exception as e:
             logger.error(f"Error scoring content {content.content_id}: {e}")
             # Return neutral scores on error
-            return DimensionScores(0.5, 0.5, 0.5, 0.5, 0.5)
+            from scoring.types import TrustScore
+            return TrustScore(overall=50.0, confidence=0.0, coverage=0.0, dimensions={}, metadata={})
+
+    def _score_freshness(self, content: NormalizedContent) -> float:
+        """Score content freshness based on publication date"""
+        try:
+            if not getattr(content, 'published_at', None):
+                return 0.5
+            
+            from datetime import datetime, timezone
+            now = datetime.now(timezone.utc)
+            
+            # Parse date if string
+            pub_date = content.published_at
+            if isinstance(pub_date, str):
+                from dateutil import parser
+                try:
+                    pub_date = parser.parse(pub_date)
+                    if pub_date.tzinfo is None:
+                        pub_date = pub_date.replace(tzinfo=timezone.utc)
+                except:
+                    return 0.5
+            
+            if not isinstance(pub_date, datetime):
+                return 0.5
+                
+            age_days = (now - pub_date).days
+            
+            if age_days < 30:
+                return 1.0
+            elif age_days < 90:
+                return 0.9
+            elif age_days < 180:
+                return 0.8
+            elif age_days < 365:
+                return 0.6
+            else:
+                return 0.4
+        except Exception:
+            return 0.5
     
     def _score_provenance(self, content: NormalizedContent, brand_context: Dict[str, Any]) -> Tuple[float, float]:
         """Score Provenance dimension: origin, traceability, metadata"""
@@ -407,8 +467,14 @@ class ContentScorer:
             
             if brand_guidelines:
                 logger.info(f"Using brand guidelines for {brand_id} in coherence scoring ({len(brand_guidelines)} chars)")
+                if content.meta is None:
+                    content.meta = {}
+                content.meta['guidelines_used'] = True
             else:
                 logger.info(f"No guidelines found for {brand_id}, using generic coherence standards")
+                if content.meta is None:
+                    content.meta = {}
+                content.meta['guidelines_used'] = False
         else:
             logger.info("Brand guidelines disabled by user preference")
         

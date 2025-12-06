@@ -46,6 +46,13 @@ class SignalMapper:
         "seller_product_verification_rate": "ver_trust_badges",
         "verified_purchaser_review_rate": "ver_social_proof",
         "review_authenticity_confidence": "ver_social_proof",
+        
+        # Additional mappings
+        "ad_sponsored_label_consistency": "trans_disclosures",
+        "schema_compliance": "coh_technical_health",
+        "metadata_completeness": "prov_source_clarity",
+        "canonical_url_matches_declared_source": "prov_source_clarity",
+        "exif_metadata_integrity": "prov_metadata_c2pa",
     }
 
     def __init__(self, trust_signals_config: Dict):

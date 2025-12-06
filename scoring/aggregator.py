@@ -33,15 +33,14 @@ class ScoringAggregator:
             logger.warning(f"No signals provided for dimension {dimension_name}")
             return DimensionScore(name=dimension_name, value=0.0, confidence=0.0, signals=[])
 
+        # Filter signals for this dimension
+        dimension_signals = [s for s in signals if s.dimension.lower() == dimension_name.lower()]
+        
         total_weighted_score = 0.0
         total_weight = 0.0
         total_confidence = 0.0
         
-        for signal in signals:
-            # Ensure signal belongs to this dimension
-            if signal.dimension.lower() != dimension_name.lower():
-                continue
-                
+        for signal in dimension_signals:
             weight = signal.weight
             total_weighted_score += signal.value * weight
             total_weight += weight
@@ -57,7 +56,7 @@ class ScoringAggregator:
             coverage_ratio = 1.0
             if expected_signals > 0:
                 # Count unique signal IDs present vs expected
-                present_signal_ids = {s.id for s in signals}
+                present_signal_ids = {s.id for s in dimension_signals}
                 # Note: signals list might contain multiple instances if we allow duplicates, so set is safer
                 coverage_ratio = min(1.0, len(present_signal_ids) / expected_signals)
                 
@@ -76,7 +75,7 @@ class ScoringAggregator:
             value=normalized_score,
             confidence=normalized_confidence,
             coverage=coverage_ratio,
-            signals=signals,
+            signals=dimension_signals,
             weight=self.dimensions_config.get(dimension_name, {}).get('weight', 0.2)
         )
 
