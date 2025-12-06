@@ -118,7 +118,58 @@ class RunManager:
 
         assets = run_config.get("assets")
         if assets:
-            return list(assets)
+            # For pre-provided assets, check if they need content fetching
+            # This handles the case where webapp passes URLs without body content
+            fetched_assets = []
+            assets_needing_fetch = []
+            
+            for asset in assets:
+                raw_content = asset.get("raw_content") or asset.get("normalized_content") or ""
+                if not raw_content and asset.get("url"):
+                    assets_needing_fetch.append(asset)
+                else:
+                    fetched_assets.append(asset)
+            
+            # Fetch content for assets that need it
+            if assets_needing_fetch:
+                logger.info(f"Fetching content for {len(assets_needing_fetch)} pre-provided assets with empty body")
+                try:
+                    from ingestion.page_fetcher import fetch_pages_parallel
+                    from ingestion.playwright_manager import get_browser_manager
+                    
+                    browser_manager = get_browser_manager()
+                    browser_manager.start()
+                    
+                    urls = [a.get("url") for a in assets_needing_fetch if a.get("url")]
+                    fetch_results = fetch_pages_parallel(urls, browser_manager=browser_manager)
+                    
+                    # Build a URL -> result map
+                    url_to_result = {r.get("url"): r for r in fetch_results}
+                    
+                    for asset in assets_needing_fetch:
+                        url = asset.get("url")
+                        result = url_to_result.get(url, {})
+                        body = result.get("body") or ""
+                        
+                        asset["raw_content"] = body
+                        asset["normalized_content"] = body
+                        asset["title"] = asset.get("title") or result.get("title") or ""
+                        
+                        # Preserve structured body if available
+                        if result.get("structured_body"):
+                            if not asset.get("meta_info"):
+                                asset["meta_info"] = {}
+                            asset["meta_info"]["structured_body"] = result.get("structured_body")
+                        
+                        fetched_assets.append(asset)
+                        logger.debug(f"Fetched {len(body)} chars for {url}")
+                        
+                except Exception as e:
+                    logger.error(f"Failed to fetch content for pre-provided assets: {e}")
+                    # Still append the assets even if fetch failed
+                    fetched_assets.extend(assets_needing_fetch)
+            
+            return fetched_assets
 
         sources = run_config.get("sources") or []
         keywords = run_config.get("keywords") or []
