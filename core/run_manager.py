@@ -295,8 +295,10 @@ class RunManager:
                 from datetime import datetime
                 import json
                 
-                # Convert ContentAsset objects to NormalizedContent for ContentScorer
+                # Create mapping from content_id to asset for later lookup
+                content_id_to_asset = {}
                 normalized_content_list = []
+                
                 for asset in assets:
                     # Extract meta_info safely
                     meta = asset.meta_info or {}
@@ -306,8 +308,11 @@ class RunManager:
                         except:
                             meta = {}
                     
+                    content_id = str(asset.id)
+                    content_id_to_asset[content_id] = asset
+                    
                     nc = NormalizedContent(
-                        content_id=str(asset.id),
+                        content_id=content_id,
                         src=asset.source_type or "web",
                         platform_id=asset.url or "",
                         author=meta.get("author", "unknown"),
@@ -337,10 +342,16 @@ class RunManager:
                 logger.info(f"Scoring {len(normalized_content_list)} assets with ContentScorer.batch_score_content()")
                 content_scores_list = self.scoring_pipeline.batch_score_content(normalized_content_list, brand_context)
                 
-                # Convert ContentScores back to the dict format expected by RunManager
+                # Track which assets were scored by ContentScorer
+                scored_asset_ids = set()
                 scored = []
-                for i, cs in enumerate(content_scores_list):
-                    asset_id = assets[i].id if i < len(assets) else None
+                
+                # Convert ContentScores back to the dict format expected by RunManager
+                for cs in content_scores_list:
+                    # ContentScores.content_id maps back to asset.id
+                    asset_id = int(cs.content_id) if cs.content_id and cs.content_id.isdigit() else None
+                    if asset_id:
+                        scored_asset_ids.add(asset_id)
                     
                     # Calculate overall score from dimension scores (5D average)
                     dims = [
@@ -369,12 +380,40 @@ class RunManager:
                         "score_transparency": cs.score_transparency or 0,
                         "score_coherence": cs.score_coherence or 0,
                         "score_resonance": cs.score_resonance or 0,
-                        "score_ai_readiness": overall,  # Use overall as AI readiness for now
+                        "score_ai_readiness": overall,
                         "overall_score": overall,
                         "classification": classification,
                     })
                 
-                logger.info(f"ContentScorer completed: {len(scored)} assets scored")
+                logger.info(f"ContentScorer completed: {len(scored)} assets scored via LLM")
+                
+                # For any assets that were filtered out by ContentScorer (insufficient content),
+                # apply heuristic fallback scoring so they still appear in the report
+                unscored_assets = [a for a in assets if a.id not in scored_asset_ids]
+                if unscored_assets:
+                    logger.info(f"Applying heuristic fallback to {len(unscored_assets)} unscored assets (filtered by ContentScorer)")
+                    for asset in unscored_assets:
+                        length = len(asset.normalized_content or asset.raw_content or "")
+                        # For items with no content, use a moderate baseline (0.5) rather than 0.1
+                        # This reflects that we couldn't fetch the content, not that it's bad
+                        if length == 0:
+                            baseline = 0.5  # Neutral score for unfetchable content
+                        else:
+                            baseline = min(1.0, 0.3 + (length / 2000.0))  # Better baseline for short content
+                        
+                        scored.append({
+                            "asset_id": asset.id,
+                            "score_provenance": baseline,
+                            "score_verification": baseline,
+                            "score_transparency": baseline,
+                            "score_coherence": baseline,
+                            "score_resonance": baseline,
+                            "score_ai_readiness": baseline,
+                            "overall_score": baseline,
+                            "classification": "Fair" if baseline >= 0.4 else "Poor",
+                        })
+                
+                logger.info(f"Total scores: {len(scored)} assets (LLM: {len(scored_asset_ids)}, heuristic: {len(unscored_assets)})")
                 return scored
                 
             except Exception as e:
@@ -391,7 +430,11 @@ class RunManager:
         scored: List[dict] = []
         for asset in assets:
             length = len(asset.normalized_content or asset.raw_content or "")
-            baseline = min(1.0, 0.1 + (length / 1000.0))
+            # For items with no content, use a moderate baseline
+            if length == 0:
+                baseline = 0.5  # Neutral score for unfetchable content
+            else:
+                baseline = min(1.0, 0.3 + (length / 2000.0))
             scored.append(
                 {
                     "asset_id": asset.id,
@@ -402,7 +445,7 @@ class RunManager:
                     "score_resonance": baseline,
                     "score_ai_readiness": baseline,
                     "overall_score": baseline,
-                    "classification": "Excellent" if baseline >= 0.8 else "Fair",
+                    "classification": "Fair" if baseline >= 0.4 else "Poor",
                 }
             )
         return scored
