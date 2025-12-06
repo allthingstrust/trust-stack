@@ -288,10 +288,106 @@ class RunManager:
         used to generate placeholder scores.
         """
 
+        # Check for ContentScorer with batch_score_content (the actual scoring method)
+        if self.scoring_pipeline and hasattr(self.scoring_pipeline, "batch_score_content"):
+            try:
+                from data.models import NormalizedContent
+                from datetime import datetime
+                import json
+                
+                # Convert ContentAsset objects to NormalizedContent for ContentScorer
+                normalized_content_list = []
+                for asset in assets:
+                    # Extract meta_info safely
+                    meta = asset.meta_info or {}
+                    if isinstance(meta, str):
+                        try:
+                            meta = json.loads(meta)
+                        except:
+                            meta = {}
+                    
+                    nc = NormalizedContent(
+                        content_id=str(asset.id),
+                        src=asset.source_type or "web",
+                        platform_id=asset.url or "",
+                        author=meta.get("author", "unknown"),
+                        title=asset.title or "",
+                        body=asset.normalized_content or asset.raw_content or "",
+                        run_id=str(asset.run_id),
+                        event_ts=datetime.now().isoformat(),
+                        meta=meta,
+                        url=asset.url or "",
+                        modality=asset.modality or "text",
+                        channel=asset.channel or "web",
+                        platform_type=meta.get("platform_type", "web"),
+                        source_type=asset.source_type or "web",
+                        source_tier=meta.get("source_tier", "unknown"),
+                    )
+                    normalized_content_list.append(nc)
+                
+                # Build brand context from run_config
+                brand_context = {
+                    "brand_name": run_config.get("brand_name", "unknown"),
+                    "brand_id": run_config.get("brand_name", "unknown"),
+                    "keywords": run_config.get("keywords", []),
+                    "sources": run_config.get("sources", []),
+                }
+                
+                # Call the actual Trust Stack scorer
+                logger.info(f"Scoring {len(normalized_content_list)} assets with ContentScorer.batch_score_content()")
+                content_scores_list = self.scoring_pipeline.batch_score_content(normalized_content_list, brand_context)
+                
+                # Convert ContentScores back to the dict format expected by RunManager
+                scored = []
+                for i, cs in enumerate(content_scores_list):
+                    asset_id = assets[i].id if i < len(assets) else None
+                    
+                    # Calculate overall score from dimension scores (5D average)
+                    dims = [
+                        cs.score_provenance or 0,
+                        cs.score_verification or 0,
+                        cs.score_transparency or 0,
+                        cs.score_coherence or 0,
+                        cs.score_resonance or 0,
+                    ]
+                    overall = sum(dims) / len(dims) if dims else 0
+                    
+                    # Classification based on overall score
+                    if overall >= 0.75:
+                        classification = "Excellent"
+                    elif overall >= 0.5:
+                        classification = "Good"
+                    elif overall >= 0.25:
+                        classification = "Fair"
+                    else:
+                        classification = "Poor"
+                    
+                    scored.append({
+                        "asset_id": asset_id,
+                        "score_provenance": cs.score_provenance or 0,
+                        "score_verification": cs.score_verification or 0,
+                        "score_transparency": cs.score_transparency or 0,
+                        "score_coherence": cs.score_coherence or 0,
+                        "score_resonance": cs.score_resonance or 0,
+                        "score_ai_readiness": overall,  # Use overall as AI readiness for now
+                        "overall_score": overall,
+                        "classification": classification,
+                    })
+                
+                logger.info(f"ContentScorer completed: {len(scored)} assets scored")
+                return scored
+                
+            except Exception as e:
+                logger.warning(f"ContentScorer scoring failed, falling back to heuristic: {e}")
+                import traceback
+                logger.warning(traceback.format_exc())
+
+        # Legacy support: check for score_assets method
         if self.scoring_pipeline and hasattr(self.scoring_pipeline, "score_assets"):
             return list(self.scoring_pipeline.score_assets(assets, run_config))
 
-        # Fallback heuristic scoring
+        # Fallback heuristic scoring (only if no scoring pipeline available)
+        logger.warning("No scoring pipeline available, using fallback heuristic scoring")
         scored: List[dict] = []
         for asset in assets:
             length = len(asset.normalized_content or asset.raw_content or "")

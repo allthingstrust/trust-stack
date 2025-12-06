@@ -1641,12 +1641,12 @@ def show_analyze_page():
                 # Populate summary stats if available
                 if run.summary:
                     legacy_run_data["scoring_report"]["dimension_breakdown"] = {
-                        "provenance": {"average": run.summary.avg_provenance},
-                        "verification": {"average": run.summary.avg_verification},
-                        "transparency": {"average": run.summary.avg_transparency},
-                        "coherence": {"average": run.summary.avg_coherence},
-                        "resonance": {"average": run.summary.avg_resonance},
-                        "ai_readiness": {"average": run.summary.avg_ai_readiness}
+                        "provenance": {"average": run.summary.avg_provenance or 0},
+                        "verification": {"average": run.summary.avg_verification or 0},
+                        "transparency": {"average": run.summary.avg_transparency or 0},
+                        "coherence": {"average": run.summary.avg_coherence or 0},
+                        "resonance": {"average": run.summary.avg_resonance or 0},
+                        "ai_readiness": {"average": run.summary.avg_ai_readiness or 0}
                     }
                     legacy_run_data["authenticity_ratio"] = {
                         "authenticity_ratio_pct": (run.summary.authenticity_ratio or 0) * 100

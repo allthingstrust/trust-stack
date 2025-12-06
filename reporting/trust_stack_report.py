@@ -128,7 +128,7 @@ def generate_trust_stack_report(report_data: Dict[str, Any], model: str = 'gpt-4
     
     for dim in ordered_dims:
         dim_data = dimension_breakdown.get(dim, {})
-        avg_score = dim_data.get('average', 0) * 10  # Convert 0-1 to 0-10
+        avg_score = (dim_data.get('average') or 0) * 10  # Convert 0-1 to 0-10, handle None
         
         # Generate detailed analysis for this dimension
         analysis = _generate_dimension_analysis(dim, avg_score, items, sources, model)
@@ -185,7 +185,7 @@ def _generate_dimension_analysis(
 
         # Improved title extraction
         title = item.get('title') or meta.get('title', 'Untitled')
-        item_score = item.get('dimension_scores', {}).get(dimension, 0) * 10
+        item_score = (item.get('dimension_scores', {}).get(dimension) or 0) * 10
         
         # Improved URL extraction
         url = meta.get('source_url') or meta.get('url') or 'No URL'
