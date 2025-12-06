@@ -84,6 +84,7 @@ class TrustStackAttributeDetector:
             "caption_subtitle_availability_accuracy": self._detect_captions,
             "data_source_citations_for_claims": self._detect_citations,
             "privacy_policy_link_availability_clarity": self._detect_privacy_policy,
+            "contact_info_availability": self._detect_contact_info,
 
             # Verification
             "ad_sponsored_label_consistency": self._detect_ad_labels,
@@ -236,6 +237,20 @@ class TrustStackAttributeDetector:
 
         # Check for visible byline (expected for blog/article content)
         has_visible_byline = content.author and content.author.lower() not in ['unknown', 'anonymous', '']
+
+        # If no metadata author, check body text for "By [Name]" pattern
+        if not has_visible_byline:
+            # Look for "By Name" at start of lines, allowing for some context
+            # Limit to first 2000 chars to avoid false positives in comments/footer
+            intro_text = content.body[:2000]
+            byline_match = re.search(r'(?:^|\n)\s*By\s+([A-Z][a-zA-Z\s\.]+)(?:\s|$)', intro_text)
+            if byline_match:
+                detected_author = byline_match.group(1).strip()
+                # Filter out common false positives
+                if len(detected_author) < 30 and detected_author.lower() not in ['email', 'phone', 'clicking', 'using']:
+                    has_visible_byline = True
+                    # Optionally update content.author? No, keep content immutable here, just use for detection.
+                    logger.info(f"Detected author in text: {detected_author}")
 
         # For blog/article content, require visible byline
         if content_type in ['blog', 'article', 'news']:
@@ -1354,6 +1369,44 @@ class TrustStackAttributeDetector:
 
         return None  # Not applicable for social/marketplace content
 
+    def _detect_contact_info(self, content: NormalizedContent) -> Optional[DetectedAttribute]:
+        """Detect contact/business info availability"""
+        text = (content.body + " " + content.title).lower()
+        meta = content.meta or {}
+
+        # Check metadata
+        has_contact_meta = any(key in meta for key in ["contact_url", "email", "phone", "address"])
+
+        # Check for email patterns (simple regex)
+        has_email = re.search(r'[\w\.-]+@[\w\.-]+\.\w+', text)
+
+        # Check for phone patterns (very simple, to avoid false positives)
+        # Look for "Call us: ..." or similar context if possible, but simple pattern for now
+        # has_phone = re.search(r'\+?[\d\s-]{10,}', text) # Too risky for false positives
+
+        # Check for "Contact Us" links/text
+        contact_phrases = ["contact us", "get in touch", "customer support", "help center", "contact support"]
+        has_contact_phrase = any(phrase in text for phrase in contact_phrases)
+
+        if has_contact_meta or has_email or has_contact_phrase:
+            return DetectedAttribute(
+                attribute_id="contact_info_availability",
+                dimension="transparency",
+                label="Contact/Business Info Availability",
+                value=10.0,
+                evidence="Contact info or link found",
+                confidence=0.9
+            )
+        
+        return DetectedAttribute(
+            attribute_id="contact_info_availability",
+            dimension="transparency",
+            label="Contact/Business Info Availability",
+            value=2.0,
+            evidence="No contact info detected",
+            confidence=0.7
+        )
+
     # ===== VERIFICATION DETECTORS =====
 
     def _detect_ad_labels(self, content: NormalizedContent) -> Optional[DetectedAttribute]:
@@ -1481,33 +1534,61 @@ class TrustStackAttributeDetector:
 
     def _detect_review_authenticity(self, content: NormalizedContent) -> Optional[DetectedAttribute]:
         """Detect review authenticity confidence"""
-        # Only applicable to reviews
-        if content.src != "amazon":
-            return None
-
-        # Simple heuristic based on verified purchase + helpful votes
+        text = (content.body + " " + content.title).lower()
         meta = content.meta or {}
-        is_verified = meta.get("verified_purchase") == "true"
-        helpful_count = content.helpful_count or 0
 
-        if is_verified and helpful_count > 5:
-            value = 10.0
-            evidence = "Verified purchase with helpful votes"
-        elif is_verified:
-            value = 8.0
-            evidence = "Verified purchase"
-        else:
-            value = 5.0
-            evidence = "Unverified purchase"
+        # 1. Amazon-specific logic (keep existing)
+        if content.src == "amazon":
+            is_verified = meta.get("verified_purchase") == "true"
+            helpful_count = content.helpful_count or 0
 
-        return DetectedAttribute(
-            attribute_id="review_authenticity_confidence",
-            dimension="verification",
-            label="Review Authenticity Confidence",
-            value=value,
-            evidence=evidence,
-            confidence=0.7
-        )
+            if is_verified and helpful_count > 5:
+                value = 10.0
+                evidence = "Verified purchase with helpful votes"
+            elif is_verified:
+                value = 8.0
+                evidence = "Verified purchase"
+            else:
+                value = 5.0
+                evidence = "Unverified purchase"
+            
+            return DetectedAttribute(
+                attribute_id="review_authenticity_confidence",
+                dimension="verification",
+                label="Review Authenticity Confidence",
+                value=value,
+                evidence=evidence,
+                confidence=0.7
+            )
+
+        # 2. General logic for other sites
+        # Check for "Reviews" section or star ratings
+        has_reviews_section = "reviews" in text or "customer reviews" in text
+        
+        # Look for "4.5 out of 5" or "4.5/5" patterns
+        star_rating_match = re.search(r'(\d(?:\.\d)?)\s*(?:out of|/)\s*5', text)
+        
+        if has_reviews_section and star_rating_match:
+            rating = float(star_rating_match.group(1))
+            return DetectedAttribute(
+                attribute_id="review_authenticity_confidence",
+                dimension="verification",
+                label="Review Authenticity Confidence",
+                value=8.0, # Good confidence if we see ratings and review section
+                evidence=f"Reviews section found with rating {rating}/5",
+                confidence=0.6
+            )
+        elif has_reviews_section:
+             return DetectedAttribute(
+                attribute_id="review_authenticity_confidence",
+                dimension="verification",
+                label="Review Authenticity Confidence",
+                value=6.0,
+                evidence="Reviews section detected",
+                confidence=0.5
+            )
+
+        return None
 
     def _detect_seller_verification(self, content: NormalizedContent) -> Optional[DetectedAttribute]:
         """Detect seller & product verification rate (placeholder)"""

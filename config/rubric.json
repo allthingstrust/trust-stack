@@ -1663,6 +1663,39 @@
       "detection_method": "Scrape presence; readability test"
     },
     {
+      "id": "contact_info_availability",
+      "label": "Contact/Business Info Availability",
+      "match_meta": [
+        "contact",
+        "info",
+        "availability"
+      ],
+      "effect": "bonus",
+      "value": 0,
+      "enabled": true,
+      "source_row": {
+        "Unified Dimension": "Transparency",
+        "Attribute (Objective Signal)": "Contact/Business Info Availability",
+        "How to Collect (API/Scrape)": "Scrape for contact info",
+        "Field Type": "boolean",
+        "Scoring Rule (1\u201310)": "10 if present",
+        "Thresholds / Flags": "Flag: missing",
+        "Frequency": "per asset",
+        "Notes / Example Tools": "Scraper",
+        "Modality": "",
+        "Channel/ Platform": "",
+        "Ecosystem (Owned/Social/Marketplace/Email)": ""
+      },
+      "dimension": "transparency",
+      "scoring_rule_parsed": {
+        "type": "boolean",
+        "max_value": 10,
+        "min_value": 1,
+        "description": "10 if present"
+      },
+      "detection_method": "Scrape for contact info"
+    },
+    {
       "id": "why_am_i_seeing_this_ad_rec",
       "label": "Why-am-I-seeing-this (ad/rec)",
       "match_meta": [

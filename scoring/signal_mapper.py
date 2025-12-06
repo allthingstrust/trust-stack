@@ -37,11 +37,13 @@ class SignalMapper:
         "ai_generated_assisted_disclosure_present": "trans_ai_labeling",
         "ai_vs_human_labeling_clarity": "trans_ai_labeling",
         "bot_disclosure_response_audit": "trans_ai_labeling",
+        "contact_info_availability": "trans_contact_info",
         
         # Verification
         "claim_to_source_traceability": "ver_fact_accuracy",
         "seller_product_verification_rate": "ver_trust_badges",
         "verified_purchaser_review_rate": "ver_social_proof",
+        "review_authenticity_confidence": "ver_social_proof",
     }
 
     def __init__(self, trust_signals_config: Dict):
