@@ -148,20 +148,22 @@ class PlaywrightBrowserManager:
                 if "Broken pipe" not in str(e) and "Event loop is closed" not in str(e):
                     logger.error('Playwright browser loop crashed: %s', e)
         finally:
+            import sys # Ensure sys is available in finally block
             # Clean up browser and playwright - suppress all errors during cleanup
             if browser:
                 try:
-                    browser.close()
+                    if not sys.is_finalizing():
+                        browser.close()
                 except Exception:
                     pass
             if playwright:
                 try:
-                    playwright.stop()
+                    if not sys.is_finalizing():
+                        playwright.stop()
                 except Exception:
                     pass
             
             # Log shutdown only if not finalizing
-            import sys
             if not sys.is_finalizing():
                 try:
                     logger.info('Playwright browser thread stopped')
@@ -242,7 +244,7 @@ class PlaywrightBrowserManager:
                 except Exception:
                     pass
 
-    def fetch_page(self, url: str, user_agent: str, timeout: int = 60) -> Dict[str, str]:
+    def fetch_page(self, url: str, user_agent: str, timeout: int = 30) -> Dict[str, str]:
         """Submit a fetch request to the browser thread and wait for result."""
         if not self.is_started:
             # Try to auto-restart if not started
@@ -269,7 +271,7 @@ class PlaywrightBrowserManager:
             
         # Release lock before joining to avoid deadlock with thread's cleanup
         if thread_to_join:
-            thread_to_join.join(timeout=5)
+            thread_to_join.join(timeout=2)
             
         # Ensure state is cleared
         with self._lock:

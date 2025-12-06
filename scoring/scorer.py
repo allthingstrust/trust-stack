@@ -16,6 +16,7 @@ from scoring.scoring_llm_client import LLMScoringClient
 from scoring.verification_manager import VerificationManager
 from scoring.linguistic_analyzer import LinguisticAnalyzer
 from scoring.triage import TriageScorer
+from scoring.signal_mapper import SignalMapper
 
 logger = logging.getLogger(__name__)
 
@@ -71,6 +72,7 @@ class ContentScorer:
         self.verification_manager = VerificationManager()
         self.linguistic_analyzer = LinguisticAnalyzer()
         self.triage_scorer = TriageScorer()
+        self.signal_mapper = SignalMapper(self.trust_signals_config)
     
     def score_content(self, content: NormalizedContent, brand_context: Dict[str, Any]) -> 'TrustScore':
         """
@@ -179,6 +181,17 @@ class ContentScorer:
                 rationale="Legacy LLM score",
                 confidence=res_conf
             ))
+
+            # Detect attributes if enabled and map to signals
+            if self.attribute_detector:
+                try:
+                    detected_attrs = self.attribute_detector.detect_attributes(content)
+                    mapped_signals = self.signal_mapper.map_attributes_to_signals(detected_attrs)
+                    if mapped_signals:
+                        logger.info(f"Adding {len(mapped_signals)} mapped signals from attribute detector")
+                        signals.extend(mapped_signals)
+                except Exception as e:
+                    logger.warning(f"Error in attribute detection/mapping: {e}")
 
             # Serialize score debug info to meta
             score_debug = getattr(content, '_score_debug', {})

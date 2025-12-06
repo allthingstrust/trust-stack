@@ -21,6 +21,7 @@ class DimensionScore:
     name: str            # "Provenance"
     value: float         # 0.0-10.0 score (to match existing 0-100 scale when multiplied by 10)
     confidence: float    # 0.0-1.0 confidence
+    coverage: float      # 0.0-1.0 percentage of expected signals present
     signals: List[SignalScore]
     weight: float = 0.2  # Default weight in overall score
 
@@ -29,5 +30,6 @@ class TrustScore:
     """Top-level trust score object"""
     overall: float       # 0.0-100.0 score
     confidence: float    # 0.0-1.0 confidence
+    coverage: float      # 0.0-1.0 overall signal coverage
     dimensions: Dict[str, DimensionScore]
     metadata: Dict[str, Any] = field(default_factory=dict) # brand, date, content coverage, model version

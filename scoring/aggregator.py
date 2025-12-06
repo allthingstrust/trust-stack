@@ -52,16 +52,21 @@ class ScoringAggregator:
             normalized_score = (total_weighted_score / total_weight) * 10.0 # Scale to 0-10
             normalized_confidence = total_confidence / total_weight
             
-            # Penalize confidence for missing signals if defined in config
-            # (Simple heuristic: if we have fewer signals than expected, reduce confidence)
+            # Calculate coverage
             expected_signals = len([s for s in self.signals_config.values() if s.get('dimension') == dimension_name])
+            coverage_ratio = 1.0
             if expected_signals > 0:
-                coverage_ratio = len(signals) / expected_signals
+                # Count unique signal IDs present vs expected
+                present_signal_ids = {s.id for s in signals}
+                # Note: signals list might contain multiple instances if we allow duplicates, so set is safer
+                coverage_ratio = min(1.0, len(present_signal_ids) / expected_signals)
+                
                 # Blend signal confidence with coverage ratio (50/50)
                 normalized_confidence = (normalized_confidence * 0.5) + (coverage_ratio * 0.5)
         else:
             normalized_score = 0.0
             normalized_confidence = 0.0
+            coverage_ratio = 0.0
 
         # Clamp
         normalized_score = max(0.0, min(10.0, normalized_score))
@@ -70,6 +75,7 @@ class ScoringAggregator:
             name=dimension_name,
             value=normalized_score,
             confidence=normalized_confidence,
+            coverage=coverage_ratio,
             signals=signals,
             weight=self.dimensions_config.get(dimension_name, {}).get('weight', 0.2)
         )
@@ -85,6 +91,7 @@ class ScoringAggregator:
         total_score = 0.0
         total_weight = 0.0
         total_confidence = 0.0
+        total_coverage = 0.0
         
         dimensions_map = {}
         
@@ -97,17 +104,21 @@ class ScoringAggregator:
             total_score += dim.value * weight
             total_weight += weight
             total_confidence += dim.confidence * weight
+            total_coverage += dim.coverage * weight
 
         if total_weight > 0:
             final_score = (total_score / total_weight) * 10.0 # Scale 0-10 -> 0-100
             final_confidence = total_confidence / total_weight
+            final_coverage = total_coverage / total_weight
         else:
             final_score = 0.0
             final_confidence = 0.0
+            final_coverage = 0.0
             
         return TrustScore(
             overall=final_score,
             confidence=final_confidence,
+            coverage=final_coverage,
             dimensions=dimensions_map,
             metadata=metadata or {}
         )
