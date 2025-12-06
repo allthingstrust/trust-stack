@@ -280,6 +280,34 @@ class RunManager:
         logger.info("No assets supplied; proceeding with empty dataset")
         return []
 
+    def _extract_rationale_from_content_scores(self, cs) -> dict:
+        """Extract detected_attributes from ContentScores.meta for persistence."""
+        import json
+        
+        rationale = {}
+        
+        # cs.meta may be a JSON string or dict
+        meta = cs.meta if hasattr(cs, 'meta') else {}
+        if isinstance(meta, str):
+            try:
+                meta = json.loads(meta)
+            except:
+                meta = {}
+        
+        # Extract detected_attributes if present
+        if isinstance(meta, dict):
+            detected_attrs = meta.get('detected_attributes', [])
+            if detected_attrs:
+                rationale['detected_attributes'] = detected_attrs
+            
+            # Also preserve other useful meta fields
+            for key in ['attribute_count', 'source_type', 'channel']:
+                if key in meta:
+                    rationale[key] = meta[key]
+        
+        return rationale
+
+
     def _score_assets(self, assets: List[ContentAsset], run_config: dict) -> List[dict]:
         """Score a list of persisted assets.
 
@@ -383,6 +411,8 @@ class RunManager:
                         "score_ai_readiness": overall,
                         "overall_score": overall,
                         "classification": classification,
+                        # Include detected_attributes in rationale for persistence
+                        "rationale": self._extract_rationale_from_content_scores(cs),
                     })
                 
                 logger.info(f"ContentScorer completed: {len(scored)} assets scored via LLM")

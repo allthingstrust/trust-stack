@@ -1634,6 +1634,11 @@ def show_analyze_page():
                                 "resonance": score.score_resonance,
                                 "ai_readiness": score.score_ai_readiness
                             }
+                            # Merge detected_attributes from score.rationale into meta
+                            # This enables the report generator to show actual attribute values
+                            rationale = score.rationale or {}
+                            if isinstance(rationale, dict) and rationale.get('detected_attributes'):
+                                item["meta"]["detected_attributes"] = rationale["detected_attributes"]
                         items.append(item)
                 
                 legacy_run_data["scoring_report"]["items"] = items
