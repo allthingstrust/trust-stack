@@ -113,7 +113,7 @@ def main():
                     "url": asset.url,
                     "title": asset.title,
                     "body": asset.raw_content, # simplified
-                    "meta": asset.meta or {},
+                    "meta": asset.meta_info or {},
                     "dimension_scores": {}
                 }
                 
