@@ -1683,6 +1683,33 @@ def show_analyze_page():
                     "authenticity_ratio_pct": (run.summary.authenticity_ratio or 0) * 100
                 }
 
+            # Generate PDF report
+            progress_animator.show("Generating PDF report...", "📄")
+            progress_bar.progress(90)
+            
+            try:
+                from reporting.pdf_generator import PDFReportGenerator
+                
+                # Create output directory for reports
+                output_dir = os.path.join(PROJECT_ROOT, 'output', 'webapp_runs')
+                os.makedirs(output_dir, exist_ok=True)
+                
+                run_dir = os.path.join(output_dir, f"{run.brand.slug}_{run.external_id}")
+                os.makedirs(run_dir, exist_ok=True)
+                
+                pdf_path = os.path.join(run_dir, f'ar_report_{run.brand.slug}_{run.external_id}.pdf')
+                
+                # Generate PDF using the scoring report data
+                pdf_generator = PDFReportGenerator()
+                pdf_generator.generate_report(legacy_run_data["scoring_report"], pdf_path)
+                
+                # Add path to run data
+                legacy_run_data["pdf_path"] = pdf_path
+                logger.info(f"Generated PDF report: {pdf_path}")
+            except Exception as pdf_err:
+                logger.warning(f"PDF generation failed: {pdf_err}")
+                # Continue without PDF - the download button will show as disabled
+
             progress_animator.show("Analysis complete! ✅", "✨")
             progress_bar.progress(100)
             
