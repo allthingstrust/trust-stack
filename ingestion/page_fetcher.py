@@ -186,7 +186,253 @@ def _extract_footer_links(html: str, base_url: str) -> Dict[str, str]:
     return {"terms": terms_url, "privacy": privacy_url}
 
 
+def _extract_verification_badges(html: str, url: str) -> Dict[str, any]:
+    """Extract verification badge information from social media pages.
+    
+    Detects platform-specific verification indicators for:
+    - Instagram: verified badge spans, aria-labels, title attributes
+    - LinkedIn: verification badges near profile names
+    - X/Twitter: verified account badges with data-testid or aria-labels
+    
+    Args:
+        html: Raw HTML content
+        url: URL of the page (used to determine platform)
+    
+    Returns:
+        Dict with keys:
+        - verified: bool (whether verification badge found)
+        - platform: str (instagram, linkedin, twitter, unknown)
+        - badge_type: str (blue_checkmark, verified_organization, etc.)
+        - evidence: str (description of what was detected)
+    """
+    result = {
+        "verified": False,
+        "platform": "unknown",
+        "badge_type": "",
+        "evidence": ""
+    }
+    
+    if not html:
+        return result
+    
+    try:
+        soup = BeautifulSoup(html, "lxml")
+        url_lower = url.lower()
+        
+        # Determine platform from URL
+        if 'instagram.com' in url_lower:
+            result["platform"] = "instagram"
+            result = _detect_instagram_badge(soup, result)
+        elif 'linkedin.com' in url_lower:
+            result["platform"] = "linkedin"
+            result = _detect_linkedin_badge(soup, result)
+        elif 'twitter.com' in url_lower or 'x.com' in url_lower:
+            result["platform"] = "twitter"
+            result = _detect_twitter_badge(soup, result)
+        else:
+            # Try generic verification detection for other platforms
+            result = _detect_generic_badge(soup, result)
+            
+    except Exception as e:
+        logger.debug("Error extracting verification badges from %s: %s", url, e)
+    
+    return result
+
+
+def _detect_instagram_badge(soup: BeautifulSoup, result: Dict) -> Dict:
+    """Detect Instagram verification badge patterns."""
+    
+    # Pattern 1: Look for title="Verified" attribute
+    verified_title = soup.find_all(attrs={"title": re.compile(r"(?i)^verified$")})
+    if verified_title:
+        result["verified"] = True
+        result["badge_type"] = "blue_checkmark"
+        result["evidence"] = "Found element with title='Verified'"
+        return result
+    
+    # Pattern 2: Look for aria-label containing "Verified"
+    verified_aria = soup.find_all(attrs={"aria-label": re.compile(r"(?i)verified")})
+    if verified_aria:
+        result["verified"] = True
+        result["badge_type"] = "blue_checkmark"
+        result["evidence"] = f"Found element with aria-label containing 'Verified': {verified_aria[0].get('aria-label', '')[:50]}"
+        return result
+    
+    # Pattern 3: Look for class names containing verified badge indicators
+    verified_class_patterns = [
+        'coreSpriteVerifiedBadge',
+        'verified',
+        'VerifiedBadge',
+        '_acan',  # Instagram's obfuscated class for verified badge
+    ]
+    for pattern in verified_class_patterns:
+        elements = soup.find_all(class_=re.compile(rf"(?i){pattern}"))
+        if elements:
+            result["verified"] = True
+            result["badge_type"] = "blue_checkmark"
+            result["evidence"] = f"Found element with class matching '{pattern}'"
+            return result
+    
+    # Pattern 4: Look for SVG with verified checkmark path
+    svgs = soup.find_all('svg')
+    for svg in svgs:
+        aria_label = svg.get('aria-label', '').lower()
+        if 'verified' in aria_label:
+            result["verified"] = True
+            result["badge_type"] = "blue_checkmark"
+            result["evidence"] = f"Found SVG with aria-label: {aria_label}"
+            return result
+        
+        title = svg.find('title')
+        if title and 'verified' in title.get_text().lower():
+            result["verified"] = True
+            result["badge_type"] = "blue_checkmark"
+            result["evidence"] = "Found SVG with 'Verified' title"
+            return result
+    
+    # Pattern 5: Text content check in profile header
+    header = soup.find('header') or soup.find('div', class_=re.compile(r'profile|header'))
+    if header:
+        header_text = header.get_text().lower()
+        if 'verified' in header_text or '✓' in header_text or '☑' in header_text:
+            result["verified"] = True
+            result["badge_type"] = "blue_checkmark"
+            result["evidence"] = "Found verification indicator in profile header"
+            return result
+    
+    return result
+
+
+def _detect_linkedin_badge(soup: BeautifulSoup, result: Dict) -> Dict:
+    """Detect LinkedIn verification badge patterns."""
+    
+    # Pattern 1: Look for verification badge aria-label
+    verified_aria = soup.find_all(attrs={"aria-label": re.compile(r"(?i)verif")})
+    if verified_aria:
+        for elem in verified_aria:
+            aria_text = elem.get('aria-label', '').lower()
+            if 'verified' in aria_text and 'not' not in aria_text:
+                result["verified"] = True
+                result["badge_type"] = "verified_account" if 'account' in aria_text else "verification_badge"
+                result["evidence"] = f"Found element with aria-label: {elem.get('aria-label', '')[:50]}"
+                return result
+    
+    # Pattern 2: Look for shield/badge SVG icons
+    badge_icons = soup.find_all(['span', 'div', 'li-icon'], class_=re.compile(r"(?i)(badge|verif|shield)"))
+    if badge_icons:
+        result["verified"] = True
+        result["badge_type"] = "verification_badge"
+        result["evidence"] = "Found verification badge element"
+        return result
+    
+    # Pattern 3: Look for LinkedIn verification text patterns
+    profile_sections = soup.find_all(['section', 'div'], class_=re.compile(r"(?i)(profile|about|contact)"))
+    for section in profile_sections:
+        section_text = section.get_text().lower()
+        if any(phrase in section_text for phrase in [
+            'verified email', 'verified workplace', 'identity verified',
+            'workplace verified', 'email verified'
+        ]):
+            result["verified"] = True
+            result["badge_type"] = "identity_verified"
+            result["evidence"] = "Found LinkedIn verification indicator in profile"
+            return result
+    
+    # Pattern 4: Check for SVGs with verification indicators
+    svgs = soup.find_all('svg')
+    for svg in svgs:
+        aria_label = svg.get('aria-label', '').lower()
+        if 'verified' in aria_label or 'verification' in aria_label:
+            result["verified"] = True
+            result["badge_type"] = "verification_badge"
+            result["evidence"] = f"Found SVG with verification aria-label: {aria_label}"
+            return result
+    
+    return result
+
+
+def _detect_twitter_badge(soup: BeautifulSoup, result: Dict) -> Dict:
+    """Detect X/Twitter verification badge patterns."""
+    
+    # Pattern 1: Look for data-testid="icon-verified"
+    verified_testid = soup.find_all(attrs={"data-testid": re.compile(r"(?i)verif")})
+    if verified_testid:
+        result["verified"] = True
+        result["badge_type"] = "blue_checkmark"
+        result["evidence"] = "Found element with data-testid containing 'verified'"
+        return result
+    
+    # Pattern 2: Look for aria-label containing "Verified account"
+    verified_aria = soup.find_all(attrs={"aria-label": re.compile(r"(?i)verified\s*(account)?")})
+    if verified_aria:
+        for elem in verified_aria:
+            aria_text = elem.get('aria-label', '').lower()
+            if 'verified' in aria_text:
+                if 'organization' in aria_text:
+                    badge_type = "verified_organization"
+                elif 'government' in aria_text:
+                    badge_type = "government_badge"
+                else:
+                    badge_type = "blue_checkmark"
+                    
+                result["verified"] = True
+                result["badge_type"] = badge_type
+                result["evidence"] = f"Found element with aria-label: {elem.get('aria-label', '')[:50]}"
+                return result
+    
+    # Pattern 3: Look for SVG with verification badge 
+    svgs = soup.find_all('svg')
+    for svg in svgs:
+        aria_label = svg.get('aria-label', '').lower()
+        if 'verified' in aria_label:
+            result["verified"] = True
+            result["badge_type"] = "blue_checkmark"
+            result["evidence"] = f"Found SVG with verified aria-label: {aria_label}"
+            return result
+        
+        parent = svg.parent
+        if parent:
+            parent_classes = ' '.join(parent.get('class', []))
+            if 'verified' in parent_classes.lower():
+                result["verified"] = True
+                result["badge_type"] = "blue_checkmark"
+                result["evidence"] = "Found SVG inside verified container"
+                return result
+    
+    # Pattern 4: Check for verification badge class names
+    verified_classes = soup.find_all(class_=re.compile(r"(?i)(verified|checkmark|badge)"))
+    for elem in verified_classes:
+        classes = ' '.join(elem.get('class', []))
+        if 'verified' in classes.lower() or ('badge' in classes.lower() and 'blue' in classes.lower()):
+            result["verified"] = True
+            result["badge_type"] = "blue_checkmark"
+            result["evidence"] = f"Found element with verification class: {classes[:50]}"
+            return result
+    
+    return result
+
+
+def _detect_generic_badge(soup: BeautifulSoup, result: Dict) -> Dict:
+    """Detect verification badges on unknown/other platforms."""
+    
+    verification_patterns = [
+        (soup.find_all(attrs={"aria-label": re.compile(r"(?i)verified")}), "aria-label"),
+        (soup.find_all(attrs={"title": re.compile(r"(?i)^verified$")}), "title"),
+        (soup.find_all(class_=re.compile(r"(?i)verified")), "class"),
+    ]
+    
+    for elements, pattern_type in verification_patterns:
+        if elements:
+            result["verified"] = True
+            result["badge_type"] = "verification_badge"
+            result["evidence"] = f"Found verification indicator via {pattern_type}"
+            return result
+    
+    return result
+
+
 def _extract_internal_links(url: str, html_content: str, max_links: int = 15) -> List[str]:
+
     """Extract internal links from a brand domain page.
 
     Useful for collecting subpages from brand homepages (e.g., product pages,
@@ -784,13 +1030,21 @@ def _fetch_with_playwright(url: str, user_agent: str, browser_manager=None) -> D
         except Exception:
             links = {"terms": "", "privacy": ""}
         
+        # Extract verification badges for social media pages
+        try:
+            verification_badges = _extract_verification_badges(page_content, url)
+        except Exception:
+            verification_badges = {"verified": False, "platform": "unknown", "badge_type": "", "evidence": ""}
+        
         return {
             "title": page_title.strip(),
             "body": page_body.strip(),
             "url": url,
             "terms": links.get("terms", ""),
-            "privacy": links.get("privacy", "")
+            "privacy": links.get("privacy", ""),
+            "verification_badges": verification_badges
         }
+
         
     except Exception as e:
         logger.warning('Playwright fetch failed for %s: %s', url, e)
@@ -977,14 +1231,23 @@ def fetch_page(url: str, timeout: int = 10, browser_manager=None) -> Dict[str, s
             links = _extract_footer_links(getattr(resp, 'text', '') or '', url)
         except Exception:
             links = {"terms": "", "privacy": ""}
+        
+        # Extract verification badges for social media pages
+        try:
+            verification_badges = _extract_verification_badges(getattr(resp, 'text', '') or '', url)
+        except Exception:
+            verification_badges = {"verified": False, "platform": "unknown", "badge_type": "", "evidence": ""}
+        
         return {
             "title": title, 
             "body": body, 
             "structured_body": structured_body,
             "url": url, 
             "terms": links.get("terms", ""), 
-            "privacy": links.get("privacy", "")
+            "privacy": links.get("privacy", ""),
+            "verification_badges": verification_badges
         }
+
     except Exception as e:
         logger.error("Error fetching page %s: %s", url, e)
         # Attempt to dump whatever we have for debugging
