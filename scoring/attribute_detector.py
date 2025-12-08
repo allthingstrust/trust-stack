@@ -10,6 +10,14 @@ import logging
 
 from data.models import NormalizedContent, DetectedAttribute
 
+# Import WHOIS lookup for domain trust signals
+try:
+    from ingestion.whois_lookup import get_whois_lookup, WHOIS_AVAILABLE
+except ImportError:
+    WHOIS_AVAILABLE = False
+    def get_whois_lookup():
+        return None
+
 logger = logging.getLogger(__name__)
 
 
@@ -57,6 +65,8 @@ class TrustStackAttributeDetector:
             "digital_watermark_fingerprint_detected": self._detect_watermark,
             "exif_metadata_integrity": self._detect_exif_integrity,
             "source_domain_trust_baseline": self._detect_domain_trust,
+            "domain_age": self._detect_domain_age,
+            "whois_privacy": self._detect_whois_privacy,
 
             # Resonance
             "community_alignment_index": self._detect_community_alignment,
@@ -702,6 +712,139 @@ class TrustStackAttributeDetector:
             )
         else:
             # Neutral case - don't report as an issue
+            return None
+
+    def _detect_domain_age(self, content: NormalizedContent) -> Optional[DetectedAttribute]:
+        """
+        Detect domain age using WHOIS lookup.
+        
+        Older domains are generally more trustworthy. This is a strong
+        provenance signal that helps identify fly-by-night operations
+        vs established organizations.
+        """
+        if not WHOIS_AVAILABLE:
+            return None
+        
+        # Get URL from content
+        url = content.url
+        if not url:
+            return None
+        
+        # Only do WHOIS lookup for web sources, not social platforms
+        # Social platforms (reddit, youtube, etc.) have their own trust baselines
+        if content.src.lower() in ['reddit', 'youtube', 'twitter', 'facebook', 'instagram', 'tiktok', 'amazon']:
+            return None
+        
+        try:
+            whois_lookup = get_whois_lookup()
+            if not whois_lookup or not whois_lookup.available:
+                return None
+            
+            result = whois_lookup.lookup(url)
+            
+            if 'error' in result:
+                logger.debug(f"WHOIS lookup failed for {url}: {result['error']}")
+                return None
+            
+            signals = result.get('trust_signals', {})
+            age_score = signals.get('domain_age_score')
+            
+            if age_score is None:
+                return None
+            
+            age_years = result.get('domain_age_years')
+            assessment = signals.get('domain_age_assessment', '')
+            
+            # Store WHOIS data in content meta for other detectors
+            if hasattr(content, 'meta') and content.meta is not None:
+                content.meta['whois_domain_age_years'] = age_years
+                content.meta['whois_domain_age_days'] = result.get('domain_age_days')
+                content.meta['whois_registrar'] = result.get('registrar')
+            
+            return DetectedAttribute(
+                attribute_id="domain_age",
+                dimension="provenance",
+                label="Domain Age",
+                value=age_score,
+                evidence=f"Domain age: {age_years} years. {assessment}",
+                confidence=0.9
+            )
+            
+        except Exception as e:
+            logger.warning(f"Error detecting domain age for {url}: {e}")
+            return None
+
+    def _detect_whois_privacy(self, content: NormalizedContent) -> Optional[DetectedAttribute]:
+        """
+        Detect WHOIS privacy/proxy registration.
+        
+        WHOIS privacy services hide the registrant's identity. While legitimate
+        for personal privacy, it can be a yellow flag for commercial sites
+        where transparency is expected.
+        """
+        if not WHOIS_AVAILABLE:
+            return None
+        
+        # Get URL from content
+        url = content.url
+        if not url:
+            return None
+        
+        # Only do WHOIS lookup for web sources
+        if content.src.lower() in ['reddit', 'youtube', 'twitter', 'facebook', 'instagram', 'tiktok', 'amazon']:
+            return None
+        
+        try:
+            whois_lookup = get_whois_lookup()
+            if not whois_lookup or not whois_lookup.available:
+                return None
+            
+            result = whois_lookup.lookup(url)
+            
+            if 'error' in result:
+                return None
+            
+            signals = result.get('trust_signals', {})
+            privacy_score = signals.get('privacy_score')
+            
+            if privacy_score is None:
+                return None
+            
+            has_privacy = result.get('whois_privacy', False)
+            assessment = signals.get('privacy_assessment', '')
+            registrant_org = result.get('registrant_org')
+            
+            # Store in content meta
+            if hasattr(content, 'meta') and content.meta is not None:
+                content.meta['whois_privacy'] = has_privacy
+                content.meta['whois_registrant_org'] = registrant_org
+            
+            # Only report if privacy is enabled (a potential flag)
+            # or if we have a clear positive signal (visible registration)
+            if has_privacy:
+                return DetectedAttribute(
+                    attribute_id="whois_privacy",
+                    dimension="provenance",
+                    label="WHOIS Privacy Status",
+                    value=privacy_score,
+                    evidence=f"WHOIS privacy enabled - registrant identity hidden. {assessment}",
+                    confidence=0.85
+                )
+            elif registrant_org:
+                return DetectedAttribute(
+                    attribute_id="whois_privacy",
+                    dimension="provenance",
+                    label="WHOIS Privacy Status",
+                    value=privacy_score,
+                    evidence=f"Registrant publicly visible: {registrant_org}",
+                    confidence=0.9
+                )
+            else:
+                # Neutral case - no privacy but also no org info
+                return None
+            
+        except Exception as e:
+            logger.warning(f"Error detecting WHOIS privacy for {url}: {e}")
             return None
 
     # ===== RESONANCE DETECTORS =====

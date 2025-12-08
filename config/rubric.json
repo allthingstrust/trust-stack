@@ -435,6 +435,74 @@
       "detection_method": "Resolve domain score from curated list"
     },
     {
+      "id": "domain_age",
+      "label": "Domain Age",
+      "match_meta": [
+        "whois",
+        "domain",
+        "age",
+        "registration"
+      ],
+      "effect": "bonus",
+      "value": 0,
+      "enabled": true,
+      "source_row": {
+        "Unified Dimension": "Provenance",
+        "Attribute (Objective Signal)": "Domain Age",
+        "How to Collect (API/Scrape)": "WHOIS lookup - extract creation date and calculate age",
+        "Field Type": "float",
+        "Scoring Rule (1–10)": "10 if 10+ years; 8 if 5-10 years; 6 if 2-5 years; 4 if 1-2 years; 2 if <1 year",
+        "Thresholds / Flags": "Flag: domains less than 1 year old",
+        "Frequency": "per domain (cached)",
+        "Notes / Example Tools": "python-whois library",
+        "Modality": "",
+        "Channel/ Platform": "Web (owned domains)",
+        "Ecosystem (Owned/Social/Marketplace/Email)": "Owned"
+      },
+      "dimension": "provenance",
+      "scoring_rule_parsed": {
+        "type": "continuous",
+        "min_value": 2,
+        "max_value": 10,
+        "description": "Older domains score higher; established domains (10+ years) score 10"
+      },
+      "detection_method": "WHOIS lookup for domain creation date"
+    },
+    {
+      "id": "whois_privacy",
+      "label": "WHOIS Privacy Status",
+      "match_meta": [
+        "whois",
+        "privacy",
+        "registrant",
+        "hidden"
+      ],
+      "effect": "bonus",
+      "value": 0,
+      "enabled": true,
+      "source_row": {
+        "Unified Dimension": "Provenance",
+        "Attribute (Objective Signal)": "WHOIS Privacy Status",
+        "How to Collect (API/Scrape)": "WHOIS lookup - check if registrant info is hidden by privacy service",
+        "Field Type": "categorical",
+        "Scoring Rule (1–10)": "8 if public registrant visible; 4 if privacy enabled",
+        "Thresholds / Flags": "Flag: WHOIS privacy enabled for commercial sites",
+        "Frequency": "per domain (cached)",
+        "Notes / Example Tools": "python-whois library",
+        "Modality": "",
+        "Channel/ Platform": "Web (owned domains)",
+        "Ecosystem (Owned/Social/Marketplace/Email)": "Owned"
+      },
+      "dimension": "provenance",
+      "scoring_rule_parsed": {
+        "type": "categorical",
+        "min_value": 4,
+        "max_value": 8,
+        "description": "Public registrant info scores higher; privacy services score lower"
+      },
+      "detection_method": "WHOIS lookup for registrant organization visibility"
+    },
+    {
       "id": "accessibility_compliance_wcag",
       "label": "Accessibility compliance (WCAG)",
       "match_meta": [

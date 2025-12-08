@@ -21,6 +21,10 @@ ATTRIBUTE_TO_KEY_SIGNAL = {
     'canonical_url_matches_declared_source': 'Metadata & Technical Provenance',
     'source_domain_trust_baseline': 'Brand Presence & Continuity',
     'digital_watermark_fingerprint_detected': 'Metadata & Technical Provenance',
+    # WHOIS-based provenance signals
+    'domain_age': 'Brand Presence & Continuity',
+    'whois_privacy': 'Brand Presence & Continuity',
+    'ai_vs_human_labeling_clarity': 'Authorship & Attribution',
     
     # Resonance
     'personalization_relevance_embedding_similarity': 'Dynamic Personalization',
@@ -37,10 +41,11 @@ ATTRIBUTE_TO_KEY_SIGNAL = {
     # Transparency
     'privacy_policy_link_availability_clarity': 'Plain Language Disclosures',
     'ai_generated_assisted_disclosure_present': 'AI/ML & Automation Clarity',
-    'ai_vs_human_labeling_clarity': 'AI/ML & Automation Clarity',
+    'ai_explainability_disclosure': 'AI/ML & Automation Clarity',
     'bot_disclosure_response_audit': 'AI/ML & Automation Clarity',
     'contact_info_availability': 'User Control & Consent Management',
     'ad_sponsored_label_consistency': 'Provenance Labeling & Source Integrity',
+    'data_source_citations_for_claims': 'Provenance Labeling & Source Integrity',
     
     # Verification
     'claim_to_source_traceability': 'Third-Party Trust Layers',
@@ -59,6 +64,10 @@ LABEL_TO_KEY_SIGNAL = {
     'Canonical URL Matches Declared Source': 'Metadata & Technical Provenance',
     'Source Domain Trust Baseline': 'Brand Presence & Continuity',
     'Digital Watermark Detected': 'Metadata & Technical Provenance',
+    # WHOIS-based provenance signals
+    'Domain Age': 'Brand Presence & Continuity',
+    'WHOIS Privacy Status': 'Brand Presence & Continuity',
+    'AI vs Human Labeling Clarity': 'Authorship & Attribution',
     
     # Resonance
     'Personalization Relevance': 'Dynamic Personalization',
@@ -75,7 +84,7 @@ LABEL_TO_KEY_SIGNAL = {
     # Transparency
     'Privacy Policy Link Availability & Clarity': 'Plain Language Disclosures',
     'AI-Generated/Assisted Disclosure Present': 'AI/ML & Automation Clarity',
-    'AI vs Human Labeling Clarity': 'AI/ML & Automation Clarity',
+    'AI Explainability Disclosure': 'AI/ML & Automation Clarity',
     'Bot Disclosure Response Audit': 'AI/ML & Automation Clarity',
     'Contact/Business Info Availability': 'User Control & Consent Management',
     'Ad/Sponsored Label Consistency': 'Provenance Labeling & Source Integrity',
