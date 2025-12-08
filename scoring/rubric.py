@@ -63,17 +63,19 @@ def load_rubric(path: str = None) -> Dict[str, Any]:
     score_multipliers = data.get("score_multipliers", DEFAULT_RUBRIC.get("score_multipliers", {}))
 
     # Load trust signals config
-    trust_signals = {}
-    signals_path = os.path.join(PROJECT_ROOT, "scoring", "config", "trust_signals.yml")
-    if os.path.exists(signals_path):
-        try:
-            import yaml
-            with open(signals_path, "r", encoding="utf-8") as f:
-                trust_signals = yaml.safe_load(f)
-        except Exception as e:
-            print(f"Warning: Failed to load trust_signals.yml: {e}")
-            # Fallback or empty dict
-            pass
+    trust_signals = data.get("trust_signals", {})
+    
+    # Fallback to YAML if not found in JSON
+    if not trust_signals:
+        signals_path = os.path.join(PROJECT_ROOT, "scoring", "config", "trust_signals.yml")
+        if os.path.exists(signals_path):
+            try:
+                import yaml
+                with open(signals_path, "r", encoding="utf-8") as f:
+                    trust_signals = yaml.safe_load(f)
+            except Exception as e:
+                print(f"Warning: Failed to load trust_signals.yml: {e}")
+                pass
 
     return {
         "version": data.get("version", DEFAULT_RUBRIC.get("version")),

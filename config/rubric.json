@@ -61,6 +61,112 @@
       "_rationale": "No adjustments for resonance - engagement and cultural fit standards apply equally to all content types"
     }
   },
+  "trust_signals": {
+    "dimensions": {
+      "Provenance": {
+        "weight": 0.2
+      },
+      "Verification": {
+        "weight": 0.2
+      },
+      "Transparency": {
+        "weight": 0.2
+      },
+      "Coherence": {
+        "weight": 0.2
+      },
+      "Resonance": {
+        "weight": 0.2
+      }
+    },
+    "signals": {
+      "prov_author_bylines": {
+        "label": "Author Attribution",
+        "dimension": "Provenance",
+        "weight": 1.0
+      },
+      "prov_metadata_c2pa": {
+        "label": "C2PA/Content Credentials",
+        "dimension": "Provenance",
+        "weight": 1.0
+      },
+      "prov_source_clarity": {
+        "label": "Source Verification",
+        "dimension": "Provenance",
+        "weight": 1.0
+      },
+      "prov_date_freshness": {
+        "label": "Content Freshness",
+        "dimension": "Provenance",
+        "weight": 1.0
+      },
+      "ver_fact_accuracy": {
+        "label": "Factual Accuracy",
+        "dimension": "Verification",
+        "weight": 1.0
+      },
+      "ver_trust_badges": {
+        "label": "Trust Badges",
+        "dimension": "Verification",
+        "weight": 1.0
+      },
+      "ver_social_proof": {
+        "label": "Social Proof",
+        "dimension": "Verification",
+        "weight": 1.0
+      },
+      "trans_disclosures": {
+        "label": "Disclosures",
+        "dimension": "Transparency",
+        "weight": 1.0
+      },
+      "trans_ai_labeling": {
+        "label": "AI Labeling",
+        "dimension": "Transparency",
+        "weight": 1.0
+      },
+      "trans_contact_info": {
+        "label": "Contact Information",
+        "dimension": "Transparency",
+        "weight": 1.0
+      },
+      "coh_voice_consistency": {
+        "label": "Voice Consistency",
+        "dimension": "Coherence",
+        "weight": 1.0
+      },
+      "coh_design_patterns": {
+        "label": "Design Consistency",
+        "dimension": "Coherence",
+        "weight": 1.0
+      },
+      "coh_technical_health": {
+        "label": "Technical Health",
+        "dimension": "Coherence",
+        "weight": 1.0
+      },
+      "res_cultural_fit": {
+        "label": "Cultural Fit",
+        "dimension": "Resonance",
+        "weight": 1.0
+      },
+      "res_personalization": {
+        "label": "Personalization",
+        "dimension": "Resonance",
+        "weight": 1.0
+      },
+      "res_engagement_metrics": {
+        "label": "Engagement",
+        "dimension": "Resonance",
+        "weight": 1.0
+      },
+      "res_readability": {
+        "label": "Readability",
+        "dimension": "Resonance",
+        "weight": 1.0
+      }
+    }
+  },
   "attributes": [
     {
       "id": "ai_vs_human_labeling_clarity",

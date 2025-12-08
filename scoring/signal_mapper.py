@@ -97,7 +97,7 @@ class SignalMapper:
                 id=signal_id,
                 label=signal_def.get('label', attr.label),
                 dimension=signal_def.get('dimension', attr.dimension),
-                value=float(attr.value),
+                value=float(attr.value) / 10.0,
                 weight=float(signal_def.get('weight', 1.0)),
                 evidence=[attr.evidence] if attr.evidence else [],
                 rationale=f"Detected via {attr.attribute_id}",
