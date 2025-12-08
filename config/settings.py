@@ -15,12 +15,19 @@ def get_secret(key: str, default: str = '') -> str:
     """
     Get secret from Streamlit Cloud secrets (if available) or environment variables.
     This allows the app to work both locally and on Streamlit Cloud.
+    Always returns a string, converting booleans/numbers from TOML if needed.
     """
     try:
         import streamlit as st
         # Try to get from Streamlit secrets first (for cloud deployment)
         if hasattr(st, 'secrets') and key in st.secrets:
-            return st.secrets[key]
+            value = st.secrets[key]
+            # Convert to string if it's a boolean or number from TOML
+            if isinstance(value, bool):
+                return str(value)  # True -> "True", False -> "False"
+            elif isinstance(value, (int, float)):
+                return str(value)  # 1 -> "1", 1.0 -> "1.0"
+            return value
     except (ImportError, FileNotFoundError):
         # Streamlit not available or secrets.toml not found - use environment variables
         pass
