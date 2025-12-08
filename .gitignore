@@ -61,6 +61,8 @@ config/local_settings.py
 
 # ignore cache folders
 .cache/
+.streamlit/secrets.toml
+
 
 #ignore temporary folders
 tmp_smoke/
