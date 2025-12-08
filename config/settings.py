@@ -10,6 +10,24 @@ from dotenv import load_dotenv
 # Load local .env file if present so os.getenv reads local secrets during dev
 load_dotenv()
 
+# Helper function to get secrets from Streamlit Cloud or environment variables
+def get_secret(key: str, default: str = '') -> str:
+    """
+    Get secret from Streamlit Cloud secrets (if available) or environment variables.
+    This allows the app to work both locally and on Streamlit Cloud.
+    """
+    try:
+        import streamlit as st
+        # Try to get from Streamlit secrets first (for cloud deployment)
+        if hasattr(st, 'secrets') and key in st.secrets:
+            return st.secrets[key]
+    except (ImportError, FileNotFoundError):
+        # Streamlit not available or secrets.toml not found - use environment variables
+        pass
+    
+    # Fallback to environment variables (for local development)
+    return os.getenv(key, default)
+
 @dataclass
 class ScoringWeights:
     """5D Trust Dimension weights"""
@@ -22,34 +40,34 @@ class ScoringWeights:
 @dataclass
 class APIConfig:
     """API configurations for data sources"""
-    reddit_client_id: str = os.getenv('REDDIT_CLIENT_ID', '')
-    reddit_client_secret: str = os.getenv('REDDIT_CLIENT_SECRET', '')
-    reddit_user_agent: str = os.getenv('REDDIT_USER_AGENT', 'AR-Tool/1.0')
+    reddit_client_id: str = get_secret('REDDIT_CLIENT_ID', '')
+    reddit_client_secret: str = get_secret('REDDIT_CLIENT_SECRET', '')
+    reddit_user_agent: str = get_secret('REDDIT_USER_AGENT', 'AR-Tool/1.0')
 
     # Amazon Product Advertising API
-    amazon_access_key: str = os.getenv('AMAZON_ACCESS_KEY', '')
-    amazon_secret_key: str = os.getenv('AMAZON_SECRET_KEY', '')
-    amazon_associate_tag: str = os.getenv('AMAZON_ASSOCIATE_TAG', '')
+    amazon_access_key: str = get_secret('AMAZON_ACCESS_KEY', '')
+    amazon_secret_key: str = get_secret('AMAZON_SECRET_KEY', '')
+    amazon_associate_tag: str = get_secret('AMAZON_ASSOCIATE_TAG', '')
 
     # LLM API Keys
-    openai_api_key: str = os.getenv('OPENAI_API_KEY', '')
-    anthropic_api_key: str = os.getenv('ANTHROPIC_API_KEY', '')
-    google_api_key: str = os.getenv('GOOGLE_API_KEY', '')
-    deepseek_api_key: str = os.getenv('DEEPSEEK_API_KEY', '')
+    openai_api_key: str = get_secret('OPENAI_API_KEY', '')
+    anthropic_api_key: str = get_secret('ANTHROPIC_API_KEY', '')
+    google_api_key: str = get_secret('GOOGLE_API_KEY', '')
+    deepseek_api_key: str = get_secret('DEEPSEEK_API_KEY', '')
 
     # YouTube Data API v3
-    youtube_api_key: str = os.getenv('YOUTUBE_API_KEY', '')
+    youtube_api_key: str = get_secret('YOUTUBE_API_KEY', '')
 
     # Search Provider APIs
-    brave_api_key: str = os.getenv('BRAVE_API_KEY', '')
-    serper_api_key: str = os.getenv('SERPER_API_KEY', '')
-    search_provider: str = os.getenv('SEARCH_PROVIDER', 'serper')
+    brave_api_key: str = get_secret('BRAVE_API_KEY', '')
+    serper_api_key: str = get_secret('SERPER_API_KEY', '')
+    search_provider: str = get_secret('SEARCH_PROVIDER', 'serper')
 
 # Global settings
 SETTINGS = {
     'app_name': 'Trust Stack Rating Tool',
     'version': '2.0.0-trust-stack',
-    'debug': os.getenv('DEBUG', 'False').lower() == 'true',
+    'debug': get_secret('DEBUG', 'False').lower() == 'true',
 
     # Trust Stack Rating configuration
     'scoring_weights': ScoringWeights(),
@@ -100,7 +118,7 @@ SETTINGS = {
     # Global control: whether to include parsed comments in the analysis
     'include_comments_in_analysis': False,
     # Brands to explicitly exclude from automated review (comma-separated env var or list)
-    'excluded_brands': [b.strip().lower() for b in os.getenv('EXCLUDED_BRANDS', '').split(',') if b.strip()],
+    'excluded_brands': [b.strip().lower() for b in get_secret('EXCLUDED_BRANDS', '').split(',') if b.strip()],
 }
 
 # URL Collection Ratio Configuration
