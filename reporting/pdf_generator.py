@@ -1148,9 +1148,9 @@ class PDFReportGenerator:
                 use_llm = bool(report_data.get('use_llm_for_examples') or report_data.get('use_llm_for_descriptions'))
                 if use_llm and _llm_summarize is not None:
                     try:
-                        desc_llm = _llm_summarize(desc or clean_text_for_llm(meta), model=report_data.get('llm_model', 'gpt-3.5-turbo'), max_words=120)
+                        desc_llm = _llm_summarize(desc or clean_text_for_llm(meta), model=report_data.get('llm_model', 'gpt-4o'), max_words=120)
                         if desc_llm and add_llm_provenance is not None:
-                            desc = add_llm_provenance(desc_llm, report_data.get('llm_model', 'gpt-3.5-turbo'))
+                            desc = add_llm_provenance(desc_llm, report_data.get('llm_model', 'gpt-4o'))
                         elif desc_llm:
                             # Fallback if helper not available
                             desc = desc_llm.strip()

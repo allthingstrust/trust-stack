@@ -14,8 +14,8 @@ class LLMClient:
     client, rate-limiting, retries, and secure secret handling.
     """
 
-    def __init__(self, model: str = 'gpt-3.5-turbo', cache_dir: str = None, api_key: str = None):
-        self.model = model or 'gpt-3.5-turbo'
+    def __init__(self, model: str = 'gpt-4o', cache_dir: str = None, api_key: str = None):
+        self.model = model or 'gpt-4o'
         self.cache_dir = cache_dir or CACHE_DIR
         os.makedirs(self.cache_dir, exist_ok=True)
         self.api_key = api_key or os.environ.get('OPENAI_API_KEY')

@@ -112,7 +112,7 @@ class ChatClient:
     def __init__(
         self,
         api_key: Optional[str] = None,
-        default_model: str = 'gpt-3.5-turbo',
+        default_model: str = 'gpt-4o',
         anthropic_api_key: Optional[str] = None,
         google_api_key: Optional[str] = None,
         deepseek_api_key: Optional[str] = None
@@ -462,7 +462,7 @@ class ChatClient:
         Args:
             text: Text to summarize
             max_words: Target word count for summary (default: 120)
-            model: Model to use (default: gpt-3.5-turbo)
+            model: Model to use (default: gpt-4o)
 
         Returns:
             Summary text or None if request fails
