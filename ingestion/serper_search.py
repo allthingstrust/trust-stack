@@ -14,6 +14,7 @@ import os
 import time
 import threading
 from typing import List, Dict, Optional
+from config.settings import get_secret
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +39,7 @@ def search_serper(query: str, size: int = 10, start_page: int = 1) -> List[Dict[
         ValueError: If SERPER_API_KEY is not configured
         requests.exceptions.RequestException: If API request fails
     """
-    api_key = os.getenv('SERPER_API_KEY')
+    api_key = get_secret('SERPER_API_KEY')
     if not api_key:
         raise ValueError(
             "SERPER_API_KEY not found in environment. "
@@ -464,7 +465,7 @@ def get_serper_stats() -> Dict[str, any]:
 
     Note: This requires a valid API key and may not be available on all plans.
     """
-    api_key = os.getenv('SERPER_API_KEY')
+    api_key = get_secret('SERPER_API_KEY')
     if not api_key:
         return {"error": "SERPER_API_KEY not configured"}
 

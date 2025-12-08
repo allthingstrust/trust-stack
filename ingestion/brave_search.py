@@ -20,6 +20,7 @@ import threading
 import re
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from config.settings import get_secret
 
 # Import fetch configuration module
 from ingestion.fetch_config import (
@@ -57,7 +58,7 @@ def search_brave(query: str, size: int = 10, start_offset: int = 0) -> List[Dict
     automatically paginate through multiple requests to collect the desired number of results.
     """
     # If user has provided a Brave API key, prefer the API endpoint
-    api_key = os.getenv('BRAVE_API_KEY')
+    api_key = get_secret('BRAVE_API_KEY')
     api_endpoint = os.getenv('BRAVE_API_ENDPOINT', 'https://api.search.brave.com/res/v1/web/search')
     headers = {
         "User-Agent": os.getenv('BRAVE_USER_AGENT', "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"),

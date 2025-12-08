@@ -22,6 +22,7 @@ from __future__ import annotations
 import logging
 import os
 from typing import List, Dict
+from config.settings import get_secret
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +62,7 @@ def search(query: str, size: int = 10, provider: str | None = None) -> List[Dict
     """
     # Determine which provider to use
     if provider is None:
-        provider = os.getenv('SEARCH_PROVIDER', 'brave').lower()
+        provider = get_secret('SEARCH_PROVIDER', 'brave').lower()
 
     logger.info('Using search provider: %s for query: %s', provider, query)
 
@@ -106,7 +107,7 @@ def get_current_provider() -> str:
     Returns:
         Name of the current provider from SEARCH_PROVIDER env var
     """
-    return os.getenv('SEARCH_PROVIDER', 'brave').lower()
+    return get_secret('SEARCH_PROVIDER', 'brave').lower()
 
 
 def validate_provider_config() -> Dict[str, any]:
@@ -137,7 +138,7 @@ def validate_provider_config() -> Dict[str, any]:
 
     # Check if API keys are configured
     if provider == 'brave':
-        api_key = os.getenv('BRAVE_API_KEY')
+        api_key = get_secret('BRAVE_API_KEY')
         if api_key:
             result['configured'] = True
             result['ready'] = True
@@ -146,7 +147,7 @@ def validate_provider_config() -> Dict[str, any]:
             result['message'] = 'BRAVE_API_KEY not found in environment'
 
     elif provider == 'serper':
-        api_key = os.getenv('SERPER_API_KEY')
+        api_key = get_secret('SERPER_API_KEY')
         if api_key:
             result['configured'] = True
             result['ready'] = True
