@@ -720,11 +720,12 @@ def _fetch_with_playwright(url: str, user_agent: str, browser_manager=None) -> D
             if not _PLAYWRIGHT_AVAILABLE:
                 return {"title": "", "body": "", "url": url, "terms": "", "privacy": ""}
             pw_context = sync_playwright().start()
-            browser = pw_context.chromium.launch(headless=True)
+            # Use --disable-http2 to avoid ERR_HTTP2_PROTOCOL_ERROR from CDNs/WAFs
+            browser = pw_context.chromium.launch(headless=True, args=['--disable-http2'])
             page = browser.new_page(user_agent=user_agent)
         
-        # Navigate to page
-        page.goto(url, timeout=20000)
+        # Navigate to page - use domcontentloaded for faster/more reliable loading
+        page.goto(url, timeout=20000, wait_until='domcontentloaded')
         
         # Wait for body
         try:

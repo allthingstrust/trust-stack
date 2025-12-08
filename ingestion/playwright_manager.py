@@ -70,13 +70,15 @@ class PlaywrightBrowserManager:
             playwright = sync_playwright().start()
             
             # Harden browser launch args to prevent crashes on macOS/Headless
+            # --disable-http2 fixes ERR_HTTP2_PROTOCOL_ERROR from CDNs/WAFs (e.g., Akamai on adidas.com)
             launch_args = [
                 '--disable-gpu',
                 '--disable-dev-shm-usage',
                 '--no-sandbox',
                 '--disable-setuid-sandbox',
                 '--disable-accelerated-2d-canvas',
-                '--disable-gl-drawing-for-tests'
+                '--disable-gl-drawing-for-tests',
+                '--disable-http2'
             ]
             
             browser = playwright.chromium.launch(
@@ -180,7 +182,9 @@ class PlaywrightBrowserManager:
         page = None
         try:
             page = browser.new_page(user_agent=user_agent)
-            page.goto(url, timeout=20000)
+            # Use domcontentloaded instead of 'load' - faster and more reliable for SPAs
+            # 'load' waits for all resources which can timeout on heavy sites
+            page.goto(url, timeout=20000, wait_until='domcontentloaded')
             
             try:
                 page.wait_for_selector('body', timeout=8000)
