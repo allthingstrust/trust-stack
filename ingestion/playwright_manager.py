@@ -96,6 +96,7 @@ class PlaywrightBrowserManager:
                     break
                     
                 url, user_agent, result_queue = item
+                logger.debug(f'Browser thread processing fetch request for: {url}')
                 
                 try:
                     # Check if browser is still connected
@@ -181,18 +182,23 @@ class PlaywrightBrowserManager:
         """Perform the actual fetch logic inside the browser thread."""
         page = None
         try:
+            logger.debug(f'[PLAYWRIGHT] Creating new page for: {url}')
             page = browser.new_page(user_agent=user_agent)
+            logger.debug(f'[PLAYWRIGHT] Page created, navigating to: {url}')
             # Use domcontentloaded instead of 'load' - faster and more reliable for SPAs
             # 'load' waits for all resources which can timeout on heavy sites
             page.goto(url, timeout=20000, wait_until='domcontentloaded')
+            logger.debug(f'[PLAYWRIGHT] Navigation complete for: {url}')
             
             try:
                 page.wait_for_selector('body', timeout=8000)
             except Exception:
                 pass
             
+            logger.debug(f'[PLAYWRIGHT] Extracting content from: {url}')
             page_content = page.content()
             page_title = page.title() or ''
+            logger.debug(f'[PLAYWRIGHT] Content extracted, title="{page_title[:50]}..." for: {url}')
             
             # Extraction logic (mirrors _fetch_with_playwright)
             page_body = ""
@@ -252,17 +258,24 @@ class PlaywrightBrowserManager:
         """Submit a fetch request to the browser thread and wait for result."""
         if not self.is_started:
             # Try to auto-restart if not started
+            logger.info(f'Browser not started, attempting to start for: {url}')
             if not self.start():
                 return {"title": "", "body": "", "url": url, "error": "Browser not started"}
             
+        logger.debug(f'[PLAYWRIGHT] Submitting fetch request for: {url}')
         result_queue = queue.Queue()
         self._request_queue.put((url, user_agent, result_queue))
         
         try:
-            return result_queue.get(timeout=timeout)
+            result = result_queue.get(timeout=timeout)
+            logger.debug(f'[PLAYWRIGHT] Got result for: {url}')
+            return result
         except queue.Empty:
-            logger.error(f"Timeout waiting for Playwright fetch: {url}")
-            return {"title": "", "body": "", "url": url, "error": "Timeout waiting for browser"}
+            # Check if thread is still alive for better diagnostics
+            thread_alive = self._thread.is_alive() if self._thread else False
+            queue_size = self._request_queue.qsize()
+            logger.error(f"Timeout waiting for Playwright fetch: {url} (thread_alive={thread_alive}, queue_size={queue_size})")
+            return {"title": "", "body": "", "url": url, "error": f"Timeout waiting for browser (thread_alive={thread_alive})"}
 
     def close(self):
         """Stop the browser thread."""
