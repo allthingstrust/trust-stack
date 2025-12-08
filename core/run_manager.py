@@ -182,6 +182,14 @@ class RunManager:
 
         for source in sources:
             source = (source or "").lower()
+            
+            # Map 'web' to the configured search provider
+            if source == "web":
+                from config.settings import get_secret
+                provider = get_secret('SEARCH_PROVIDER', 'brave').lower()
+                logger.info(f"'web' source requested, using configured provider: {provider}")
+                source = provider
+            
             if source == "brave":
                 collected.extend(self._collect_from_brave(keywords, limit))
             elif source == "serper":
