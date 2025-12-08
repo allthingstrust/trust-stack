@@ -149,7 +149,7 @@ def main():
 
             report_data_dict = {
                 "brand_id": run_data.brand.name if run_data.brand else args.brand,
-                "generated_at": run_data.created_at.strftime("%Y-%m-%d"),
+                "generated_at": run_data.started_at.strftime("%Y-%m-%d"),
                 "total_items_analyzed": len(items),
                 "dimension_breakdown": dimension_breakdown,
                 "items": items,
