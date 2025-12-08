@@ -21,7 +21,7 @@ DEFAULT_RUBRIC: Dict[str, Any] = {
         "max_total_penalty": -50,
         "normalize_weights": True,
         "max_llm_items": 10,
-        "llm_model": "gpt-3.5-turbo",
+        "llm_model": "gpt-4o",
         "triage_method": "top_uncertain",
         "max_llm_cost_per_run": None,
     },

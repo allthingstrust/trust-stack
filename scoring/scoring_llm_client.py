@@ -20,12 +20,12 @@ class LLMScoringClient:
     Handles all OpenAI API interactions with different scoring patterns
     """
     
-    def __init__(self, model: str = "gpt-3.5-turbo"):
+    def __init__(self, model: str = "gpt-4o"):
         """
         Initialize LLM scoring client
         
         Args:
-            model: OpenAI model to use (default: gpt-3.5-turbo)
+            model: OpenAI model to use (default: gpt-4o)
         """
         self.client = ChatClient(
             api_key=APIConfig.openai_api_key,
