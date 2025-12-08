@@ -222,11 +222,31 @@ class TrustStackAttributeDetector:
         Blog posts and articles warrant visible bylines, but corporate landing pages
         showing organizational/team attribution through structured data or subtle
         footer credits can still pass the Author Identity check.
+        
+        Also checks for platform verification badges (Instagram, LinkedIn, X/Twitter)
+        which indicate verified accounts with blue checkmarks.
         """
         meta = content.meta or {}
 
         # Determine content type
         content_type = self._determine_content_type(content)
+
+        # Check for platform verification badges (from page_fetcher extraction)
+        verification_badges = meta.get("verification_badges", {})
+        if isinstance(verification_badges, dict) and verification_badges.get("verified"):
+            platform = verification_badges.get("platform", "unknown")
+            badge_type = verification_badges.get("badge_type", "verification_badge")
+            evidence = verification_badges.get("evidence", "Platform verification detected")
+            
+            # Platform verification is high-confidence verification
+            return DetectedAttribute(
+                attribute_id="author_brand_identity_verified",
+                dimension="provenance",
+                label="Author/Brand Identity Verified",
+                value=10.0,
+                evidence=f"Platform verified ({platform}): {badge_type}. {evidence}",
+                confidence=1.0
+            )
 
         # Check for explicit verification (highest confidence)
         is_explicitly_verified = (
@@ -244,6 +264,7 @@ class TrustStackAttributeDetector:
                 evidence=f"Verified author: {content.author}",
                 confidence=1.0
             )
+
 
         # Check for visible byline (expected for blog/article content)
         has_visible_byline = content.author and content.author.lower() not in ['unknown', 'anonymous', '']
