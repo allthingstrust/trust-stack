@@ -1847,8 +1847,24 @@ def show_results_page():
     fair = sum(1 for item in items if 40 <= item.get('final_score', 0) < 60)
     poor = sum(1 for item in items if item.get('final_score', 0) < 40)
 
-    # Header
-    st.markdown('<div class="main-header">⭐ Trust Stack Results</div>', unsafe_allow_html=True)
+    # Header with Download Report CTA
+    header_col, download_col = st.columns([3, 1])
+    with header_col:
+        st.markdown('<div class="main-header">⭐ Trust Stack Results</div>', unsafe_allow_html=True)
+    with download_col:
+        # Download Report button - links to PDF
+        pdf_path = run_data.get('pdf_path')
+        if pdf_path and os.path.exists(pdf_path):
+            with open(pdf_path, 'rb') as f:
+                st.download_button(
+                    label="📄 Download Report",
+                    data=f,
+                    file_name=os.path.basename(pdf_path),
+                    mime="application/pdf",
+                    key="header_download_report"
+                )
+        else:
+            st.button("📄 Download Report", disabled=True, help="PDF not available yet")
     
     # Date
     from datetime import datetime

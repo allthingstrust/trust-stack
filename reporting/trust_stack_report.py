@@ -327,8 +327,8 @@ You must output the analysis in the EXACT following format. Use the provided HTM
 
 *Rationale:*
 
-*   **[Point 1]**: [Explanation - MUST reference specific content from the snippets above]
-*   **[Point 2]**: [Explanation - MUST reference specific content from the snippets above]
+*   [Explanation - MUST reference specific content from the snippets above]
+*   [Explanation - MUST reference specific content from the snippets above]
 ... (3-5 bullet points explaining the score)
 
 **{dimension.upper()}**: Score: {score:.1f} / 10
