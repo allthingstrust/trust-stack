@@ -136,6 +136,12 @@ except Exception:
         except Exception:
             return ''
 
+# Import Trust Stack report generator for rich content
+try:
+    from reporting.trust_stack_report import generate_trust_stack_report
+except Exception:
+    generate_trust_stack_report = None
+
 class PDFReportGenerator:
     """Generates PDF reports for Trust Stack Rating analysis"""
     
@@ -169,6 +175,34 @@ class PDFReportGenerator:
             spaceAfter=6,
             alignment=TA_CENTER,
             textColor=colors.darkgreen
+        ))
+        
+        # Additional styles for Trust Stack content
+        self.styles.add(ParagraphStyle(
+            name='DimensionHeader',
+            parent=self.styles['Heading3'],
+            fontSize=14,
+            spaceAfter=8,
+            spaceBefore=12,
+            textColor=colors.HexColor('#1a5276')
+        ))
+        
+        self.styles.add(ParagraphStyle(
+            name='TrustStackBody',
+            parent=self.styles['Normal'],
+            fontSize=9,
+            spaceAfter=4,
+            leading=12
+        ))
+        
+        self.styles.add(ParagraphStyle(
+            name='TrustStackBullet',
+            parent=self.styles['Normal'],
+            fontSize=9,
+            spaceAfter=3,
+            leftIndent=20,
+            bulletIndent=10,
+            leading=11
         ))
     
     def generate_report(self, report_data: Dict[str, Any], output_path: str, include_items_table: bool = False) -> str:
@@ -208,15 +242,15 @@ class PDFReportGenerator:
         story.extend(self._create_visual_overview(report_data))
         story.append(PageBreak())
 
-        # 4. Notable Content Examples (success highlights and problem areas)
+        # 4. Trust Stack Report (matches web app content - per-dimension analysis)
+        story.extend(self._create_trust_stack_section(report_data))
+        story.append(PageBreak())
+
+        # 5. Notable Content Examples (success highlights and problem areas)
         story.extend(self._create_notable_examples(report_data))
         story.append(PageBreak())
 
-        # 5. Dimension Deep Dive (per-dimension analysis with examples)
-        story.extend(self._create_dimension_deep_dive(report_data))
-        story.append(PageBreak())
-
-        # 5. Item-by-Item Diagnostic (detailed appendix)
+        # 6. Item-by-Item Diagnostic (detailed appendix)
         story.extend(self._create_item_diagnostic(report_data))
 
         # Build PDF
@@ -349,6 +383,251 @@ class PDFReportGenerator:
 
         return story
 
+    def _create_trust_stack_section(self, report_data: Dict[str, Any]) -> List:
+        """
+        Create Trust Stack Report section matching the web app content.
+        
+        This section generates the same detailed analysis displayed in the web app,
+        including per-dimension rationale, key signal evaluations, diagnostics, 
+        and recommendations.
+        """
+        import re
+        story = []
+        
+        story.append(Paragraph("Trust Stack Report", self.styles['SectionHeader']))
+        story.append(Spacer(1, 10))
+        story.append(Paragraph(
+            "This section provides detailed dimension-by-dimension analysis of your brand's trust posture, "
+            "matching the content displayed in the web application.",
+            self.styles['Normal']
+        ))
+        story.append(Spacer(1, 15))
+        
+        # Check if generate_trust_stack_report is available
+        if generate_trust_stack_report is None:
+            story.append(Paragraph(
+                "<i>Trust Stack Report generation is not available. Please check the reporting module.</i>",
+                self.styles['Normal']
+            ))
+            return story
+        
+        # Get model configuration
+        summary_model = report_data.get('llm_model', 'gpt-4o-mini')
+        
+        try:
+            # Generate the Trust Stack report markdown content
+            trust_stack_text = generate_trust_stack_report(report_data, model=summary_model)
+            
+            if not trust_stack_text:
+                story.append(Paragraph(
+                    "<i>No Trust Stack content was generated.</i>",
+                    self.styles['Normal']
+                ))
+                return story
+            
+            # Convert markdown to PDF elements
+            story.extend(self._markdown_to_pdf_elements(trust_stack_text))
+            
+        except Exception as e:
+            logger.error(f"Failed to generate Trust Stack section: {e}")
+            story.append(Paragraph(
+                f"<i>Error generating Trust Stack Report: {str(e)}</i>",
+                self.styles['Normal']
+            ))
+        
+        return story
+    
+    def _markdown_to_pdf_elements(self, markdown_text: str) -> List:
+        """
+        Convert markdown text to ReportLab PDF elements.
+        
+        Handles:
+        - Bold (**text**)
+        - Italic (*text*)
+        - Headers (##, ###)
+        - Bullet points (- or *)
+        - Tables (| col | col |)
+        - Emojis (converted to text or removed)
+        """
+        import re
+        story = []
+        
+        # Emoji replacements for better PDF compatibility
+        emoji_map = {
+            '🧠': '[BRAIN]',
+            '🗝️': '[KEY]',
+            '🧮': '[CALC]',
+            '📊': '[CHART]',
+            '🛠️': '[TOOLS]',
+            '📄': '[DOC]',
+            '🔐': '[LOCK]',
+            '📣': '[SPEAKER]',
+            '🔍': '[SEARCH]',
+            '📌': '[PIN]',
+            '✅': '[OK]',
+            '⚠️': '[WARN]',
+            '❌': '[X]',
+            '●': '*',
+            '⭐': '[STAR]',
+        }
+        
+        def clean_emoji(text):
+            """Replace emojis with text equivalents"""
+            for emoji, replacement in emoji_map.items():
+                text = text.replace(emoji, replacement)
+            # Remove any remaining emojis (unicode ranges)
+            text = re.sub(r'[\U0001F600-\U0001F64F]', '', text)  # emoticons
+            text = re.sub(r'[\U0001F300-\U0001F5FF]', '', text)  # symbols & pictographs
+            text = re.sub(r'[\U0001F680-\U0001F6FF]', '', text)  # transport & map
+            text = re.sub(r'[\U0001F1E0-\U0001F1FF]', '', text)  # flags
+            return text
+        
+        def md_to_html(text):
+            """Convert markdown formatting to HTML tags for ReportLab"""
+            # Bold: **text** -> <b>text</b>
+            text = re.sub(r'\*\*([^*]+)\*\*', r'<b>\1</b>', text)
+            # Italic: *text* -> <i>text</i> (but not ** which is bold)
+            text = re.sub(r'(?<!\*)\*([^*]+)\*(?!\*)', r'<i>\1</i>', text)
+            # Clean emojis
+            text = clean_emoji(text)
+            return text
+        
+        # Split into lines
+        lines = markdown_text.split('\n')
+        
+        # Track if we're in a table
+        in_table = False
+        table_rows = []
+        current_paragraph_lines = []
+        
+        def flush_paragraph():
+            """Flush accumulated paragraph lines"""
+            if current_paragraph_lines:
+                text = ' '.join(current_paragraph_lines)
+                text = md_to_html(text)
+                if text.strip():
+                    story.append(Paragraph(text, self.styles['TrustStackBody']))
+                    story.append(Spacer(1, 3))
+                current_paragraph_lines.clear()
+        
+        def render_table():
+            """Render accumulated table rows"""
+            if not table_rows:
+                return
+            
+            # Parse table rows
+            parsed_rows = []
+            for row in table_rows:
+                # Skip separator rows (|---|---|)
+                if re.match(r'^\|[\s\-:]+\|$', row.replace(' ', '')):
+                    continue
+                # Split by | and clean
+                cells = [cell.strip() for cell in row.split('|') if cell.strip()]
+                if cells:
+                    parsed_rows.append(cells)
+            
+            if not parsed_rows:
+                return
+            
+            # Create table
+            try:
+                # Limit cell content length
+                for i, row in enumerate(parsed_rows):
+                    parsed_rows[i] = [cell[:60] for cell in row]
+                
+                # Calculate column widths
+                num_cols = max(len(row) for row in parsed_rows)
+                col_width = 5.5 * inch / num_cols
+                
+                table = Table(parsed_rows, colWidths=[col_width] * num_cols)
+                table.setStyle(TableStyle([
+                    ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+                    ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                    ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+                    ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                    ('FONTSIZE', (0, 0), (-1, -1), 8),
+                    ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+                    ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+                    ('GRID', (0, 0), (-1, -1), 0.5, colors.grey)
+                ]))
+                story.append(table)
+                story.append(Spacer(1, 8))
+            except Exception as e:
+                logger.warning(f"Failed to render table: {e}")
+            
+            table_rows.clear()
+        
+        for line in lines:
+            stripped = line.strip()
+            
+            # Empty line - flush paragraph
+            if not stripped:
+                flush_paragraph()
+                if in_table:
+                    render_table()
+                    in_table = False
+                continue
+            
+            # Table row
+            if stripped.startswith('|') and stripped.endswith('|'):
+                flush_paragraph()
+                in_table = True
+                table_rows.append(stripped)
+                continue
+            elif in_table:
+                render_table()
+                in_table = False
+            
+            # Horizontal rule
+            if stripped == '---' or stripped == '***':
+                flush_paragraph()
+                story.append(Spacer(1, 10))
+                continue
+            
+            # Headers
+            if stripped.startswith('###'):
+                flush_paragraph()
+                header_text = md_to_html(stripped[3:].strip())
+                story.append(Paragraph(header_text, self.styles['Heading3']))
+                story.append(Spacer(1, 5))
+                continue
+            elif stripped.startswith('##'):
+                flush_paragraph()
+                header_text = md_to_html(stripped[2:].strip())
+                story.append(Paragraph(header_text, self.styles['SectionHeader']))
+                story.append(Spacer(1, 8))
+                continue
+            elif stripped.startswith('#'):
+                flush_paragraph()
+                header_text = md_to_html(stripped[1:].strip())
+                story.append(Paragraph(header_text, self.styles['DimensionHeader']))
+                story.append(Spacer(1, 8))
+                continue
+            
+            # Bullet points
+            if re.match(r'^[\*\-]\s+', stripped):
+                flush_paragraph()
+                bullet_text = md_to_html(stripped[2:].strip())
+                story.append(Paragraph(f"• {bullet_text}", self.styles['TrustStackBullet']))
+                continue
+            
+            # Numbered lists
+            if re.match(r'^\d+\.\s+', stripped):
+                flush_paragraph()
+                list_text = md_to_html(stripped)
+                story.append(Paragraph(list_text, self.styles['TrustStackBullet']))
+                continue
+            
+            # Regular text - accumulate for paragraph
+            current_paragraph_lines.append(stripped)
+        
+        # Flush remaining content
+        flush_paragraph()
+        if in_table:
+            render_table()
+        
+        return story
+    
     def _create_executive_summary_enhanced(self, report_data: Dict[str, Any]) -> List:
         """Create enhanced executive summary with robust analysis and recommendations"""
         story = []

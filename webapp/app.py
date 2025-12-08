@@ -2007,17 +2007,6 @@ Summary of Analyzed Content:"""
     st.markdown(full_description)
     
     st.divider()
-    
-    # Display model info (read-only - model was selected before analysis)
-    summary_model_used = report.get('llm_model', 'gpt-4o-mini')
-    recommendations_model_used = report.get('recommendations_model', 'gpt-4o-mini')
-
-    with st.expander("ℹ️ AI Models Used", expanded=False):
-        st.markdown("**Models selected for this analysis:**")
-        st.info(f"📝 **Executive Summary**: {summary_model_used}\n\n📋 **Recommendations**: {recommendations_model_used}")
-        st.caption("💡 Models are selected on the analysis page before running. To use different models, run a new analysis.")
-
-    st.divider()
 
     # =========================================================================
     # TRUST STACK REPORT SECTION
