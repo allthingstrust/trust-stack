@@ -207,17 +207,17 @@ class PDFReportGenerator:
     
     def generate_report(self, report_data: Dict[str, Any], output_path: str, include_items_table: bool = False) -> str:
         """
-        Generate PDF report from report data
+        Generate PDF report from report data - simplified to match web app layout.
 
         Args:
             report_data: Dictionary containing report data
             output_path: Path to save the PDF file
-            include_items_table: Whether to include detailed items table (deprecated, always included in appendix)
+            include_items_table: Whether to include detailed items table (ignored in simplified format)
 
         Returns:
             Path to generated PDF file
         """
-        logger.info(f"Generating PDF report: {output_path}")
+        logger.info(f"Generating PDF report (web app format): {output_path}")
 
         doc = SimpleDocTemplate(
             output_path,
@@ -225,34 +225,128 @@ class PDFReportGenerator:
             rightMargin=72,
             leftMargin=72,
             topMargin=72,
-            bottomMargin=18
+            bottomMargin=36
         )
 
         story = []
 
-        # 1. Title page
-        story.extend(self._create_title_page(report_data))
-        story.append(PageBreak())
-
-        # 2. Executive Summary (robust analysis with data-driven recommendations)
-        story.extend(self._create_executive_summary_enhanced(report_data))
-        story.append(PageBreak())
-
-        # 3. Visual Overview (charts and graphs)
-        story.extend(self._create_visual_overview(report_data))
-        story.append(PageBreak())
-
-        # 4. Trust Stack Report (matches web app content - per-dimension analysis)
+        # =========================================================================
+        # HEADER SECTION (matches web app)
+        # =========================================================================
+        
+        # Title: Trust Stack Results
+        story.append(Paragraph("⭐ Trust Stack Results", self.styles['CustomTitle']))
+        story.append(Spacer(1, 10))
+        
+        # Date
+        from datetime import datetime
+        current_date = report_data.get('generated_at', datetime.now().strftime("%B %d, %Y"))
+        story.append(Paragraph(f"<b>Date:</b> {current_date}", self.styles['Normal']))
+        story.append(Spacer(1, 15))
+        
+        # Brand name
+        brand_id = report_data.get('brand_id', 'Unknown Brand')
+        brand_name_display = brand_id.replace('_', ' ').replace('-', ' ').title()
+        story.append(Paragraph(brand_name_display, self.styles['SectionHeader']))
+        story.append(Spacer(1, 8))
+        
+        # Data Sources
+        items = report_data.get('items', [])
+        actual_urls = set()
+        for item in items:
+            meta = item.get('meta', {})
+            if isinstance(meta, str):
+                try:
+                    import json
+                    meta = json.loads(meta) if meta else {}
+                except:
+                    meta = {}
+            url = meta.get('source_url') or meta.get('url') or meta.get('link')
+            if url and url.startswith('http'):
+                from urllib.parse import urlparse
+                parsed = urlparse(url)
+                domain = f"{parsed.scheme}://{parsed.netloc}"
+                actual_urls.add(domain)
+        
+        if actual_urls:
+            sources_str = ', '.join(sorted(actual_urls))
+            story.append(Paragraph(f"<b>Data Source(s):</b> {sources_str}", self.styles['Normal']))
+        else:
+            story.append(Paragraph("<b>Data Source(s):</b> Brand content analysis", self.styles['Normal']))
+        story.append(Spacer(1, 10))
+        
+        # Description
+        total_items = len(items)
+        description = f"This report evaluates <b>{total_items} content items</b> across five trust dimensions."
+        story.append(Paragraph(description, self.styles['Normal']))
+        story.append(Spacer(1, 20))
+        
+        # Divider line
+        from reportlab.platypus import HRFlowable
+        story.append(HRFlowable(width="100%", thickness=1, color=colors.grey))
+        story.append(Spacer(1, 20))
+        
+        # =========================================================================
+        # TRUST STACK REPORT SECTION (main content - matches web app)
+        # =========================================================================
+        
         story.extend(self._create_trust_stack_section(report_data))
-        story.append(PageBreak())
-
-        # 5. Notable Content Examples (success highlights and problem areas)
-        story.extend(self._create_notable_examples(report_data))
-        story.append(PageBreak())
-
-        # 6. Item-by-Item Diagnostic (detailed appendix)
-        story.extend(self._create_item_diagnostic(report_data))
-
+        
+        # =========================================================================
+        # CONTENT ITEMS TABLE (simplified)
+        # =========================================================================
+        
+        story.append(Spacer(1, 20))
+        story.append(HRFlowable(width="100%", thickness=1, color=colors.grey))
+        story.append(Spacer(1, 15))
+        story.append(Paragraph("Content Items Detail", self.styles['SectionHeader']))
+        story.append(Spacer(1, 10))
+        
+        if items:
+            # Create simplified items table
+            table_data = [['Source', 'Title', 'Score', 'Rating']]
+            
+            for item in items[:50]:  # Limit to 50 items for PDF
+                meta = item.get('meta', {})
+                if isinstance(meta, str):
+                    try:
+                        import json
+                        meta = json.loads(meta) if meta else {}
+                    except:
+                        meta = {}
+                
+                source = str(item.get('source', '')).upper()[:10]
+                title = (meta.get('title') or meta.get('name') or 'N/A')[:40]
+                if len(title) == 40:
+                    title += '...'
+                    
+                score = item.get('final_score', 0)
+                
+                if score >= 80:
+                    rating = 'Excellent'
+                elif score >= 60:
+                    rating = 'Good'
+                elif score >= 40:
+                    rating = 'Fair'
+                else:
+                    rating = 'Poor'
+                
+                table_data.append([source, title, f"{score:.1f}", rating])
+            
+            table = Table(table_data, colWidths=[0.8*inch, 3*inch, 0.8*inch, 1*inch])
+            table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+                ('ALIGN', (2, 0), (2, -1), 'CENTER'),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, -1), 8),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+                ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+                ('GRID', (0, 0), (-1, -1), 0.5, colors.grey)
+            ]))
+            story.append(table)
+        
         # Build PDF
         doc.build(story)
 
