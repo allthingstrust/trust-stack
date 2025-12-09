@@ -360,7 +360,7 @@ class RunManager:
                 rationale['detected_attributes'] = detected_attrs
             
             # Also preserve other useful meta fields
-            for key in ['attribute_count', 'source_type', 'channel']:
+            for key in ['attribute_count', 'source_type', 'channel', 'dimensions']:
                 if key in meta:
                     rationale[key] = meta[key]
         
