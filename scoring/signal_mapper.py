@@ -19,7 +19,9 @@ class SignalMapper:
         # Provenance
         "author_brand_identity_verified": "prov_author_bylines",
         "c2pa_cai_manifest_present": "prov_metadata_c2pa",
-        "source_domain_trust_baseline": "prov_source_clarity", # Best fit for now
+        "source_domain_trust_baseline": "prov_domain_trust", 
+        "domain_age": "prov_domain_trust",
+        "whois_privacy": "prov_domain_trust",
         "digital_watermark_fingerprint_detected": "prov_metadata_c2pa", # Map to same signal or create new one? Mapping to C2PA for now as "cryptographic provenance"
         
         # Resonance

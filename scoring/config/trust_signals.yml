@@ -23,30 +23,37 @@ signals:
   prov_author_bylines:
     dimension: Provenance
     label: "Clear Authorship/Bylines"
-    weight: 0.25
+    weight: 0.20
     detection: "heuristic" # or "llm"
     description: "Presence of clear author names, bios, or verified profiles."
   
   prov_metadata_c2pa:
     dimension: Provenance
     label: "C2PA/Content Credentials"
-    weight: 0.25
+    weight: 0.20
     detection: "heuristic"
     description: "Presence of C2PA manifest or other cryptographic provenance."
 
   prov_source_clarity:
     dimension: Provenance
     label: "Source Attribution"
-    weight: 0.25
+    weight: 0.20
     detection: "llm"
     description: "Clear citation of sources and data origins."
 
   prov_date_freshness:
     dimension: Provenance
     label: "Content Freshness"
-    weight: 0.25
+    weight: 0.20
     detection: "heuristic"
     description: "Content has recent publication or modification dates."
+
+  prov_domain_trust:
+    dimension: Provenance
+    label: "Domain Trust & History"
+    weight: 0.20
+    detection: "heuristic"
+    description: "Domain age, WHOIS privacy, and reputation."
 
   # --- RESONANCE ---
   res_personalization:
