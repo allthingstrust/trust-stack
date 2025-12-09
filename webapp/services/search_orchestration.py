@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 def perform_initial_search(brand_id: str, keywords: List[str], sources: List[str], web_pages: int, search_provider: str = 'serper',
                     brand_domains: List[str] = None, brand_subdomains: List[str] = None, brand_social_handles: List[str] = None,
-                    collection_strategy: str = 'both', brand_owned_ratio: int = 60):
+                    collection_strategy: str = 'both', brand_owned_ratio: int = 60, search_model: str = 'gpt-4o-mini'):
     """
     Step 1: Search for URLs and store them in session state for user selection.
     Does NOT fetch page content yet.
@@ -74,7 +74,7 @@ def perform_initial_search(brand_id: str, keywords: List[str], sources: List[str
                     progress_animator.show(f"Using {len(llm_domains)} cached brand domains for {brand_id}", "📦")
                 else:
                     progress_animator.show(f"Discovering brand domains for {brand_id} using AI...", "🤖")
-                    llm_domains = get_brand_domains_from_llm(brand_id, model='gpt-4o-mini')
+                    llm_domains = get_brand_domains_from_llm(brand_id, model=search_model)
                     # Cache for this session
                     st.session_state[cache_key] = llm_domains
 

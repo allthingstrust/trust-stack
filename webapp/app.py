@@ -162,237 +162,10 @@ def infer_brand_domains(brand_id: str) -> Dict[str, List[str]]:
     }
 
 
-def get_brand_domains_from_llm(brand_id: str, model: str = 'gpt-4o-mini') -> List[str]:
-    """
-    Use LLM to discover all official domains owned by a brand.
-
-    This is used to build site-restricted search queries for more efficient
-    brand-controlled URL collection.
-
-    Args:
-        brand_id: Brand identifier (e.g., 'mastercard', 'nike')
-        model: LLM model to use (default: gpt-4o-mini for cost efficiency)
-
-    Returns:
-        List of domains (e.g., ['mastercard.com', 'investor.mastercard.com'])
-    """
-    import openai
-    import logging
-
-    logger = logging.getLogger(__name__)
-
-    prompt = f"""List all official domains and subdomains owned by {brand_id}.
-
-Include:
-- Main corporate website
-- Investor relations sites
-- Product/service sites
-- Career/jobs sites
-- Newsroom/press sites
-- Developer/API sites
-- International variants (e.g., .co.uk, .com.au)
-
-Rules:
-- One domain per line
-- Domain only, no 'www.' prefix
-- No URLs, just domains
-- No explanations or numbering
-- Maximum 15 domains
-
-Example format:
-mastercard.com
-investor.mastercard.com
-priceless.com
-"""
-
-    try:
-        response = openai.chat.completions.create(
-            model=model,
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0,
-            max_tokens=500
-        )
-
-        text = response.choices[0].message.content.strip()
-        logger.debug('LLM domain discovery response:\n%s', text)
-
-        # Parse domains from response
-        domains = []
-        for line in text.split('\n'):
-            line = line.strip()
-            # Remove common prefixes/formatting
-            line = line.replace('www.', '').replace('http://', '').replace('https://', '')
-            line = line.split('/')[0]  # Remove any paths
-            line = line.split()[0]  # Take first word if multiple
-
-            # Validate: must contain a dot and look like a domain
-            if '.' in line and len(line) > 3 and not line.startswith('#'):
-                domains.append(line.lower())
-
-        # Deduplicate and limit
-        domains = list(dict.fromkeys(domains))[:15]
-        logger.info(f'LLM discovered {len(domains)} domains for {brand_id}: {domains}')
-
-        return domains
-
-    except Exception as e:
-        logger.warning(f'LLM domain discovery failed for {brand_id}: {e}')
-        return []
 
 
-def suggest_brand_urls_from_llm(brand_id: str, keywords: List[str], model: str = 'gpt-4o-mini', max_urls: int = 10,
-                               brand_domains: List[str] = None) -> List[Dict[str, Any]]:
-    """
-    Ask an LLM to enumerate likely brand-owned URLs for the given brand.
 
-    Args:
-        brand_id: Brand identifier
-        keywords: Search keywords to provide context
-        model: LLM model to use
-        max_urls: Maximum number of URLs to return
 
-    Returns:
-        Ordered list of dictionaries with keys `url` and `is_primary`, where primary entries come first
-    """
-    prompt = (
-        f"Provide up to {max_urls} canonical brand-owned URLs for {brand_id}. "
-    f"Include the most relevant primary domains first, followed by any supporting subdomains, english-speaking country variants, and promotional hubs that belong to {brand_id}. "
-    "Highlight international domains (e.g., .com.au, .co.uk, .ca, .ie) and other brand-owned marketing sites. "
-        "Return only the URLs (one per line), without numbering or explanations."
-    )
-    try:
-        client = ChatClient(default_model=model)
-        messages = [
-            {'role': 'system', 'content': 'You are a helpful research assistant.'},
-            {'role': 'user', 'content': prompt}
-        ]
-        # Respect config: do not perform LLM/verification for explicitly excluded brands
-        excluded = SETTINGS.get('excluded_brands', []) or []
-        if brand_id and brand_id.lower() in excluded:
-            logger.info('Brand %s is in excluded_brands; skipping LLM enumeration', brand_id)
-            return []
-
-        # Ask the model for structured JSON-per-line output: url, evidence, confidence
-        # Temporarily enable debug logging for this call so we can capture raw model output
-        prev_level = logger.level
-        try:
-            logger.setLevel(logging.DEBUG)
-            response = client.chat(messages=messages, max_tokens=1024)
-            text = response.get('content') or response.get('text') or ''
-            logger.debug('LLM raw response:\n%s', text)
-        finally:
-            logger.setLevel(prev_level)
-
-        # Parse JSON lines if available (model should return one JSON object per line)
-        candidates: List[Dict[str, Any]] = []
-        for line in text.splitlines():
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                obj = json.loads(line)
-                url = obj.get('url')
-                evidence = obj.get('evidence')
-                confidence = int(obj.get('confidence') or 0)
-                if url:
-                    candidates.append({'url': url.strip(), 'evidence': evidence, 'confidence': confidence})
-            except Exception:
-                # Fall back to regex extraction per-line if JSON parse fails
-                m = re.search(r'(https?://[\w\-\.\/\%\?&=#:]+)', line)
-                if m:
-                    candidates.append({'url': m.group(1).strip(), 'evidence': None, 'confidence': 0})
-        # Build a deduped candidate list, respecting the order and any model confidence
-        seen_urls = set()
-        deduped_candidates: List[Dict[str, Any]] = []
-        for c in candidates:
-            url = c['url'].rstrip('.,;')
-            if url in seen_urls:
-                continue
-            seen_urls.add(url)
-            # prefer US/.com hosts only
-            if not is_usa_host(url):
-                continue
-            is_primary = classify_brand_url(url, brand_id, brand_domains) == 'primary'
-            deduped_candidates.append({
-                'url': url,
-                'evidence': c.get('evidence'),
-                'confidence': c.get('confidence', 0),
-                'is_primary': is_primary
-            })
-        # Log parsed candidates for debugging (INFO so it appears in typical logs)
-        try:
-            logger.info('Parsed LLM candidates (deduped, US-only): %s', json.dumps(deduped_candidates, indent=2))
-        except Exception:
-            logger.info('Parsed LLM candidates (deduped, US-only): %s', str(deduped_candidates))
-
-        # Verify candidates in parallel, prioritizing primaries
-        ordered = sorted(deduped_candidates, key=lambda x: (0 if x['is_primary'] else 1, -int(x.get('confidence', 0))))
-
-        verified_entries: List[Dict[str, Any]] = []
-        from concurrent.futures import ThreadPoolExecutor, as_completed
-
-        max_workers = min(20, max(4, len(ordered)))
-        with ThreadPoolExecutor(max_workers=max_workers) as exe:
-            future_to_entry = {exe.submit(verify_url, e['url'], brand_id): e for e in ordered}
-            for fut in as_completed(future_to_entry):
-                entry = future_to_entry[fut]
-                try:
-                    result = fut.result()
-                except Exception as exc:
-                    logger.debug('Verification raised for %s: %s', entry['url'], exc)
-                    continue
-                if result and result.get('ok'):
-                    # fetch title for display
-                    title = fetch_page_title(result.get('final_url') or entry['url'], brand_id)
-                    verified_entries.append({
-                        'url': result.get('final_url') or entry['url'],
-                        'is_primary': entry['is_primary'],
-                        'verified': True,
-                        'status': result.get('status'),
-                        'soft_verified': result.get('soft_verified', False),
-                        'verification_method': result.get('method'),
-                        'title': title,
-                        'evidence': entry.get('evidence'),
-                        'confidence': entry.get('confidence', 0),
-                        'is_promotional': is_promotional_url(entry['url'])
-                    })
-                else:
-                    logger.debug('Unverified candidate: %s (status=%s)', entry['url'], result.get('status') if isinstance(result, dict) else None)
-                if len(verified_entries) >= max_urls:
-                    break
-
-        if verified_entries:
-            # Clear any previous fallback indicator
-            try:
-                if 'llm_search_fallback' in st.session_state:
-                    del st.session_state['llm_search_fallback']
-                if 'llm_search_fallback_count' in st.session_state:
-                    del st.session_state['llm_search_fallback_count']
-            except Exception:
-                pass
-
-        if not verified_entries:
-            logger.info('No verified URLs found after LLM verification for brand: %s. Attempting web-search fallback...', brand_id)
-            try:
-                fallback = search_urls_fallback(brand_id, keywords, target_count=max_urls)
-                if fallback:
-                    logger.info('Search fallback returned %d verified URLs for %s', len(fallback), brand_id)
-                    verified_entries = fallback[:max_urls]
-                    # Mark that fallback was used so UI can show a banner
-                    try:
-                        st.session_state['llm_search_fallback'] = True
-                        st.session_state['llm_search_fallback_count'] = len(verified_entries)
-                    except Exception:
-                        pass
-                else:
-                    logger.warning('Search fallback did not return any verified URLs for brand: %s', brand_id)
-            except Exception as e:
-                logger.warning('Search fallback failed for %s: %s', brand_id, e)
-
-        return verified_entries[:max_urls]
-    except Exception as exc:
-        logger.warning('LLM brand URL suggestion failed: %s', exc)
-        return []
 
 
 def enumerate_brand_urls_from_llm_raw(brand_id: str, keywords: List[str], model: str = 'gpt-4o-mini', candidate_limit: int = 100) -> List[str]:
@@ -1274,9 +1047,26 @@ def show_analyze_page():
         with st.expander("🤖 LLM Model Selection", expanded=True):
             st.markdown("**Choose which AI model to use for generating executive summaries and recommendations:**")
 
-            col_model1, col_model2 = st.columns(2)
+            # 1. Search/Discovery Model
+            search_model = st.selectbox(
+                "Search/Discovery Model",
+                [
+                    "gpt-4o-mini",
+                    "gpt-4o",
+                    "claude-sonnet-4-5-20250929",
+                    "claude-opus-4-5-20251101",
+                    "claude-3-5-sonnet-20240620",
+                    "gemini-1.5-pro",
+                    "deepseek-chat"
+                ],
+                index=0,
+                help="Model used for discovering brand domains and URLs.",
+                key="search_model_select"
+            )
 
-            with col_model1:
+            col1, col2 = st.columns(2)
+
+            with col1:
                 summary_model = st.selectbox(
                     "Executive Summary Model",
                     options=[
@@ -1284,6 +1074,7 @@ def show_analyze_page():
                         "gpt-3.5-turbo",
                         "gpt-4o",
                         "claude-sonnet-4-5-20250929",
+                        "claude-opus-4-5-20251101",
                         "claude-sonnet-4-20250514",
                         "claude-3-5-haiku-20241022",
                         "claude-3-haiku-20240307",
@@ -1296,7 +1087,7 @@ def show_analyze_page():
                     help="Model for generating the main executive summary. Higher-tier models (GPT-4o) produce more detailed, actionable insights."
                 )
 
-            with col_model2:
+            with col2:
                 recommendations_model = st.selectbox(
                     "Recommendations Model",
                     options=[
@@ -1304,6 +1095,7 @@ def show_analyze_page():
                         "gpt-3.5-turbo",
                         "gpt-4o",
                         "claude-sonnet-4-5-20250929",
+                        "claude-opus-4-5-20251101",
                         "claude-sonnet-4-20250514",
                         "claude-3-5-haiku-20241022",
                         "claude-3-haiku-20240307",
@@ -1322,6 +1114,7 @@ def show_analyze_page():
                 'gpt-4o-mini': '⚖️ Balanced',
                 'gpt-4o': '⭐ Premium',
                 'claude-sonnet-4-5-20250929': '⭐ Premium',
+                'claude-opus-4-5-20251101': '⭐ Premium',
                 'claude-sonnet-4-20250514': '⭐ Premium',
                 'claude-3-5-haiku-20241022': '💰 Budget',
                 'claude-3-haiku-20240307': '💰 Budget',
@@ -1331,7 +1124,7 @@ def show_analyze_page():
                 'deepseek-reasoner': '⚖️ Balanced'
             }
 
-            st.info(f"💡 **Selection**: Summary: {model_tiers.get(summary_model, '')} {summary_model} | Recommendations: {model_tiers.get(recommendations_model, '')} {recommendations_model}")
+            st.info(f"💡 **Selection**: Search: {model_tiers.get(search_model, '')} {search_model} | Summary: {model_tiers.get(summary_model, '')} {summary_model} | Recommendations: {model_tiers.get(recommendations_model, '')} {recommendations_model}")
             st.caption("💡 **Tip**: Use premium models (Claude Sonnet 4, GPT-4o) for highest quality summaries with specific, actionable recommendations.")
 
         st.divider()
@@ -1380,7 +1173,7 @@ def show_analyze_page():
         # Search for URLs without running analysis
         perform_initial_search(brand_id, keywords.split(), sources, web_pages, search_provider,
                        brand_domains, brand_subdomains, brand_social_handles,
-                       collection_strategy, brand_owned_ratio)
+                       collection_strategy, brand_owned_ratio, search_model=search_model)
 
     # Display found URLs for selection
     if 'found_urls' in st.session_state and st.session_state['found_urls']:
@@ -1593,7 +1386,8 @@ def show_analyze_page():
                     "brand_subdomains": brand_subdomains,
                     "brand_social_handles": brand_social_handles,
                     "summary_model": summary_model,
-                    "recommendations_model": recommendations_model
+                    "recommendations_model": recommendations_model,
+                    "search_model": search_model # Added search_model here
                 }
             }
 

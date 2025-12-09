@@ -50,7 +50,7 @@ class VerificationManager:
         prompt = build_claim_extraction_prompt(content.body)
         
         try:
-            response = self.llm_client.client.chat(
+            response = self.llm_client.client.chat.completions.create(
                 model=self.llm_client.model,
                 messages=[
                     {"role": "system", "content": CLAIM_EXTRACTION_SYSTEM},
@@ -59,7 +59,7 @@ class VerificationManager:
                 response_format={"type": "json_object"},
                 temperature=0.1
             )
-            result = json.loads(response.get('content', '{}'))
+            result = json.loads(response.choices[0].message.content)
             claims = [c.strip() for c in result.get('claims', []) if c and c.strip()]
             return claims[:5]
         except Exception as e:
@@ -109,7 +109,7 @@ class VerificationManager:
         prompt = build_verification_prompt(claim, context)
         
         try:
-            response = self.llm_client.client.chat(
+            response = self.llm_client.client.chat.completions.create(
                 model=self.llm_client.model,
                 messages=[
                     {"role": "system", "content": VERIFICATION_SYSTEM},
@@ -118,7 +118,7 @@ class VerificationManager:
                 response_format={"type": "json_object"},
                 temperature=0.1
             )
-            result = json.loads(response.get('content', '{}'))
+            result = json.loads(response.choices[0].message.content)
             result['claim'] = claim
             result['evidence'] = context
             result['status'] = result.get('status', 'UNVERIFIED').upper()

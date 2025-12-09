@@ -2,7 +2,6 @@
 LLM Client for Classification
 
 Minimal LLM client wrapper for classification prompts with caching.
-Refactored to use the shared multi-provider ChatClient.
 Prompts are imported from the centralized prompts module.
 """
 
@@ -13,7 +12,6 @@ import time
 import re
 from typing import List, Dict, Any
 
-from scoring.llm_client import ChatClient
 from prompts.classification import (
     CLASSIFICATION_SYSTEM,
     build_classification_prompt,
@@ -29,8 +27,7 @@ class LLMClient:
         self.model = model or 'gpt-4o'
         self.cache_dir = cache_dir or CACHE_DIR
         os.makedirs(self.cache_dir, exist_ok=True)
-        # Initialize ChatClient - it handles API keys from env if not provided
-        self.chat_client = ChatClient(api_key=api_key, default_model=self.model)
+        self.api_key = api_key or os.environ.get('OPENAI_API_KEY')
 
     def _cache_path(self, key: str) -> str:
         h = hashlib.sha256(key.encode('utf-8')).hexdigest()
@@ -53,29 +50,36 @@ class LLMClient:
         except Exception:
             pass
 
-    def _call_llm(self, prompt: str) -> Dict[str, Any]:
-        """Make LLM API call with few-shot classification prompt via ChatClient."""
+    def _call_openai(self, prompt: str) -> Dict[str, Any]:
+        """Make OpenAI API call with few-shot classification prompt."""
         try:
-            response = self.chat_client.chat(
-                messages=[
-                    {"role": "system", "content": CLASSIFICATION_SYSTEM},
-                    {"role": "user", "content": prompt}
-                ],
-                model=self.model,
-                temperature=0.1,
-                max_tokens=200,
-            )
-            
-            text = response.get('content', '').strip()
-            
+            import openai
+        except ImportError as e:
+            raise RuntimeError('openai package not available') from e
+
+        if self.api_key:
+            openai.api_key = self.api_key
+
+        resp = openai.ChatCompletion.create(
+            model=self.model,
+            messages=[
+                {"role": "system", "content": CLASSIFICATION_SYSTEM},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.1,
+            max_tokens=200
+        )
+        
+        text = resp['choices'][0]['message']['content'].strip()
+        
+        try:
             if '```' in text:
                 match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', text, re.DOTALL)
                 if match:
                     return json.loads(match.group(1))
             return json.loads(text)
-        except Exception:
-            # Return raw text wrapped in dict on JSON parse failure (or empty if really broken)
-            return {'raw': text} if 'text' in locals() else {}
+        except json.JSONDecodeError:
+            return {'raw': text}
 
     def classify(self, items: List[Dict[str, Any]], rubric_version: str = 'unknown') -> Dict[str, Dict[str, Any]]:
         """Classify a list of items."""
@@ -83,7 +87,6 @@ class LLMClient:
         
         for item in items:
             content_id = item.get('content_id', 'unknown')
-            # Consistent cache key generation
             cache_key = f"{content_id}.{rubric_version}.{self.model}.{json.dumps(item.get('meta', {}), sort_keys=True)}.{item.get('final_score')}"
             
             cached = self._read_cache(cache_key)
@@ -95,7 +98,7 @@ class LLMClient:
             prompt = build_classification_prompt(item_json)
 
             try:
-                out = self._call_llm(prompt)
+                out = self._call_openai(prompt)
                 if 'label' not in out or out.get('label') not in ['authentic', 'suspect', 'inauthentic']:
                     out = self._fallback_classification(item)
             except Exception as e:

@@ -34,8 +34,6 @@ def get_brand_domains_from_llm(brand_id: str, model: str = 'gpt-4o-mini') -> Lis
     Returns:
         List of domains (e.g., ['mastercard.com', 'investor.mastercard.com'])
     """
-    import openai
-
     prompt = f"""List all official domains and subdomains owned by {brand_id}.
 
 Include:
@@ -61,14 +59,17 @@ priceless.com
 """
 
     try:
-        response = openai.chat.completions.create(
+        client = ChatClient(default_model=model)
+        messages = [{"role": "user", "content": prompt}]
+        
+        response = client.chat(
+            messages=messages,
             model=model,
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0,
-            max_tokens=500
+            max_tokens=500,
+            temperature=0
         )
 
-        text = response.choices[0].message.content.strip()
+        text = response.get('content', '').strip()
         logger.debug('LLM domain discovery response:\n%s', text)
 
         # Parse domains from response
