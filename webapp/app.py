@@ -1150,6 +1150,10 @@ def show_analyze_page():
     if 'progress_container_placeholder' not in st.session_state or st.session_state.get('progress_container_placeholder') is None:
         st.session_state['progress_container_placeholder'] = st.empty()
 
+    # Create progress bar placeholder immediately after progress container
+    if 'progress_bar_placeholder' not in st.session_state or st.session_state.get('progress_bar_placeholder') is None:
+        st.session_state['progress_bar_placeholder'] = st.empty()
+
     # Handle URL search
     if search_urls:
         # Validate inputs
@@ -1343,7 +1347,10 @@ def show_analyze_page():
             progress_container = st.empty()
         
         progress_animator = ProgressAnimator(container=progress_container)
-        progress_bar = st.progress(0)
+        if 'progress_bar_placeholder' in st.session_state and st.session_state['progress_bar_placeholder'] is not None:
+            progress_bar = st.session_state['progress_bar_placeholder'].progress(0)
+        else:
+            progress_bar = st.progress(0)
         
         try:
             progress_animator.show("Initializing analysis pipeline...", "🚀")
@@ -1519,6 +1526,15 @@ def show_analyze_page():
                 except:
                     pass
                 del st.session_state['progress_container_placeholder']
+
+            # Ensure progress bar placeholder is executed
+            if 'progress_bar_placeholder' in st.session_state:
+                try:
+                    if st.session_state['progress_bar_placeholder'] is not None:
+                        st.session_state['progress_bar_placeholder'].empty()
+                except:
+                    pass
+                del st.session_state['progress_bar_placeholder']
 
             st.session_state['last_run'] = legacy_run_data
             st.session_state['page'] = 'results'
