@@ -122,7 +122,7 @@ class ContentScorer:
                 label="Source Attribution",
                 dimension="Provenance",
                 value=prov_val,
-                weight=0.25,
+                weight=self.trust_signals_config.get('prov_source_clarity', {}).get('weight', 0.2),
                 evidence=[],
                 rationale="LLM analysis of source clarity",
                 confidence=prov_conf
@@ -135,7 +135,7 @@ class ContentScorer:
                 label="Content Freshness",
                 dimension="Provenance",
                 value=freshness_val,
-                weight=0.25,
+                weight=self.trust_signals_config.get('prov_date_freshness', {}).get('weight', 0.2),
                 evidence=[],
                 rationale="Heuristic date check",
                 confidence=1.0
@@ -150,7 +150,7 @@ class ContentScorer:
                 label="Factual Accuracy",
                 dimension="Verification",
                 value=ver_val,
-                weight=0.40,
+                weight=self.trust_signals_config.get('ver_fact_accuracy', {}).get('weight', 0.4),
                 evidence=content._llm_issues.get('verification', []) if hasattr(content, '_llm_issues') else [],
                 rationale="RAG-based verification",
                 confidence=ver_conf
@@ -165,7 +165,7 @@ class ContentScorer:
                 label="Clear Disclosures",
                 dimension="Transparency",
                 value=trans_val,
-                weight=0.40,
+                weight=self.trust_signals_config.get('trans_disclosures', {}).get('weight', 0.4),
                 evidence=content._llm_issues.get('transparency', []) if hasattr(content, '_llm_issues') else [],
                 rationale="LLM analysis of disclosures",
                 confidence=trans_conf
@@ -180,7 +180,7 @@ class ContentScorer:
                 label="Voice Consistency",
                 dimension="Coherence",
                 value=coh_val,
-                weight=0.40,
+                weight=self.trust_signals_config.get('coh_voice_consistency', {}).get('weight', 0.4),
                 evidence=content._llm_issues.get('coherence', []) if hasattr(content, '_llm_issues') else [],
                 rationale="LLM analysis of voice consistency",
                 confidence=coh_conf
@@ -195,7 +195,7 @@ class ContentScorer:
                 label="Cultural/Audience Fit",
                 dimension="Resonance",
                 value=res_val,
-                weight=0.40,
+                weight=self.trust_signals_config.get('res_cultural_fit', {}).get('weight', 0.4),
                 evidence=[],
                 rationale="LLM analysis of cultural fit",
                 confidence=res_conf

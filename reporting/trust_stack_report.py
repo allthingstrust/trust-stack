@@ -13,22 +13,67 @@ from scoring.llm_client import ChatClient
 logger = logging.getLogger(__name__)
 
 
-def _compute_diagnostics_from_attributes(dimension: str, items: List[Dict]) -> Dict[str, List[float]]:
+
+def _compute_diagnostics_from_signals(dimension: str, items: List[Dict]) -> Dict[str, List[float]]:
     """
-    Aggregate detected attribute values by label for a given dimension.
+    Aggregate signal scores by label for a given dimension using serialized dimension_details.
     
     Returns:
-        Dict mapping attribute label to list of scores (e.g., {'Author Verified': [7, 8, 6]})
+        Dict mapping signal label to list of scores
     """
-    attribute_scores = {}  # label -> list of scores
+    signal_scores = {}  # label -> list of scores
     
+    for item in items:
+        # Check for detailed dimension info (added in run_pipeline.py)
+        dim_details = item.get('dimension_details', {})
+        
+        # Also check inside meta (legacy path or alternate serialization)
+        if not dim_details:
+             meta = item.get('meta', {})
+             if isinstance(meta, str):
+                 try:
+                     meta = json.loads(meta)
+                 except:
+                     meta = {}
+             if isinstance(meta, dict):
+                 # Try to find dimension details in meta if not at root
+                 pass
+
+        if dim_details:
+             target_dim = dim_details.get(dimension.lower())
+             if target_dim:
+                 # It's a DimensionScore object serialized as dict
+                 signals = target_dim.get('signals', [])
+                 for sig in signals:
+                     label = sig.get('label', sig.get('id', 'Unknown'))
+                     # Signal values are 0-1 (from Scorer/Aggregator), scale to 0-10 for display?
+                     # Wait, aggregator.py says signal.value is 0-10 range if checking line 48?
+                     # SignalMapper maps attribute value/10 (so 0-1) to signal value.
+                     # BUT Aggregator line 63 scales weighted score by 10 to get 0-10 dimension score.
+                     # SignalScore objects created in Scorer are 0-1 range usually (LLM return 0-1).
+                     # Let's check SignalMapper again.
+                     # SignalMapper line 100: value=float(attr.value) / 10.0. So signals are 0-1.
+                     # We want to display 0-10 in the table.
+                     val = sig.get('value')
+                     if val is not None:
+                         if label not in signal_scores:
+                             signal_scores[label] = []
+                         signal_scores[label].append(float(val) * 10.0) # Scale 0-1 to 0-10
+    
+    # Fallback to attributes if no signals found (legacy support)
+    if not signal_scores:
+        return _compute_diagnostics_from_attributes(dimension, items)
+        
+    return signal_scores
+
+def _compute_diagnostics_from_attributes(dimension: str, items: List[Dict]) -> Dict[str, List[float]]:
+    """Legacy fallback: Aggregate detected attribute values."""
+    attribute_scores = {}
     for item in items:
         meta = item.get('meta', {})
         if isinstance(meta, str):
-            try:
-                meta = json.loads(meta)
-            except:
-                meta = {}
+            try: meta = json.loads(meta)
+            except: meta = {}
         
         detected_attrs = meta.get('detected_attributes', [])
         for attr in detected_attrs:
@@ -39,37 +84,26 @@ def _compute_diagnostics_from_attributes(dimension: str, items: List[Dict]) -> D
                     if label not in attribute_scores:
                         attribute_scores[label] = []
                     attribute_scores[label].append(float(value))
-    
     return attribute_scores
-
 
 def _render_diagnostics_table(dimension: str, items: List[Dict], fallback_score: float) -> str:
     """
-    Render the diagnostics snapshot table from actual detected attributes.
-    
-    Args:
-        dimension: The dimension being analyzed
-        items: List of content items with detected_attributes in meta
-        fallback_score: Score to use if no attributes detected
-    
-    Returns:
-        Markdown table string
+    Render the diagnostics snapshot table from aggregated signals (primary) or attributes (fallback).
     """
-    attr_scores = _compute_diagnostics_from_attributes(dimension, items)
+    # Use signals first
+    metric_scores = _compute_diagnostics_from_signals(dimension, items)
     
-    if not attr_scores:
-        # No attributes detected - show fallback
-        return f"""| Metric | Value |
-|---|---|
-| No attributes detected | {fallback_score:.0f}/10 |
-| (Based on heuristic scoring) | - |"""
+    if not metric_scores:
+        # Fallback to simple table if no data
+        return f"| Metric | Value |\n|---|---|\n| No signals detected | {fallback_score:.1f}/10 |\n| (Based on fallback scoring) | - |"
     
     # Build table rows
     rows = ["| Metric | Value |", "|---|---|"]
-    for label, scores in sorted(attr_scores.items()):
-        avg_score = sum(scores) / len(scores) if scores else fallback_score
-        count = len(scores)
-        rows.append(f"| {label} | {avg_score:.1f}/10 ({count} items) |")
+    for label, scores in sorted(metric_scores.items()):
+        if scores:
+            avg_score = sum(scores) / len(scores)
+            count = len(scores)
+            rows.append(f"| {label} | {avg_score:.1f}/10 ({count} items) |")
     
     return "\n".join(rows)
 

@@ -129,10 +129,18 @@ def main():
                         "resonance": score.score_resonance,
                         "ai_readiness": score.score_ai_readiness
                     }
+                    }
                     # Merge detected_attributes from rationale
                     rationale = score.rationale or {}
-                    if isinstance(rationale, dict) and rationale.get('detected_attributes'):
-                        item["meta"]["detected_attributes"] = rationale["detected_attributes"]
+                    
+                    # Extract dimension details (signals) if available
+                    if isinstance(rationale, dict):
+                        if rationale.get('detected_attributes'):
+                            item["meta"]["detected_attributes"] = rationale["detected_attributes"]
+                        
+                        # Store detailed dimension data (including signals) if available
+                        if 'dimensions' in rationale:
+                            item["dimension_details"] = rationale['dimensions']
                 
                 items.append(item)
 
