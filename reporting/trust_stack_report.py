@@ -407,7 +407,7 @@ INSTRUCTIONS:
         return response.get('content') or response.get('text') or f"Error generating analysis for {dimension}"
     except Exception as e:
         logger.error(f"Failed to generate analysis for {dimension}: {e}")
-        return f"Error generating analysis for {dimension}"
+        return f"Error generating analysis for {dimension}: {str(e)}"
 
 def _format_signals_for_prompt(signals: List[str]) -> str:
     """Format signals for the prompt (Legacy)"""
@@ -494,4 +494,4 @@ INSTRUCTIONS:
         return response.get('content') or response.get('text') or "Error generating audit report"
     except Exception as e:
         logger.error(f"Failed to generate audit report: {e}")
-        return "Error generating audit report"
+        return f"Error generating audit report: {str(e)}"

@@ -129,7 +129,7 @@ def main():
                         "resonance": score.score_resonance,
                         "ai_readiness": score.score_ai_readiness
                     }
-                    }
+
                     # Merge detected_attributes from rationale
                     rationale = score.rationale or {}
                     
