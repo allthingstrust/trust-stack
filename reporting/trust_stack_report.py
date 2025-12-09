@@ -89,21 +89,28 @@ def _compute_diagnostics_from_attributes(dimension: str, items: List[Dict]) -> D
 def _render_diagnostics_table(dimension: str, items: List[Dict], fallback_score: float) -> str:
     """
     Render the diagnostics snapshot table from aggregated signals (primary) or attributes (fallback).
+    Displays weighted contribution of each signal to the overall dimension score.
     """
     # Use signals first
     metric_scores = _compute_diagnostics_from_signals(dimension, items)
     
     if not metric_scores:
         # Fallback to simple table if no data
-        return f"| Metric | Value |\n|---|---|\n| No signals detected | {fallback_score:.1f}/10 |\n| (Based on fallback scoring) | - |"
+        return f"| Metric | Contribution |\n|---|---|\n| No signals detected | {fallback_score:.1f} points |\n| (Based on fallback scoring) | - |"
+    
+    # Calculate dynamic weight based on number of active signals
+    # If we have 5 signals, weight is 0.2. If 6, weight is ~0.166.
+    signal_count = len(metric_scores)
+    weight = 1.0 / signal_count if signal_count > 0 else 0.2
     
     # Build table rows
-    rows = ["| Metric | Value |", "|---|---|"]
+    rows = ["| Metric | Contribution |", "|---|---|"]
     for label, scores in sorted(metric_scores.items()):
         if scores:
             avg_score = sum(scores) / len(scores)
-            count = len(scores)
-            rows.append(f"| {label} | {avg_score:.1f}/10 ({count} items) |")
+            contribution = avg_score * weight
+            # Format: 1.6 points (8.0 * 0.20)
+            rows.append(f"| {label} | {contribution:.2f} points ({avg_score:.1f} * {weight:.2f}) |")
     
     return "\n".join(rows)
 
