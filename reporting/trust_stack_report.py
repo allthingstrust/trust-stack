@@ -86,31 +86,36 @@ def _compute_diagnostics_from_attributes(dimension: str, items: List[Dict]) -> D
                     attribute_scores[label].append(float(value))
     return attribute_scores
 
-def _render_diagnostics_table(dimension: str, items: List[Dict], fallback_score: float) -> str:
+def _render_diagnostics_table(dimension: str, key_signal_statuses: Dict[str, Any], fallback_score: float) -> str:
     """
-    Render the diagnostics snapshot table from aggregated signals (primary) or attributes (fallback).
-    Displays weighted contribution of each signal to the overall dimension score.
+    Render the diagnostics snapshot table using aggregated Key Signal scores.
+    Displays weighted contribution of each high-level Key Signal to the overall dimension score.
     """
-    # Use signals first
-    metric_scores = _compute_diagnostics_from_signals(dimension, items)
+    # Get the strict list of signals for this dimension
+    expected_signals = TRUST_STACK_DIMENSIONS.get(dimension.lower(), {}).get('signals', [])
     
-    if not metric_scores:
-        # Fallback to simple table if no data
-        return f"| Metric | Contribution |\n|---|---|\n| No signals detected | {fallback_score:.1f} points |\n| (Based on fallback scoring) | - |"
-    
-    # Calculate dynamic weight based on number of active signals
-    # If we have 5 signals, weight is 0.2. If 6, weight is ~0.166.
-    signal_count = len(metric_scores)
+    if not expected_signals:
+         return f"| Metric | Contribution |\n|---|---|\n| No signals defined | {fallback_score:.1f} points |"
+
+    # Calculate dynamic weight based on number of EXPECTED signals (usually 5)
+    # This ensures consistency: 5 signals = 0.20 weight each.
+    signal_count = len(expected_signals)
     weight = 1.0 / signal_count if signal_count > 0 else 0.2
     
     # Build table rows
     rows = ["| Metric | Contribution |", "|---|---|"]
-    for label, scores in sorted(metric_scores.items()):
-        if scores:
-            avg_score = sum(scores) / len(scores)
-            contribution = avg_score * weight
-            # Format: 1.6 points (8.0 * 0.20)
-            rows.append(f"| {label} | {contribution:.2f} points ({avg_score:.1f} * {weight:.2f}) |")
+    
+    for label in expected_signals:
+        # Get pre-computed status tuple: (status_icon, avg_score, evidence_list)
+        # Default to 0.0 if not found (though evaluator should return all)
+        if label in key_signal_statuses:
+            _, avg_score, _ = key_signal_statuses[label]
+        else:
+            avg_score = 0.0
+            
+        contribution = avg_score * weight
+        # Format: 1.60 points (8.0 * 0.20)
+        rows.append(f"| {label} | {contribution:.2f} points ({avg_score:.1f} * {weight:.2f}) |")
     
     return "\n".join(rows)
 
@@ -260,12 +265,12 @@ def _generate_dimension_analysis(
     # Format diagnostics for prompt (legacy, kept for reference)
     diagnostics_list = "\n".join([f"- {d}" for d in diagnostics])
     
-    # Compute actual diagnostics from detected attributes
-    diagnostics_table = _render_diagnostics_table(dimension, items, score)
-    
     # ===== NEW: Compute key signal statuses DETERMINISTICALLY =====
     evaluator = KeySignalEvaluator()
     computed_statuses = evaluator.compute_signal_statuses(dimension, items)
+    
+    # Compute actual diagnostics from computed statuses
+    diagnostics_table = _render_diagnostics_table(dimension, computed_statuses, score)
     
     # Format signals with pre-computed statuses for the LLM prompt
     signals_with_status = []
