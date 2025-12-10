@@ -7,10 +7,69 @@ matching the specific format with Rationale, Key Signal Evaluation, and Diagnost
 
 import json
 import logging
+import os
+from pathlib import Path
 from typing import Dict, Any, List, Optional
+import yaml
 from scoring.llm_client import ChatClient
 
 logger = logging.getLogger(__name__)
+
+
+def _load_signal_weights() -> Dict[str, float]:
+    """
+    Load signal weights from trust_signals.yml.
+    
+    Returns:
+        Dict mapping signal_id -> weight (e.g., {"res_cultural_fit": 0.40})
+    """
+    try:
+        config_path = Path(__file__).parent.parent / "scoring" / "config" / "trust_signals.yml"
+        with open(config_path, 'r') as f:
+            config = yaml.safe_load(f)
+        
+        weights = {}
+        for signal_id, signal_def in config.get('signals', {}).items():
+            weights[signal_id] = float(signal_def.get('weight', 0.2))
+        return weights
+    except Exception as e:
+        logger.warning(f"Failed to load signal weights: {e}")
+        return {}
+
+
+# Reverse mapping: Key Signal Label -> Signal ID (for weight lookup)
+KEY_SIGNAL_TO_SIGNAL_ID = {
+    # Provenance
+    "Author & Creator Clarity": "prov_author_bylines",
+    "Source Attribution": "prov_source_clarity",
+    "Domain Trust & History": "prov_domain_trust",
+    "Content Credentials (C2PA)": "prov_metadata_c2pa",
+    "Content Freshness": "prov_date_freshness",
+    # Resonance
+    "Cultural & Audience Fit": "res_cultural_fit",
+    "Readability & Clarity": "res_readability",
+    "Personalization Relevance": "res_personalization",
+    "Engagement Quality": "res_engagement_metrics",
+    "Language Match": "res_cultural_fit",  # Language match folded into cultural fit
+    # Coherence
+    "Voice Consistency": "coh_voice_consistency",
+    "Visual/Design Coherence": "coh_design_patterns",
+    "Cross-Channel Alignment": "coh_cross_channel",
+    "Technical Health": "coh_technical_health",
+    "Claim Consistency": "coh_claim_consistency",
+    # Transparency
+    "Clear Disclosures": "trans_disclosures",
+    "AI Usage Disclosure": "trans_ai_labeling",
+    "Contact/Business Info": "trans_contact_info",
+    "Privacy Policy Clarity": "trans_privacy_policy",
+    "Data Source Citations": "trans_data_citations",
+    # Verification
+    "Factual Accuracy": "ver_fact_accuracy",
+    "Trust Badges & Certs": "ver_trust_badges",
+    "External Social Proof": "ver_social_proof",
+    "Review Authenticity": "ver_review_authenticity",
+    "Claim Traceability": "ver_claim_traceability",
+}
 
 
 
@@ -96,7 +155,8 @@ def _render_diagnostics_table(
     Render the diagnostics snapshot table using aggregated Key Signal scores.
     Displays weighted contribution of each high-level Key Signal to the overall dimension score.
     
-    Now includes LLM-derived signals from dimension_details (merged with attribute-based signals).
+    v5.1 Fix: Uses actual weights from trust_signals.yml and normalizes across only
+    signals with data so contributions sum to the dimension score.
     """
     # Get the strict list of signals for this dimension
     expected_signals = TRUST_STACK_DIMENSIONS.get(dimension.lower(), {}).get('signals', [])
@@ -104,9 +164,8 @@ def _render_diagnostics_table(
     if not expected_signals:
          return f"| Metric | Contribution |\n|---|---|\n| No signals defined | {fallback_score:.1f} points |"
 
-    # Calculate dynamic weight based on number of EXPECTED signals (usually 5-6)
-    signal_count = len(expected_signals)
-    weight = 1.0 / signal_count if signal_count > 0 else 0.2
+    # Load actual signal weights from config
+    signal_weights = _load_signal_weights()
     
     # Build enhanced signal scores by merging LLM signals from dimension_details
     enhanced_statuses = dict(key_signal_statuses)  # Start with attribute-based
@@ -129,21 +188,56 @@ def _render_diagnostics_table(
                     status = '✅' if avg_score >= 7.0 else ('⚠️' if avg_score >= 4.0 else '❌')
                     enhanced_statuses[key_signal_label] = (status, avg_score, evidence)
     
-    # Calculate weight per signal (equal weights)
-    signal_count = len(expected_signals)
-    weight = 1.0 / signal_count if signal_count > 0 else 0.2
+    # Collect scores and weights for signals WITH data
+    active_signals = []  # [(label, score, weight)]
+    inactive_signals = []  # [(label, 0.0, weight)] - shown but don't contribute
     
-    # Build table rows - show raw score and weighted contribution
+    for label in expected_signals:
+        signal_id = KEY_SIGNAL_TO_SIGNAL_ID.get(label, "")
+        weight = signal_weights.get(signal_id, 0.2)  # Default 0.2 if not found
+        
+        if label in enhanced_statuses:
+            _, avg_score, _ = enhanced_statuses[label]
+            if avg_score > 0.0:
+                active_signals.append((label, avg_score, weight))
+            else:
+                inactive_signals.append((label, 0.0, weight))
+        else:
+            inactive_signals.append((label, 0.0, weight))
+    
+    # Calculate weighted average of active signals to verify math
+    if active_signals:
+        weighted_sum = sum(s * w for _, s, w in active_signals)
+        total_active_weight = sum(w for _, _, w in active_signals)
+        weighted_avg = weighted_sum / total_active_weight if total_active_weight > 0 else 0.0
+    else:
+        total_active_weight = 1.0
+        weighted_avg = 0.0
+    
+    # Build table rows - contribution = (signal_score / weighted_avg) * normalized_weight * fallback_score
+    # This ensures: sum of contributions = fallback_score
     rows = ["| Metric | Score |", "|---|---|"]
     
     for label in expected_signals:
+        signal_id = KEY_SIGNAL_TO_SIGNAL_ID.get(label, "")
+        raw_weight = signal_weights.get(signal_id, 0.2)
+        
         if label in enhanced_statuses:
             _, avg_score, _ = enhanced_statuses[label]
         else:
             avg_score = 0.0
         
-        # Calculate weighted contribution to final score
-        contribution = avg_score * weight
+        if avg_score > 0.0 and total_active_weight > 0:
+            # Each signal's contribution is its proportional share of the dimension score
+            # Formula: contribution = (score * weight) / weighted_sum * fallback_score
+            weighted_sum = sum(s * w for _, s, w in active_signals)
+            if weighted_sum > 0:
+                contribution = (avg_score * raw_weight / weighted_sum) * fallback_score
+            else:
+                contribution = 0.0
+        else:
+            # Inactive signals show 0 contribution
+            contribution = 0.0
         
         # Format: "6.0/10 → 1.2/10 final score"
         rows.append(f"| {label} | {avg_score:.1f}/10 → {contribution:.1f}/10 final score |")
