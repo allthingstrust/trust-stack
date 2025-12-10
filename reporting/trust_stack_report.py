@@ -382,7 +382,7 @@ You MUST use these EXACT statuses. Do NOT change them. Only add 2-3 bullet point
 {signals_formatted}
 
 🧮 **Diagnostics Snapshot**
-{{DIAGNOSTICS_TABLE}}
+{{{{DIAGNOSTICS_TABLE}}}}
 
 📊 **Final {dimension.title()} Score: {score:.1f} / 10**
 [A 2-3 sentence summary paragraph that reflects the diagnostic data above]
@@ -399,7 +399,7 @@ INSTRUCTIONS:
 - CRITICAL: The Key Signal statuses are FIXED. Copy them exactly as provided above.
 - CRITICAL: You MUST use the provided "Attributes" and "Issues" data in your Rationale.
 - CRITICAL: Recommendations must be specific and actionable. Use the provided content snippets to identify specific gaps.
-- CRITICAL: Output '{{DIAGNOSTICS_TABLE}}' exactly where shown. Do not try to generate the table yourself.
+- CRITICAL: Output '{{{{DIAGNOSTICS_TABLE}}}}' exactly where shown. Do not try to generate the table yourself.
 """
 
     try:
@@ -416,8 +416,11 @@ INSTRUCTIONS:
             return f"Error generating analysis for {dimension}"
             
         # Inject the pre-computed table
+        # Handle both single and double braces to be robust against f-string/LLM variations
         if "{{DIAGNOSTICS_TABLE}}" in content:
             content = content.replace("{{DIAGNOSTICS_TABLE}}", diagnostics_table)
+        elif "{DIAGNOSTICS_TABLE}" in content:
+            content = content.replace("{DIAGNOSTICS_TABLE}", diagnostics_table)
         else:
             # Fallback: if LLM forgot the placeholder, inject it before the Final Score or append
             if f"📊 **Final {dimension.title()} Score" in content:
