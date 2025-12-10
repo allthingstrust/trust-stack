@@ -382,9 +382,7 @@ You MUST use these EXACT statuses. Do NOT change them. Only add 2-3 bullet point
 {signals_formatted}
 
 🧮 **Diagnostics Snapshot**
-(Include this EXACT pre-computed table in your output - do NOT modify or regenerate these values)
-
-{diagnostics_table}
+{{DIAGNOSTICS_TABLE}}
 
 📊 **Final {dimension.title()} Score: {score:.1f} / 10**
 [A 2-3 sentence summary paragraph that reflects the diagnostic data above]
@@ -401,6 +399,7 @@ INSTRUCTIONS:
 - CRITICAL: The Key Signal statuses are FIXED. Copy them exactly as provided above.
 - CRITICAL: You MUST use the provided "Attributes" and "Issues" data in your Rationale.
 - CRITICAL: Recommendations must be specific and actionable. Use the provided content snippets to identify specific gaps.
+- CRITICAL: Output '{{DIAGNOSTICS_TABLE}}' exactly where shown. Do not try to generate the table yourself.
 """
 
     try:
@@ -411,7 +410,26 @@ INSTRUCTIONS:
             max_tokens=2000,
             temperature=0.7
         )
-        return response.get('content') or response.get('text') or f"Error generating analysis for {dimension}"
+        content = response.get('content') or response.get('text')
+        
+        if not content:
+            return f"Error generating analysis for {dimension}"
+            
+        # Inject the pre-computed table
+        if "{{DIAGNOSTICS_TABLE}}" in content:
+            content = content.replace("{{DIAGNOSTICS_TABLE}}", diagnostics_table)
+        else:
+            # Fallback: if LLM forgot the placeholder, inject it before the Final Score or append
+            if f"📊 **Final {dimension.title()} Score" in content:
+                # Insert before final score
+                parts = content.split(f"📊 **Final {dimension.title()} Score")
+                content = parts[0] + f"\n🧮 **Diagnostics Snapshot**\n{diagnostics_table}\n\n📊 **Final {dimension.title()} Score" + parts[1]
+            else:
+                # Just append
+                content += f"\n\n🧮 **Diagnostics Snapshot**\n{diagnostics_table}"
+                
+        return content
+
     except Exception as e:
         logger.error(f"Failed to generate analysis for {dimension}: {e}")
         return f"Error generating analysis for {dimension}: {str(e)}"
