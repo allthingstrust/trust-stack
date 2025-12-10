@@ -108,6 +108,41 @@ LABEL_TO_KEY_SIGNAL = {
     'Review Authenticity Confidence': 'Review Authenticity',
 }
 
+# Map signal IDs (from aggregator/dimension_details) to Key Signal labels
+# v5.1: Aligned with signal definitions in trust_signals.yml
+SIGNAL_ID_TO_KEY_SIGNAL = {
+    # Provenance
+    "prov_author_bylines": "Author & Creator Clarity",
+    "prov_source_clarity": "Source Attribution",
+    "prov_domain_trust": "Domain Trust & History",
+    "prov_metadata_c2pa": "Content Credentials (C2PA)",
+    "prov_date_freshness": "Content Freshness",
+    # Resonance
+    "res_cultural_fit": "Cultural & Audience Fit",
+    "res_readability": "Readability & Clarity",
+    "res_personalization": "Personalization Relevance",
+    "res_engagement_metrics": "Engagement Quality",
+    "res_language_match": "Language Match",
+    # Coherence
+    "coh_voice_consistency": "Voice Consistency",
+    "coh_design_patterns": "Visual/Design Coherence",
+    "coh_cross_channel": "Cross-Channel Alignment",
+    "coh_technical_health": "Technical Health",
+    "coh_claim_consistency": "Claim Consistency",
+    # Transparency
+    "trans_disclosures": "Clear Disclosures",
+    "trans_ai_labeling": "AI Usage Disclosure",
+    "trans_contact_info": "Contact/Business Info",
+    "trans_privacy_policy": "Privacy Policy Clarity",
+    "trans_data_citations": "Data Source Citations",
+    # Verification
+    "ver_fact_accuracy": "Factual Accuracy",
+    "ver_trust_badges": "Trust Badges & Certs",
+    "ver_social_proof": "External Social Proof",
+    "ver_review_authenticity": "Review Authenticity",
+    "ver_claim_traceability": "Claim Traceability",
+}
+
 
 class KeySignalEvaluator:
     """Generates key signal evaluations for trust dimensions"""
@@ -212,6 +247,50 @@ class KeySignalEvaluator:
             if key_signal not in signal_scores:
                 signal_scores[key_signal] = []
             signal_scores[key_signal].append((score, evidence))
+        
+        # === NEW: Also extract LLM-derived signals from dimension_details ===
+        # This fills in gaps where attribute detection didn't find anything
+        for item in items:
+            dim_details = item.get('dimension_details', {})
+            if not dim_details:
+                continue
+            
+            target_dim = dim_details.get(dimension.lower())
+            if not target_dim or not isinstance(target_dim, dict):
+                continue
+            
+            signals_list = target_dim.get('signals', [])
+            for sig in signals_list:
+                if not isinstance(sig, dict):
+                    continue
+                    
+                signal_id = sig.get('id', '')
+                key_signal = SIGNAL_ID_TO_KEY_SIGNAL.get(signal_id)
+                if not key_signal:
+                    continue
+                
+                # Only add if expected for this dimension
+                if key_signal not in self.dimension_signals.get(dimension, []):
+                    continue
+                
+                # Signal value from aggregator is 0-1, scale to 0-10
+                raw_value = sig.get('value', 0)
+                if raw_value <= 1.0:
+                    score = float(raw_value) * 10.0
+                else:
+                    score = float(raw_value)
+                
+                # Extract evidence
+                evidence_list = sig.get('evidence', [])
+                if evidence_list:
+                    evidence = str(evidence_list[0]) if evidence_list else sig.get('rationale', 'LLM analysis')
+                else:
+                    evidence = sig.get('rationale', 'LLM analysis')
+                
+                if key_signal not in signal_scores:
+                    signal_scores[key_signal] = []
+                signal_scores[key_signal].append((score, evidence))
+        # === END NEW ===
         
         # Compute status for each key signal
         results = {}
