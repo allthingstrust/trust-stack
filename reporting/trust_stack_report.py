@@ -129,7 +129,11 @@ def _render_diagnostics_table(
                     status = '✅' if avg_score >= 7.0 else ('⚠️' if avg_score >= 4.0 else '❌')
                     enhanced_statuses[key_signal_label] = (status, avg_score, evidence)
     
-    # Build table rows - simplified to just show score
+    # Calculate weight per signal (equal weights)
+    signal_count = len(expected_signals)
+    weight = 1.0 / signal_count if signal_count > 0 else 0.2
+    
+    # Build table rows - show raw score and weighted contribution
     rows = ["| Metric | Score |", "|---|---|"]
     
     for label in expected_signals:
@@ -138,8 +142,11 @@ def _render_diagnostics_table(
         else:
             avg_score = 0.0
         
-        # Simplified format: just show the score
-        rows.append(f"| {label} | {avg_score:.1f}/10 |")
+        # Calculate weighted contribution to final score
+        contribution = avg_score * weight
+        
+        # Format: "6.0/10 → 1.2/10 final score"
+        rows.append(f"| {label} | {avg_score:.1f}/10 → {contribution:.1f}/10 final score |")
     
     return "\n".join(rows)
 

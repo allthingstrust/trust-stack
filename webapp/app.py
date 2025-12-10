@@ -1464,8 +1464,14 @@ def show_analyze_page():
                         # Merge detected_attributes from score.rationale into meta
                         # This enables the report generator to show actual attribute values
                         rationale = score.rationale or {}
-                        if isinstance(rationale, dict) and rationale.get('detected_attributes'):
-                            item["meta"]["detected_attributes"] = rationale["detected_attributes"]
+                        if isinstance(rationale, dict):
+                            if rationale.get('detected_attributes'):
+                                item["meta"]["detected_attributes"] = rationale["detected_attributes"]
+                            # v5.1: Extract dimension signals for accurate diagnostics table
+                            # This fixes the math mismatch where diagnostics showed attribute scores
+                            # but dimension score was calculated from LLM signals
+                            if rationale.get('dimensions'):
+                                item["dimension_details"] = rationale["dimensions"]
                     items.append(item)
             
             legacy_run_data["scoring_report"]["items"] = items

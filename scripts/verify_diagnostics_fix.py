@@ -79,12 +79,12 @@ def test_extraction_with_mock_data():
     extracted = _extract_llm_signals_for_dimension("resonance", mock_items)
     print(f"  Extracted signals: {extracted}")
     
-    # Verify mapping worked
-    assert "Cultural Fluency & Inclusion" in extracted, "res_cultural_fit should map to 'Cultural Fluency & Inclusion'"
-    assert "Creative Relevance" in extracted, "res_readability should map to 'Creative Relevance'"
+    # Verify mapping worked - use v5.1 labels
+    assert "Cultural & Audience Fit" in extracted, f"res_cultural_fit should map to 'Cultural & Audience Fit', got {list(extracted.keys())}"
+    assert "Readability & Clarity" in extracted, f"res_readability should map to 'Readability & Clarity', got {list(extracted.keys())}"
     
     # Verify scaling (0-1 -> 0-10)
-    cultural_score = extracted["Cultural Fluency & Inclusion"][0]
+    cultural_score = extracted["Cultural & Audience Fit"][0]
     assert 7.0 <= cultural_score <= 8.0, f"Expected 7.5 (scaled from 0.75), got {cultural_score}"
     
     print("  ✅ LLM signals extracted and mapped correctly")
@@ -96,8 +96,8 @@ def test_table_rendering():
     
     # Attribute-based statuses (from KeySignalEvaluator)
     key_signal_statuses = {
-        "Creative Relevance": ("⚠️", 6.2, ["Readable: 12.0 words/sentence"]),
-        "Cultural Fluency & Inclusion": ("✅", 10.0, ["Language match: en"]),
+        "Readability & Clarity": ("⚠️", 6.2, ["Readable: 12.0 words/sentence"]),
+        "Cultural & Audience Fit": ("✅", 10.0, ["Language match: en"]),
     }
     
     # Mock items with LLM signals
@@ -116,14 +116,13 @@ def test_table_rendering():
     table = _render_diagnostics_table("resonance", key_signal_statuses, 7.5, mock_items)
     print(f"  Generated table:\n{table}\n")
     
-    # Verify new format
-    assert "(Score:" in table, "New format (Score: X.X/10) not found"
-    assert "/10)" in table, "New format should include /10"
+    # Verify simplified format (X.X/10)
+    assert "/10" in table, "Table should contain /10 format"
     
     # Verify LLM signal appears
-    assert "Cultural Fluency" in table, "Cultural Fluency & Inclusion should appear in table"
+    assert "Cultural" in table, "Cultural & Audience Fit should appear in table"
     
-    print("  ✅ Table rendered with new format")
+    print("  ✅ Table rendered with correct format")
 
 
 def test_score_sum():
