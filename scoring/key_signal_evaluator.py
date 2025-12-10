@@ -12,94 +12,100 @@ logger = logging.getLogger(__name__)
 
 
 # Mapping from detected attribute IDs to key signal names
-# This bridges the attribute detector output to the report's key signal categories
+# v5.1: Aligned with actual signals in trust_signals.yml
 ATTRIBUTE_TO_KEY_SIGNAL = {
     # Provenance
-    'author_brand_identity_verified': 'Authorship & Attribution',
-    'c2pa_cai_manifest_present': 'Metadata & Technical Provenance',
-    'exif_metadata_integrity': 'Metadata & Technical Provenance',
-    'canonical_url_matches_declared_source': 'Metadata & Technical Provenance',
-    'source_domain_trust_baseline': 'Brand Presence & Continuity',
-    'digital_watermark_fingerprint_detected': 'Metadata & Technical Provenance',
-    # WHOIS-based provenance signals
-    'domain_age': 'Brand Presence & Continuity',
-    'whois_privacy': 'Brand Presence & Continuity',
-    'ai_vs_human_labeling_clarity': 'Authorship & Attribution',
-    # Platform verification signals - maps to 'Verification & Identity'
-    'verified_platform_account': 'Verification & Identity',
+    'author_brand_identity_verified': 'Author & Creator Clarity',
+    'verified_platform_account': 'Author & Creator Clarity',
+    'canonical_url_matches_declared_source': 'Source Attribution',
+    'c2pa_cai_manifest_present': 'Content Credentials (C2PA)',
+    'exif_metadata_integrity': 'Content Credentials (C2PA)',
+    'digital_watermark_fingerprint_detected': 'Content Credentials (C2PA)',
+    'source_domain_trust_baseline': 'Domain Trust & History',
+    'domain_age': 'Domain Trust & History',
+    'whois_privacy': 'Domain Trust & History',
+    'first_seen_timestamp_crawl': 'Content Freshness',
     
     # Resonance
-    'personalization_relevance_embedding_similarity': 'Dynamic Personalization',
-    'engagement_authenticity_ratio': 'Opt-in & Accessible Personalization',
-    'language_locale_match': 'Cultural Fluency & Inclusion',
-    'readability_grade_level_fit': 'Creative Relevance',
+    'language_locale_match': 'Language Match',
+    'cultural_context_alignment': 'Cultural & Audience Fit',
+    'tone_sentiment_appropriateness': 'Cultural & Audience Fit',
+    'readability_grade_level_fit': 'Readability & Clarity',
+    'personalization_relevance_embedding_similarity': 'Personalization Relevance',
+    'engagement_authenticity_ratio': 'Engagement Quality',
+    'community_alignment_index': 'Engagement Quality',
     
     # Coherence
-    'brand_voice_consistency_score': 'Narrative Alignment Across Channels',
-    'multimodal_consistency_score': 'Design System & Interaction Patterns',
-    'claim_consistency_across_pages': 'Behavioral Consistency',
-    'broken_link_rate': 'Feedback Loops & Adaptive Clarity',
+    'brand_voice_consistency_score': 'Voice Consistency',
+    'claim_consistency_across_pages': 'Claim Consistency',
+    'multimodal_consistency_score': 'Visual/Design Coherence',
+    'email_asset_consistency_check': 'Cross-Channel Alignment',
+    'broken_link_rate': 'Technical Health',
+    'schema_compliance': 'Technical Health',
     
     # Transparency
-    'privacy_policy_link_availability_clarity': 'Plain Language Disclosures',
-    'ai_generated_assisted_disclosure_present': 'AI/ML & Automation Clarity',
-    'ai_explainability_disclosure': 'AI/ML & Automation Clarity',
-    'bot_disclosure_response_audit': 'AI/ML & Automation Clarity',
-    'contact_info_availability': 'User Control & Consent Management',
-    'ad_sponsored_label_consistency': 'Provenance Labeling & Source Integrity',
-    'data_source_citations_for_claims': 'Provenance Labeling & Source Integrity',
+    'privacy_policy_link_availability_clarity': 'Privacy Policy Clarity',
+    'ai_generated_assisted_disclosure_present': 'AI Usage Disclosure',
+    'ai_explainability_disclosure': 'AI Usage Disclosure',
+    'bot_disclosure_response_audit': 'AI Usage Disclosure',
+    'ai_vs_human_labeling_clarity': 'AI Usage Disclosure',
+    'contact_info_availability': 'Contact/Business Info',
+    'ad_sponsored_label_consistency': 'Clear Disclosures',
+    'data_source_citations_for_claims': 'Data Source Citations',
     
     # Verification
-    'claim_to_source_traceability': 'Third-Party Trust Layers',
-    'seller_product_verification_rate': 'Third-Party Trust Layers',
-    'verified_purchaser_review_rate': 'Authentic Social Proof',
-    'review_authenticity_confidence': 'Authentic Social Proof',
+    'claim_to_source_traceability': 'Claim Traceability',
+    'seller_product_verification_rate': 'Trust Badges & Certs',
+    'third_party_certifications_present': 'Trust Badges & Certs',
+    'verified_purchaser_review_rate': 'Review Authenticity',
+    'review_authenticity_confidence': 'Review Authenticity',
 }
 
 # Also map by LABEL string (what appears in the diagnostics table)
-# This ensures we match attributes regardless of whether they have attribute_id set
+# v5.1: Aligned with actual signals in trust_signals.yml
 LABEL_TO_KEY_SIGNAL = {
     # Provenance
-    'Author/Brand Identity Verified': 'Authorship & Attribution',
-    'C2PA/CAI Manifest Present': 'Metadata & Technical Provenance',
-    'EXIF/Metadata Integrity': 'Metadata & Technical Provenance',
-    'Canonical URL Matches Declared Source': 'Metadata & Technical Provenance',
-    'Source Domain Trust Baseline': 'Brand Presence & Continuity',
-    'Digital Watermark Detected': 'Metadata & Technical Provenance',
-    # WHOIS-based provenance signals
-    'Domain Age': 'Brand Presence & Continuity',
-    'WHOIS Privacy Status': 'Brand Presence & Continuity',
-    'AI vs Human Labeling Clarity': 'Authorship & Attribution',
-    # Platform verification signals
-    'Verified Platform Account': 'Verification & Identity',
+    'Author/Brand Identity Verified': 'Author & Creator Clarity',
+    'Verified Platform Account': 'Author & Creator Clarity',
+    'Canonical URL Matches Declared Source': 'Source Attribution',
+    'C2PA/CAI Manifest Present': 'Content Credentials (C2PA)',
+    'EXIF/Metadata Integrity': 'Content Credentials (C2PA)',
+    'Digital Watermark Detected': 'Content Credentials (C2PA)',
+    'Source Domain Trust Baseline': 'Domain Trust & History',
+    'Domain Age': 'Domain Trust & History',
+    'WHOIS Privacy Status': 'Domain Trust & History',
     
     # Resonance
-    'Personalization Relevance': 'Dynamic Personalization',
-    'Engagement Authenticity Ratio': 'Opt-in & Accessible Personalization',
-    'Language/Locale Match': 'Cultural Fluency & Inclusion',
-    'Readability Grade Level Fit': 'Creative Relevance',
+    'Language/Locale Match': 'Language Match',
+    'Cultural Context Alignment': 'Cultural & Audience Fit',
+    'Tone Sentiment Appropriateness': 'Cultural & Audience Fit',
+    'Readability Grade Level Fit': 'Readability & Clarity',
+    'Personalization Relevance': 'Personalization Relevance',
+    'Engagement Authenticity Ratio': 'Engagement Quality',
     
     # Coherence
-    'Brand Voice Consistency Score': 'Narrative Alignment Across Channels',
-    'Multimodal Consistency Score': 'Design System & Interaction Patterns',
-    'Claim Consistency Across Pages': 'Behavioral Consistency',
-    'Broken Link Rate': 'Feedback Loops & Adaptive Clarity',
+    'Brand Voice Consistency Score': 'Voice Consistency',
+    'Claim Consistency Across Pages': 'Claim Consistency',
+    'Multimodal Consistency Score': 'Visual/Design Coherence',
+    'Broken Link Rate': 'Technical Health',
     
     # Transparency
-    'Privacy Policy Link Availability & Clarity': 'Plain Language Disclosures',
-    'AI-Generated/Assisted Disclosure Present': 'AI/ML & Automation Clarity',
-    'AI Explainability Disclosure': 'AI/ML & Automation Clarity',
-    'Bot Disclosure Response Audit': 'AI/ML & Automation Clarity',
-    'Contact/Business Info Availability': 'User Control & Consent Management',
-    'Ad/Sponsored Label Consistency': 'Provenance Labeling & Source Integrity',
-    'Data Source Citations for Claims': 'Provenance Labeling & Source Integrity',
+    'Privacy Policy Link Availability & Clarity': 'Privacy Policy Clarity',
+    'AI-Generated/Assisted Disclosure Present': 'AI Usage Disclosure',
+    'AI Explainability Disclosure': 'AI Usage Disclosure',
+    'Bot Disclosure Response Audit': 'AI Usage Disclosure',
+    'AI vs Human Labeling Clarity': 'AI Usage Disclosure',
+    'Contact/Business Info Availability': 'Contact/Business Info',
+    'Ad/Sponsored Label Consistency': 'Clear Disclosures',
+    'Data Source Citations for Claims': 'Data Source Citations',
     
     # Verification
-    'Claim Traceability': 'Third-Party Trust Layers',
-    'Claim to Source Traceability': 'Third-Party Trust Layers',
-    'Seller/Product Verification Rate': 'Third-Party Trust Layers',
-    'Verified Purchaser Review Rate': 'Authentic Social Proof',
-    'Review Authenticity Confidence': 'Authentic Social Proof',
+    'Claim Traceability': 'Claim Traceability',
+    'Claim to Source Traceability': 'Claim Traceability',
+    'Seller/Product Verification Rate': 'Trust Badges & Certs',
+    'Third Party Certifications Present': 'Trust Badges & Certs',
+    'Verified Purchaser Review Rate': 'Review Authenticity',
+    'Review Authenticity Confidence': 'Review Authenticity',
 }
 
 
@@ -108,45 +114,42 @@ class KeySignalEvaluator:
     
     def __init__(self):
         """Initialize the key signal evaluator"""
-        # Define key signals for each dimension based on the reference format
+        # v5.1: Key signals aligned with trust_signals.yml (5 per dimension)
         self.dimension_signals = {
             'provenance': [
-                'Authorship & Attribution',
-                'Verification & Identity',
-                'Brand Presence & Continuity',
-                'Metadata & Technical Provenance',
-                'Intent & Legitimacy'
+                'Author & Creator Clarity',
+                'Source Attribution',
+                'Domain Trust & History',
+                'Content Credentials (C2PA)',
+                'Content Freshness'
             ],
             'resonance': [
-                'Dynamic Personalization',
-                'Cultural Fluency & Inclusion',
-                'Emotional Tone & Timing',
-                'Modality & Channel Continuity',
-                'Opt-in & Accessible Personalization',
-                'Creative Relevance'
+                'Cultural & Audience Fit',
+                'Readability & Clarity',
+                'Personalization Relevance',
+                'Engagement Quality',
+                'Language Match'
             ],
             'coherence': [
-                'Narrative Alignment Across Channels',
-                'Behavioral Consistency',
-                'Design System & Interaction Patterns',
-                'Temporal Continuity',
-                'Feedback Loops & Adaptive Clarity'
+                'Voice Consistency',
+                'Visual/Design Coherence',
+                'Cross-Channel Alignment',
+                'Technical Health',
+                'Claim Consistency'
             ],
             'transparency': [
-                'Plain Language Disclosures',
-                'AI/ML & Automation Clarity',
-                'Provenance Labeling & Source Integrity',
-                'User Control & Consent Management',
-                'Explainable System Behavior',
-                'Trust Recovery Mechanisms'
+                'Clear Disclosures',
+                'AI Usage Disclosure',
+                'Contact/Business Info',
+                'Privacy Policy Clarity',
+                'Data Source Citations'
             ],
             'verification': [
-                'Authentic Social Proof',
-                'Human Validation & Peer Endorsement',
-                'Third-Party Trust Layers',
-                'Moderation & Dispute Transparency',
-                'Cross-Platform Reputation Consistency',
-                'Secure & Tamper-Resistant Systems'
+                'Factual Accuracy',
+                'Trust Badges & Certs',
+                'External Social Proof',
+                'Review Authenticity',
+                'Claim Traceability'
             ]
         }
     

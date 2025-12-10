@@ -193,86 +193,82 @@ def _extract_llm_signals_for_dimension(dimension: str, items: List[Dict]) -> Dic
 
 
 # Define the standard Key Signal categories for each dimension
+# v5.1: Aligned with actual signals defined in trust_signals.yml
 TRUST_STACK_DIMENSIONS = {
     'provenance': {
         'signals': [
-            "Authorship & Attribution",
-            "Verification & Identity",
-            "Brand Presence & Continuity",
-            "Metadata & Technical Provenance",
-            "Intent & Legitimacy"
+            "Author & Creator Clarity",
+            "Source Attribution",
+            "Domain Trust & History",
+            "Content Credentials (C2PA)",
+            "Content Freshness"
         ]
     },
     'resonance': {
         'signals': [
-            "Dynamic Personalization",
-            "Cultural Fluency & Inclusion",
-            "Emotional Tone & Timing",
-            "Modality & Channel Continuity",
-            "Opt-in & Accessible Personalization",
-            "Creative Relevance"
+            "Cultural & Audience Fit",
+            "Readability & Clarity",
+            "Personalization Relevance",
+            "Engagement Quality",
+            "Language Match"
         ]
     },
     'coherence': {
         'signals': [
-            "Narrative Alignment Across Channels",
-            "Behavioral Consistency",
-            "Design System & Interaction Patterns",
-            "Temporal Continuity",
-            "Feedback Loops & Adaptive Clarity"
+            "Voice Consistency",
+            "Visual/Design Coherence",
+            "Cross-Channel Alignment",
+            "Technical Health",
+            "Claim Consistency"
         ]
     },
     'transparency': {
         'signals': [
-            "Plain Language Disclosures",
-            "AI/ML & Automation Clarity",
-            "Provenance Labeling & Source Integrity",
-            "User Control & Consent Management",
-            "Explainable System Behavior",
-            "Trust Recovery Mechanisms"
+            "Clear Disclosures",
+            "AI Usage Disclosure",
+            "Contact/Business Info",
+            "Privacy Policy Clarity",
+            "Data Source Citations"
         ]
     },
-
     'verification': {
         'signals': [
-            "Authentic Social Proof",
-            "Human Validation & Peer Endorsement",
-            "Third-Party Trust Layers",
-            "Moderation & Dispute Transparency",
-            "Cross-Platform Reputation Consistency",
-            "Secure & Tamper-Resistant Systems"
+            "Factual Accuracy",
+            "Trust Badges & Certs",
+            "External Social Proof",
+            "Review Authenticity",
+            "Claim Traceability"
         ]
     }
 }
 
 # Map scorer signal IDs (from aggregator) to report Key Signal labels
-# This bridges LLM-derived signals to the diagnostics table
+# v5.1: Updated to match actual signal definitions in trust_signals.yml
 SIGNAL_ID_TO_KEY_SIGNAL = {
     # Provenance
-    "prov_source_clarity": "Authorship & Attribution",
-    "prov_author_bylines": "Authorship & Attribution",
-    "prov_date_freshness": "Metadata & Technical Provenance",
-    "prov_metadata_c2pa": "Metadata & Technical Provenance",
-    "prov_domain_trust": "Brand Presence & Continuity",
-    # Platform verification
-    "prov_platform_verification": "Verification & Identity",
+    "prov_author_bylines": "Author & Creator Clarity",
+    "prov_source_clarity": "Source Attribution",
+    "prov_domain_trust": "Domain Trust & History",
+    "prov_metadata_c2pa": "Content Credentials (C2PA)",
+    "prov_date_freshness": "Content Freshness",
     # Resonance
-    "res_cultural_fit": "Cultural Fluency & Inclusion",
-    "res_personalization": "Dynamic Personalization",
-    "res_engagement_metrics": "Opt-in & Accessible Personalization",
-    "res_readability": "Creative Relevance",
+    "res_cultural_fit": "Cultural & Audience Fit",
+    "res_readability": "Readability & Clarity",
+    "res_personalization": "Personalization Relevance",
+    "res_engagement_metrics": "Engagement Quality",
     # Coherence
-    "coh_voice_consistency": "Narrative Alignment Across Channels",
-    "coh_design_patterns": "Design System & Interaction Patterns",
-    "coh_technical_health": "Feedback Loops & Adaptive Clarity",
+    "coh_voice_consistency": "Voice Consistency",
+    "coh_design_patterns": "Visual/Design Coherence",
+    "coh_cross_channel": "Cross-Channel Alignment",
+    "coh_technical_health": "Technical Health",
     # Transparency
-    "trans_disclosures": "Plain Language Disclosures",
-    "trans_ai_labeling": "AI/ML & Automation Clarity",
-    "trans_contact_info": "User Control & Consent Management",
+    "trans_disclosures": "Clear Disclosures",
+    "trans_ai_labeling": "AI Usage Disclosure",
+    "trans_contact_info": "Contact/Business Info",
     # Verification
-    "ver_fact_accuracy": "Third-Party Trust Layers",
-    "ver_trust_badges": "Authentic Social Proof",
-    "ver_social_proof": "Human Validation & Peer Endorsement",
+    "ver_fact_accuracy": "Factual Accuracy",
+    "ver_trust_badges": "Trust Badges & Certs",
+    "ver_social_proof": "External Social Proof",
 }
 
 # Define specific diagnostic metrics for each dimension
