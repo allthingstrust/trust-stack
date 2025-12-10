@@ -182,7 +182,15 @@ def _extract_llm_signals_for_dimension(dimension: str, items: List[Dict]) -> Dic
             raw_value = sig.get('value', 0)
             score = float(raw_value) * 10.0 if raw_value <= 1.0 else float(raw_value)
             evidence = sig.get('evidence', [])
-            evidence_str = '; '.join(evidence[:2]) if evidence else sig.get('rationale', '')
+            
+            # Handle evidence that may be dicts or strings
+            evidence_strs = []
+            for e in evidence[:2]:
+                if isinstance(e, dict):
+                    evidence_strs.append(str(e.get('text', e.get('description', str(e)))))
+                else:
+                    evidence_strs.append(str(e))
+            evidence_str = '; '.join(evidence_strs) if evidence_strs else sig.get('rationale', '')
             
             if key_signal_label not in signal_aggregates:
                 signal_aggregates[key_signal_label] = []
