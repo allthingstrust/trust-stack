@@ -67,6 +67,7 @@ class TrustStackAttributeDetector:
             "source_domain_trust_baseline": self._detect_domain_trust,
             "domain_age": self._detect_domain_age,
             "whois_privacy": self._detect_whois_privacy,
+            "verified_platform_account": self._detect_platform_verification,
 
             # Resonance
             "community_alignment_index": self._detect_community_alignment,
@@ -867,6 +868,54 @@ class TrustStackAttributeDetector:
         except Exception as e:
             logger.warning(f"Error detecting WHOIS privacy for {url}: {e}")
             return None
+
+    def _detect_platform_verification(self, content: NormalizedContent) -> Optional[DetectedAttribute]:
+        """
+        Detect platform verification badges for social media accounts.
+        
+        This creates a dedicated attribute that maps to 'Verification & Identity'
+        key signal, separate from author verification. Detects blue checkmarks
+        and verified status on Instagram, LinkedIn, X/Twitter, etc.
+        """
+        meta = content.meta or {}
+        
+        # Check for platform verification badges extracted by page_fetcher
+        verification_badges = meta.get("verification_badges", {})
+        
+        if isinstance(verification_badges, dict) and verification_badges.get("verified"):
+            platform = verification_badges.get("platform", "unknown")
+            badge_type = verification_badges.get("badge_type", "verification_badge")
+            evidence = verification_badges.get("evidence", "Platform verification detected")
+            
+            # Platform verification is high-confidence
+            return DetectedAttribute(
+                attribute_id="verified_platform_account",
+                dimension="provenance",
+                label="Verified Platform Account",
+                value=10.0,
+                evidence=f"Verified {platform} account: {badge_type}. {evidence}",
+                confidence=1.0
+            )
+        
+        # Check if this is a known social media platform without verification
+        url_lower = content.url.lower() if content.url else ""
+        social_platforms = ['instagram.com', 'linkedin.com', 'twitter.com', 'x.com', 'facebook.com', 'tiktok.com']
+        
+        is_social = any(platform in url_lower for platform in social_platforms)
+        
+        if is_social:
+            # Social media without detected verification badge
+            return DetectedAttribute(
+                attribute_id="verified_platform_account",
+                dimension="provenance",
+                label="Verified Platform Account", 
+                value=3.0,
+                evidence="Social media profile without verified badge detected",
+                confidence=0.7
+            )
+        
+        # Not a social media platform - don't report (not applicable)
+        return None
 
     # ===== RESONANCE DETECTORS =====
 

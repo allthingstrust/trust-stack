@@ -86,10 +86,17 @@ def _compute_diagnostics_from_attributes(dimension: str, items: List[Dict]) -> D
                     attribute_scores[label].append(float(value))
     return attribute_scores
 
-def _render_diagnostics_table(dimension: str, key_signal_statuses: Dict[str, Any], fallback_score: float) -> str:
+def _render_diagnostics_table(
+    dimension: str, 
+    key_signal_statuses: Dict[str, Any], 
+    fallback_score: float,
+    items: List[Dict] = None
+) -> str:
     """
     Render the diagnostics snapshot table using aggregated Key Signal scores.
     Displays weighted contribution of each high-level Key Signal to the overall dimension score.
+    
+    Now includes LLM-derived signals from dimension_details (merged with attribute-based signals).
     """
     # Get the strict list of signals for this dimension
     expected_signals = TRUST_STACK_DIMENSIONS.get(dimension.lower(), {}).get('signals', [])
@@ -97,27 +104,93 @@ def _render_diagnostics_table(dimension: str, key_signal_statuses: Dict[str, Any
     if not expected_signals:
          return f"| Metric | Contribution |\n|---|---|\n| No signals defined | {fallback_score:.1f} points |"
 
-    # Calculate dynamic weight based on number of EXPECTED signals (usually 5)
-    # This ensures consistency: 5 signals = 0.20 weight each.
+    # Calculate dynamic weight based on number of EXPECTED signals (usually 5-6)
     signal_count = len(expected_signals)
     weight = 1.0 / signal_count if signal_count > 0 else 0.2
     
-    # Build table rows
-    rows = ["| Metric | Contribution |", "|---|---|"]
+    # Build enhanced signal scores by merging LLM signals from dimension_details
+    enhanced_statuses = dict(key_signal_statuses)  # Start with attribute-based
+    
+    if items:
+        # Extract LLM-derived signals from dimension_details
+        llm_signal_scores = _extract_llm_signals_for_dimension(dimension, items)
+        
+        # Merge: LLM signals fill in gaps or override attribute-based signals
+        for key_signal_label, (avg_score, evidence) in llm_signal_scores.items():
+            if key_signal_label in expected_signals:
+                # If we already have attribute data, average them; otherwise use LLM
+                if key_signal_label in enhanced_statuses:
+                    _, existing_score, existing_evidence = enhanced_statuses[key_signal_label]
+                    # Prefer LLM if attribute score is 0
+                    if existing_score == 0.0:
+                        status = '✅' if avg_score >= 7.0 else ('⚠️' if avg_score >= 4.0 else '❌')
+                        enhanced_statuses[key_signal_label] = (status, avg_score, evidence)
+                else:
+                    status = '✅' if avg_score >= 7.0 else ('⚠️' if avg_score >= 4.0 else '❌')
+                    enhanced_statuses[key_signal_label] = (status, avg_score, evidence)
+    
+    # Build table rows - simplified to just show score
+    rows = ["| Metric | Score |", "|---|---|"]
     
     for label in expected_signals:
-        # Get pre-computed status tuple: (status_icon, avg_score, evidence_list)
-        # Default to 0.0 if not found (though evaluator should return all)
-        if label in key_signal_statuses:
-            _, avg_score, _ = key_signal_statuses[label]
+        if label in enhanced_statuses:
+            _, avg_score, _ = enhanced_statuses[label]
         else:
             avg_score = 0.0
-            
-        contribution = avg_score * weight
-        # Format: 1.60 points (8.0 * 0.20)
-        rows.append(f"| {label} | {contribution:.2f} points ({avg_score:.1f} * {weight:.2f}) |")
+        
+        # Simplified format: just show the score
+        rows.append(f"| {label} | {avg_score:.1f}/10 |")
     
     return "\n".join(rows)
+
+
+def _extract_llm_signals_for_dimension(dimension: str, items: List[Dict]) -> Dict[str, tuple]:
+    """
+    Extract LLM-derived signal scores from dimension_details for a specific dimension.
+    
+    Returns:
+        Dict mapping Key Signal label -> (avg_score, evidence_list)
+    """
+    signal_aggregates = {}  # key_signal_label -> list of (score, evidence)
+    
+    for item in items:
+        dim_details = item.get('dimension_details', {})
+        if not dim_details:
+            continue
+            
+        target_dim = dim_details.get(dimension.lower())
+        if not target_dim:
+            continue
+        
+        signals = target_dim.get('signals', [])
+        for sig in signals:
+            signal_id = sig.get('id', '')
+            
+            # Map signal ID to Key Signal label
+            key_signal_label = SIGNAL_ID_TO_KEY_SIGNAL.get(signal_id)
+            if not key_signal_label:
+                continue
+            
+            # Signal values from aggregator are 0-1, scale to 0-10
+            raw_value = sig.get('value', 0)
+            score = float(raw_value) * 10.0 if raw_value <= 1.0 else float(raw_value)
+            evidence = sig.get('evidence', [])
+            evidence_str = '; '.join(evidence[:2]) if evidence else sig.get('rationale', '')
+            
+            if key_signal_label not in signal_aggregates:
+                signal_aggregates[key_signal_label] = []
+            signal_aggregates[key_signal_label].append((score, evidence_str))
+    
+    # Average the scores per Key Signal
+    result = {}
+    for label, scores_evidences in signal_aggregates.items():
+        scores = [s for s, _ in scores_evidences]
+        evidence = [e for _, e in scores_evidences if e][:3]
+        avg_score = sum(scores) / len(scores) if scores else 0.0
+        result[label] = (avg_score, evidence)
+    
+    return result
+
 
 # Define the standard Key Signal categories for each dimension
 TRUST_STACK_DIMENSIONS = {
@@ -170,6 +243,36 @@ TRUST_STACK_DIMENSIONS = {
             "Secure & Tamper-Resistant Systems"
         ]
     }
+}
+
+# Map scorer signal IDs (from aggregator) to report Key Signal labels
+# This bridges LLM-derived signals to the diagnostics table
+SIGNAL_ID_TO_KEY_SIGNAL = {
+    # Provenance
+    "prov_source_clarity": "Authorship & Attribution",
+    "prov_author_bylines": "Authorship & Attribution",
+    "prov_date_freshness": "Metadata & Technical Provenance",
+    "prov_metadata_c2pa": "Metadata & Technical Provenance",
+    "prov_domain_trust": "Brand Presence & Continuity",
+    # Platform verification
+    "prov_platform_verification": "Verification & Identity",
+    # Resonance
+    "res_cultural_fit": "Cultural Fluency & Inclusion",
+    "res_personalization": "Dynamic Personalization",
+    "res_engagement_metrics": "Opt-in & Accessible Personalization",
+    "res_readability": "Creative Relevance",
+    # Coherence
+    "coh_voice_consistency": "Narrative Alignment Across Channels",
+    "coh_design_patterns": "Design System & Interaction Patterns",
+    "coh_technical_health": "Feedback Loops & Adaptive Clarity",
+    # Transparency
+    "trans_disclosures": "Plain Language Disclosures",
+    "trans_ai_labeling": "AI/ML & Automation Clarity",
+    "trans_contact_info": "User Control & Consent Management",
+    # Verification
+    "ver_fact_accuracy": "Third-Party Trust Layers",
+    "ver_trust_badges": "Authentic Social Proof",
+    "ver_social_proof": "Human Validation & Peer Endorsement",
 }
 
 # Define specific diagnostic metrics for each dimension
@@ -270,7 +373,7 @@ def _generate_dimension_analysis(
     computed_statuses = evaluator.compute_signal_statuses(dimension, items)
     
     # Compute actual diagnostics from computed statuses
-    diagnostics_table = _render_diagnostics_table(dimension, computed_statuses, score)
+    diagnostics_table = _render_diagnostics_table(dimension, computed_statuses, score, items)
     
     # Format signals with pre-computed statuses for the LLM prompt
     signals_with_status = []

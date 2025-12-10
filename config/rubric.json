@@ -62,108 +62,227 @@
     }
   },
   "trust_signals": {
+    "scoring": {
+      "_description": "v5.1: Aggregator-level defaults for score capping",
+      "cap_if_core_missing": 6.0,
+      "cap_if_knockout": 4.0,
+      "knockout_threshold_default": 0.30,
+      "coverage_cap_low": 6.0,
+      "coverage_cap_medium": 8.0,
+      "coverage_threshold_low": 0.5,
+      "coverage_threshold_medium": 0.8
+    },
     "dimensions": {
       "Provenance": {
-        "weight": 0.2
+        "weight": 0.25
       },
       "Verification": {
-        "weight": 0.2
+        "weight": 0.25
       },
       "Transparency": {
-        "weight": 0.2
+        "weight": 0.15
       },
       "Coherence": {
-        "weight": 0.2
+        "weight": 0.20
       },
       "Resonance": {
-        "weight": 0.2
+        "weight": 0.15
       }
     },
     "signals": {
       "prov_author_bylines": {
-        "label": "Author Attribution",
+        "label": "Clear Authorship/Bylines",
         "dimension": "Provenance",
-        "weight": 1.0
+        "weight": 0.20,
+        "requirement_level": "core",
+        "knockout_flag": false,
+        "include_in_coverage": true,
+        "discoverability_signal": "machine_visible",
+        "visibility_signal": "user_visible_high"
       },
       "prov_metadata_c2pa": {
         "label": "C2PA/Content Credentials",
         "dimension": "Provenance",
-        "weight": 1.0
+        "weight": 0.20,
+        "requirement_level": "amplifier",
+        "knockout_flag": false,
+        "include_in_coverage": true,
+        "discoverability_signal": "machine_visible",
+        "visibility_signal": "user_visible_low"
       },
       "prov_source_clarity": {
-        "label": "Source Verification",
+        "label": "Source Attribution",
         "dimension": "Provenance",
-        "weight": 1.0
+        "weight": 0.20,
+        "requirement_level": "core",
+        "knockout_flag": true,
+        "knockout_threshold_norm": 0.30,
+        "include_in_coverage": true,
+        "discoverability_signal": "machine_visible",
+        "visibility_signal": "backend_only"
       },
       "prov_date_freshness": {
         "label": "Content Freshness",
         "dimension": "Provenance",
-        "weight": 1.0
+        "weight": 0.20,
+        "requirement_level": "amplifier",
+        "knockout_flag": false,
+        "include_in_coverage": false,
+        "discoverability_signal": "machine_visible",
+        "visibility_signal": "backend_only"
+      },
+      "prov_domain_trust": {
+        "label": "Domain Trust & History",
+        "dimension": "Provenance",
+        "weight": 0.20,
+        "requirement_level": "core",
+        "knockout_flag": true,
+        "knockout_threshold_norm": 0.30,
+        "include_in_coverage": true,
+        "discoverability_signal": "machine_visible",
+        "visibility_signal": "backend_only"
       },
       "ver_fact_accuracy": {
         "label": "Factual Accuracy",
         "dimension": "Verification",
-        "weight": 1.0
+        "weight": 0.40,
+        "requirement_level": "core",
+        "knockout_flag": false,
+        "include_in_coverage": true,
+        "discoverability_signal": "machine_visible",
+        "visibility_signal": "user_visible_high"
       },
       "ver_trust_badges": {
-        "label": "Trust Badges",
+        "label": "Trust Badges/Certs",
         "dimension": "Verification",
-        "weight": 1.0
+        "weight": 0.30,
+        "requirement_level": "amplifier",
+        "knockout_flag": false,
+        "include_in_coverage": false,
+        "discoverability_signal": "not_machine_visible",
+        "visibility_signal": "user_visible_high"
       },
       "ver_social_proof": {
-        "label": "Social Proof",
+        "label": "External Social Proof",
         "dimension": "Verification",
-        "weight": 1.0
+        "weight": 0.30,
+        "requirement_level": "amplifier",
+        "knockout_flag": false,
+        "include_in_coverage": false,
+        "discoverability_signal": "machine_visible",
+        "visibility_signal": "user_visible_high"
       },
       "trans_disclosures": {
-        "label": "Disclosures",
+        "label": "Clear Disclosures",
         "dimension": "Transparency",
-        "weight": 1.0
+        "weight": 0.40,
+        "requirement_level": "core",
+        "knockout_flag": false,
+        "include_in_coverage": true,
+        "discoverability_signal": "machine_visible",
+        "visibility_signal": "user_visible_high"
       },
       "trans_ai_labeling": {
-        "label": "AI Labeling",
+        "label": "AI Usage Disclosure",
         "dimension": "Transparency",
-        "weight": 1.0
+        "weight": 0.30,
+        "requirement_level": "core",
+        "knockout_flag": true,
+        "knockout_threshold_norm": 0.30,
+        "include_in_coverage": true,
+        "discoverability_signal": "machine_visible",
+        "visibility_signal": "user_visible_high"
       },
       "trans_contact_info": {
-        "label": "Contact Information",
+        "label": "Contact/Business Info",
         "dimension": "Transparency",
-        "weight": 1.0
+        "weight": 0.30,
+        "requirement_level": "amplifier",
+        "knockout_flag": false,
+        "include_in_coverage": false,
+        "discoverability_signal": "machine_visible",
+        "visibility_signal": "user_visible_high"
       },
       "coh_voice_consistency": {
         "label": "Voice Consistency",
         "dimension": "Coherence",
-        "weight": 1.0
+        "weight": 0.40,
+        "requirement_level": "core",
+        "knockout_flag": false,
+        "include_in_coverage": true,
+        "discoverability_signal": "machine_visible",
+        "visibility_signal": "user_visible_high"
       },
       "coh_design_patterns": {
-        "label": "Design Consistency",
+        "label": "Visual/Design Coherence",
         "dimension": "Coherence",
-        "weight": 1.0
+        "weight": 0.30,
+        "requirement_level": "core",
+        "knockout_flag": false,
+        "include_in_coverage": true,
+        "discoverability_signal": "machine_visible",
+        "visibility_signal": "user_visible_high"
       },
       "coh_technical_health": {
         "label": "Technical Health",
         "dimension": "Coherence",
-        "weight": 1.0
+        "weight": 0.30,
+        "requirement_level": "amplifier",
+        "knockout_flag": false,
+        "include_in_coverage": false,
+        "discoverability_signal": "machine_visible",
+        "visibility_signal": "backend_only"
+      },
+      "coh_cross_channel": {
+        "label": "Cross-Channel Alignment",
+        "dimension": "Coherence",
+        "weight": 0.30,
+        "requirement_level": "core",
+        "knockout_flag": true,
+        "knockout_threshold_norm": 0.30,
+        "include_in_coverage": true,
+        "discoverability_signal": "machine_visible",
+        "visibility_signal": "user_visible_high"
       },
       "res_cultural_fit": {
-        "label": "Cultural Fit",
+        "label": "Cultural/Audience Fit",
         "dimension": "Resonance",
-        "weight": 1.0
+        "weight": 0.40,
+        "requirement_level": "core",
+        "knockout_flag": false,
+        "include_in_coverage": true,
+        "discoverability_signal": "machine_visible",
+        "visibility_signal": "user_visible_high"
       },
       "res_personalization": {
-        "label": "Personalization",
+        "label": "Personalization Signals",
         "dimension": "Resonance",
-        "weight": 1.0
+        "weight": 0.30,
+        "requirement_level": "amplifier",
+        "knockout_flag": false,
+        "include_in_coverage": false,
+        "discoverability_signal": "not_machine_visible",
+        "visibility_signal": "user_visible_low"
       },
       "res_engagement_metrics": {
-        "label": "Engagement",
+        "label": "Organic Engagement",
         "dimension": "Resonance",
-        "weight": 1.0
+        "weight": 0.30,
+        "requirement_level": "amplifier",
+        "knockout_flag": false,
+        "include_in_coverage": false,
+        "discoverability_signal": "machine_visible",
+        "visibility_signal": "user_visible_low"
       },
       "res_readability": {
         "label": "Readability",
         "dimension": "Resonance",
-        "weight": 1.0
+        "weight": 0.30,
+        "requirement_level": "core",
+        "knockout_flag": false,
+        "include_in_coverage": true,
+        "discoverability_signal": "machine_visible",
+        "visibility_signal": "user_visible_low"
       }
     }
   },
@@ -607,6 +726,41 @@
         "description": "Public registrant info scores higher; privacy services score lower"
       },
       "detection_method": "WHOIS lookup for registrant organization visibility"
+    },
+    {
+      "id": "verified_platform_account",
+      "label": "Verified Platform Account",
+      "match_meta": [
+        "verified",
+        "platform",
+        "account",
+        "badge",
+        "checkmark"
+      ],
+      "effect": "bonus",
+      "value": 0,
+      "enabled": true,
+      "source_row": {
+        "Unified Dimension": "Provenance",
+        "Attribute (Objective Signal)": "Verified Platform Account",
+        "How to Collect (API/Scrape)": "Detect verification badges on social media platforms (Instagram, LinkedIn, X/Twitter)",
+        "Field Type": "boolean",
+        "Scoring Rule (1–10)": "10 if verified badge present; 3 if social platform without verification; N/A for non-social",
+        "Thresholds / Flags": "Flag: unverified account for major brand",
+        "Frequency": "per page",
+        "Notes / Example Tools": "HTML scraping for verification badge elements (aria-label, data-testid)",
+        "Modality": "",
+        "Channel/ Platform": "Instagram, LinkedIn, X/Twitter, Facebook, TikTok",
+        "Ecosystem (Owned/Social/Marketplace/Email)": "Social"
+      },
+      "dimension": "provenance",
+      "scoring_rule_parsed": {
+        "type": "boolean",
+        "min_value": 1,
+        "max_value": 10,
+        "description": "10 if platform verified badge detected; 3 if social platform without verified badge"
+      },
+      "detection_method": "HTML scraping for platform verification badge elements"
     },
     {
       "id": "accessibility_compliance_wcag",

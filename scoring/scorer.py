@@ -51,6 +51,7 @@ class ContentScorer:
         from scoring.rubric import load_rubric
         rubric = load_rubric()
         self.trust_signals_config = rubric.get('trust_signals', {})
+        self._signals_cfg = self.trust_signals_config.get('signals', {})
         
         # Initialize Aggregator
         from scoring.aggregator import ScoringAggregator
@@ -73,6 +74,25 @@ class ContentScorer:
         self.linguistic_analyzer = LinguisticAnalyzer()
         self.triage_scorer = TriageScorer()
         self.signal_mapper = SignalMapper(self.trust_signals_config)
+
+    def _signal_weight(self, signal_id: str, default: float) -> float:
+        """
+        Get signal weight from config with fallback support.
+        
+        trust_signals_config shape is expected to be:
+          { dimensions: {...}, signals: { <id>: { weight: ... } } }
+        but we keep a fallback for legacy flat configs.
+        """
+        try:
+            if signal_id in self._signals_cfg:
+                return float(self._signals_cfg[signal_id].get('weight', default))
+            # Legacy fallback: flat config structure
+            legacy = self.trust_signals_config.get(signal_id, {})
+            if isinstance(legacy, dict):
+                return float(legacy.get('weight', default))
+        except Exception:
+            pass
+        return float(default)
     
     def score_content(self, content: NormalizedContent, brand_context: Dict[str, Any]) -> 'TrustScore':
         """
@@ -122,7 +142,7 @@ class ContentScorer:
                 label="Source Attribution",
                 dimension="Provenance",
                 value=prov_val,
-                weight=self.trust_signals_config.get('prov_source_clarity', {}).get('weight', 0.2),
+                weight=self._signal_weight('prov_source_clarity', 0.2),
                 evidence=[],
                 rationale="LLM analysis of source clarity",
                 confidence=prov_conf
@@ -135,7 +155,7 @@ class ContentScorer:
                 label="Content Freshness",
                 dimension="Provenance",
                 value=freshness_val,
-                weight=self.trust_signals_config.get('prov_date_freshness', {}).get('weight', 0.2),
+                weight=self._signal_weight('prov_date_freshness', 0.2),
                 evidence=[],
                 rationale="Heuristic date check",
                 confidence=1.0
@@ -150,7 +170,7 @@ class ContentScorer:
                 label="Factual Accuracy",
                 dimension="Verification",
                 value=ver_val,
-                weight=self.trust_signals_config.get('ver_fact_accuracy', {}).get('weight', 0.4),
+                weight=self._signal_weight('ver_fact_accuracy', 0.4),
                 evidence=content._llm_issues.get('verification', []) if hasattr(content, '_llm_issues') else [],
                 rationale="RAG-based verification",
                 confidence=ver_conf
@@ -165,7 +185,7 @@ class ContentScorer:
                 label="Clear Disclosures",
                 dimension="Transparency",
                 value=trans_val,
-                weight=self.trust_signals_config.get('trans_disclosures', {}).get('weight', 0.4),
+                weight=self._signal_weight('trans_disclosures', 0.4),
                 evidence=content._llm_issues.get('transparency', []) if hasattr(content, '_llm_issues') else [],
                 rationale="LLM analysis of disclosures",
                 confidence=trans_conf
@@ -180,7 +200,7 @@ class ContentScorer:
                 label="Voice Consistency",
                 dimension="Coherence",
                 value=coh_val,
-                weight=self.trust_signals_config.get('coh_voice_consistency', {}).get('weight', 0.4),
+                weight=self._signal_weight('coh_voice_consistency', 0.4),
                 evidence=content._llm_issues.get('coherence', []) if hasattr(content, '_llm_issues') else [],
                 rationale="LLM analysis of voice consistency",
                 confidence=coh_conf
@@ -195,7 +215,7 @@ class ContentScorer:
                 label="Cultural/Audience Fit",
                 dimension="Resonance",
                 value=res_val,
-                weight=self.trust_signals_config.get('res_cultural_fit', {}).get('weight', 0.4),
+                weight=self._signal_weight('res_cultural_fit', 0.4),
                 evidence=[],
                 rationale="LLM analysis of cultural fit",
                 confidence=res_conf

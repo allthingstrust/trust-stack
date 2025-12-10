@@ -25,6 +25,8 @@ ATTRIBUTE_TO_KEY_SIGNAL = {
     'domain_age': 'Brand Presence & Continuity',
     'whois_privacy': 'Brand Presence & Continuity',
     'ai_vs_human_labeling_clarity': 'Authorship & Attribution',
+    # Platform verification signals - maps to 'Verification & Identity'
+    'verified_platform_account': 'Verification & Identity',
     
     # Resonance
     'personalization_relevance_embedding_similarity': 'Dynamic Personalization',
@@ -68,6 +70,8 @@ LABEL_TO_KEY_SIGNAL = {
     'Domain Age': 'Brand Presence & Continuity',
     'WHOIS Privacy Status': 'Brand Presence & Continuity',
     'AI vs Human Labeling Clarity': 'Authorship & Attribution',
+    # Platform verification signals
+    'Verified Platform Account': 'Verification & Identity',
     
     # Resonance
     'Personalization Relevance': 'Dynamic Personalization',

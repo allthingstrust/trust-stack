@@ -1,21 +1,22 @@
-# Trust Signals Configuration
-# Defines explicit signals for each dimension, their weights, and detection methods.
+# Trust Signals Configuration (v5.1)
+# Defines explicit signals for each dimension, their weights, detection methods,
+# and v5.1 scoring attributes (requirement_level, knockout flags, visibility).
 
 dimensions:
   Provenance:
-    weight: 0.20
+    weight: 0.25
     description: "Origin clarity, traceability, and metadata completeness."
   Resonance:
-    weight: 0.20
+    weight: 0.15
     description: "Cultural fit, authentic engagement, and organic appeal."
   Coherence:
     weight: 0.20
     description: "Consistency of voice, terminology, and design patterns."
   Transparency:
-    weight: 0.20
+    weight: 0.15
     description: "Clear disclosures, honest communication, no hidden agendas."
   Verification:
-    weight: 0.20
+    weight: 0.25
     description: "Factual accuracy, third-party validation, and security."
 
 signals:
@@ -24,8 +25,13 @@ signals:
     dimension: Provenance
     label: "Clear Authorship/Bylines"
     weight: 0.20
-    detection: "heuristic" # or "llm"
+    detection: "heuristic"
     description: "Presence of clear author names, bios, or verified profiles."
+    requirement_level: "core"
+    knockout_flag: false
+    include_in_coverage: true
+    discoverability_signal: "machine_visible"
+    visibility_signal: "user_visible_high"
   
   prov_metadata_c2pa:
     dimension: Provenance
@@ -33,6 +39,11 @@ signals:
     weight: 0.20
     detection: "heuristic"
     description: "Presence of C2PA manifest or other cryptographic provenance."
+    requirement_level: "amplifier"
+    knockout_flag: false
+    include_in_coverage: true
+    discoverability_signal: "machine_visible"
+    visibility_signal: "user_visible_low"
 
   prov_source_clarity:
     dimension: Provenance
@@ -40,6 +51,12 @@ signals:
     weight: 0.20
     detection: "llm"
     description: "Clear citation of sources and data origins."
+    requirement_level: "core"
+    knockout_flag: true
+    knockout_threshold_norm: 0.30
+    include_in_coverage: true
+    discoverability_signal: "machine_visible"
+    visibility_signal: "backend_only"
 
   prov_date_freshness:
     dimension: Provenance
@@ -47,6 +64,11 @@ signals:
     weight: 0.20
     detection: "heuristic"
     description: "Content has recent publication or modification dates."
+    requirement_level: "amplifier"
+    knockout_flag: false
+    include_in_coverage: false
+    discoverability_signal: "machine_visible"
+    visibility_signal: "backend_only"
 
   prov_domain_trust:
     dimension: Provenance
@@ -54,6 +76,12 @@ signals:
     weight: 0.20
     detection: "heuristic"
     description: "Domain age, WHOIS privacy, and reputation."
+    requirement_level: "core"
+    knockout_flag: true
+    knockout_threshold_norm: 0.30
+    include_in_coverage: true
+    discoverability_signal: "machine_visible"
+    visibility_signal: "backend_only"
 
   # --- RESONANCE ---
   res_personalization:
@@ -62,6 +90,11 @@ signals:
     weight: 0.30
     detection: "llm"
     description: "Content adapts to user context (location, history) if applicable."
+    requirement_level: "amplifier"
+    knockout_flag: false
+    include_in_coverage: false
+    discoverability_signal: "not_machine_visible"
+    visibility_signal: "user_visible_low"
 
   res_engagement_metrics:
     dimension: Resonance
@@ -69,18 +102,35 @@ signals:
     weight: 0.30
     detection: "heuristic"
     description: "Presence of genuine comments, reviews, or shares."
+    requirement_level: "amplifier"
+    knockout_flag: false
+    include_in_coverage: false
+    discoverability_signal: "machine_visible"
+    visibility_signal: "user_visible_low"
 
   res_cultural_fit:
     dimension: Resonance
     label: "Cultural/Audience Fit"
     weight: 0.40
     detection: "llm"
+    description: "Language match, cultural context alignment, and tone appropriateness."
+    requirement_level: "core"
+    knockout_flag: false
+    include_in_coverage: true
+    discoverability_signal: "machine_visible"
+    visibility_signal: "user_visible_high"
+
   res_readability:
     dimension: Resonance
     label: "Readability"
     weight: 0.30
     detection: "heuristic"
     description: "Content is easy to read and suitable for the audience."
+    requirement_level: "core"
+    knockout_flag: false
+    include_in_coverage: true
+    discoverability_signal: "machine_visible"
+    visibility_signal: "user_visible_low"
 
   # --- COHERENCE ---
   coh_voice_consistency:
@@ -89,6 +139,11 @@ signals:
     weight: 0.40
     detection: "llm"
     description: "Consistent tone and style across all content items."
+    requirement_level: "core"
+    knockout_flag: false
+    include_in_coverage: true
+    discoverability_signal: "machine_visible"
+    visibility_signal: "user_visible_high"
 
   coh_technical_health:
     dimension: Coherence
@@ -96,13 +151,23 @@ signals:
     weight: 0.30
     detection: "heuristic"
     description: "Absence of broken links and technical errors."
+    requirement_level: "amplifier"
+    knockout_flag: false
+    include_in_coverage: false
+    discoverability_signal: "machine_visible"
+    visibility_signal: "backend_only"
 
   coh_design_patterns:
     dimension: Coherence
     label: "Visual/Design Coherence"
     weight: 0.30
-    detection: "llm" # Placeholder for vision model
+    detection: "llm"
     description: "Consistent visual identity and UI patterns."
+    requirement_level: "core"
+    knockout_flag: false
+    include_in_coverage: true
+    discoverability_signal: "machine_visible"
+    visibility_signal: "user_visible_high"
 
   coh_cross_channel:
     dimension: Coherence
@@ -110,6 +175,12 @@ signals:
     weight: 0.30
     detection: "llm"
     description: "Messaging is consistent between web, social, and other channels."
+    requirement_level: "core"
+    knockout_flag: true
+    knockout_threshold_norm: 0.30
+    include_in_coverage: true
+    discoverability_signal: "machine_visible"
+    visibility_signal: "user_visible_high"
 
   # --- TRANSPARENCY ---
   trans_disclosures:
@@ -118,6 +189,11 @@ signals:
     weight: 0.40
     detection: "llm"
     description: "Presence of terms, privacy policy, and pricing clarity."
+    requirement_level: "core"
+    knockout_flag: false
+    include_in_coverage: true
+    discoverability_signal: "machine_visible"
+    visibility_signal: "user_visible_high"
 
   trans_ai_labeling:
     dimension: Transparency
@@ -125,6 +201,12 @@ signals:
     weight: 0.30
     detection: "heuristic"
     description: "Explicit labeling of AI-generated content."
+    requirement_level: "core"
+    knockout_flag: true
+    knockout_threshold_norm: 0.30
+    include_in_coverage: true
+    discoverability_signal: "machine_visible"
+    visibility_signal: "user_visible_high"
 
   trans_contact_info:
     dimension: Transparency
@@ -132,14 +214,24 @@ signals:
     weight: 0.30
     detection: "heuristic"
     description: "Clear physical address, email, or support channels."
+    requirement_level: "amplifier"
+    knockout_flag: false
+    include_in_coverage: false
+    discoverability_signal: "machine_visible"
+    visibility_signal: "user_visible_high"
 
   # --- VERIFICATION ---
   ver_fact_accuracy:
     dimension: Verification
     label: "Factual Accuracy"
     weight: 0.40
-    detection: "llm" # RAG-based
+    detection: "llm"
     description: "Claims are supported by verifiable facts or consensus."
+    requirement_level: "core"
+    knockout_flag: false
+    include_in_coverage: true
+    discoverability_signal: "machine_visible"
+    visibility_signal: "user_visible_high"
 
   ver_trust_badges:
     dimension: Verification
@@ -147,6 +239,11 @@ signals:
     weight: 0.30
     detection: "heuristic"
     description: "Presence of security seals, industry certs, or awards."
+    requirement_level: "amplifier"
+    knockout_flag: false
+    include_in_coverage: false
+    discoverability_signal: "not_machine_visible"
+    visibility_signal: "user_visible_high"
 
   ver_social_proof:
     dimension: Verification
@@ -154,3 +251,8 @@ signals:
     weight: 0.30
     detection: "llm"
     description: "Mentions or validation from reputable third parties."
+    requirement_level: "amplifier"
+    knockout_flag: false
+    include_in_coverage: false
+    discoverability_signal: "machine_visible"
+    visibility_signal: "user_visible_high"

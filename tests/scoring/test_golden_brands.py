@@ -17,15 +17,28 @@ GOLDEN_SIGNALS = {
 
 MOCK_CONFIG = {
     "dimensions": {
-        "Provenance": {"weight": 0.2},
-        "Resonance": {"weight": 0.2}
+        "Provenance": {"weight": 0.25},
+        "Resonance": {"weight": 0.15}
     },
     "signals": {
-        "prov_author_bylines": {"dimension": "Provenance"},
-        "prov_metadata_c2pa": {"dimension": "Provenance"},
-        "res_engagement": {"dimension": "Resonance"}
+        "prov_author_bylines": {
+            "dimension": "Provenance",
+            "requirement_level": "core",
+            "include_in_coverage": True
+        },
+        "prov_metadata_c2pa": {
+            "dimension": "Provenance",
+            "requirement_level": "core",
+            "include_in_coverage": True
+        },
+        "res_engagement": {
+            "dimension": "Resonance",
+            "requirement_level": "amplifier",
+            "include_in_coverage": False
+        }
     }
 }
+
 
 def test_aggregator_high_trust():
     aggregator = ScoringAggregator(MOCK_CONFIG)
