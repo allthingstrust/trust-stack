@@ -340,7 +340,7 @@ class RunManager:
         return []
 
     def _extract_rationale_from_content_scores(self, cs) -> dict:
-        """Extract detected_attributes from ContentScores.meta for persistence."""
+        """Extract detected_attributes and dimension signals from ContentScores.meta for persistence."""
         import json
         
         rationale = {}
@@ -359,8 +359,13 @@ class RunManager:
             if detected_attrs:
                 rationale['detected_attributes'] = detected_attrs
             
+            # v5.1: Extract dimension signals for downstream aggregation
+            dimensions = meta.get('dimensions', {})
+            if dimensions:
+                rationale['dimensions'] = dimensions
+            
             # Also preserve other useful meta fields
-            for key in ['attribute_count', 'source_type', 'channel', 'dimensions']:
+            for key in ['attribute_count', 'source_type', 'channel']:
                 if key in meta:
                     rationale[key] = meta[key]
         
@@ -540,6 +545,14 @@ class RunManager:
         return scored
 
     def _calculate_averages(self, scores: Iterable[dict]) -> Dict[str, float]:
+        """Calculate dimension averages using v5.1 aggregator with caps/penalties.
+        
+        This uses the ScoringAggregator to apply:
+        - Visibility-based weight multipliers
+        - Knockout caps (max 4.0 if knockout signal fails)
+        - Core deficit caps (max 6.0 if core signal is low)
+        - Coverage penalties
+        """
         scores = list(scores)
         if not scores:
             return {k: None for k in [
@@ -553,6 +566,80 @@ class RunManager:
                 "authenticity_ratio",
             ]}
 
+        # Try to use v5.1 aggregator for proper dimension scoring
+        try:
+            from scoring.aggregator import ScoringAggregator
+            from scoring.rubric import load_rubric
+            from scoring.types import SignalScore
+            import json
+            
+            rubric = load_rubric()
+            trust_signals_config = rubric.get('trust_signals', {})
+            
+            if trust_signals_config:
+                aggregator = ScoringAggregator(trust_signals_config)
+                
+                # Collect all signals from rationale.dimensions across all scored items
+                all_signals = []
+                for s in scores:
+                    rationale = s.get('rationale', {})
+                    if not rationale:
+                        continue
+                    
+                    # Extract signals from dimension details if present
+                    dimensions = rationale.get('dimensions', {})
+                    for dim_name, dim_data in dimensions.items():
+                        if not isinstance(dim_data, dict):
+                            continue
+                        signals_list = dim_data.get('signals', [])
+                        for sig in signals_list:
+                            if not isinstance(sig, dict):
+                                continue
+                            try:
+                                signal = SignalScore(
+                                    id=sig.get('id', ''),
+                                    label=sig.get('label', ''),
+                                    dimension=sig.get('dimension', dim_name.capitalize()),
+                                    value=float(sig.get('value', 0)),
+                                    weight=float(sig.get('weight', 0.2)),
+                                    evidence=sig.get('evidence', []),
+                                    rationale=sig.get('rationale', ''),
+                                    confidence=float(sig.get('confidence', 1.0))
+                                )
+                                all_signals.append(signal)
+                            except (ValueError, TypeError) as e:
+                                logger.debug(f"Skipping malformed signal: {e}")
+                                continue
+                
+                if all_signals:
+                    # Aggregate using v5.1 logic with caps and penalties
+                    dimension_scores = {}
+                    for dim_name in ["Provenance", "Verification", "Transparency", "Coherence", "Resonance"]:
+                        dim_score = aggregator.aggregate_dimension(dim_name, all_signals)
+                        # Store on 0-1 scale (will be multiplied by 10 in reports)
+                        dimension_scores[dim_name.lower()] = dim_score.value / 10.0
+                    
+                    # Calculate overall using aggregator
+                    dim_score_objs = [aggregator.aggregate_dimension(d, all_signals) 
+                                      for d in ["Provenance", "Verification", "Transparency", "Coherence", "Resonance"]]
+                    trust_score = aggregator.calculate_trust_score(dim_score_objs)
+                    
+                    logger.info(f"Aggregated dimension scores using v5.1: {dimension_scores}")
+                    
+                    return {
+                        "avg_provenance": dimension_scores.get("provenance"),
+                        "avg_verification": dimension_scores.get("verification"),
+                        "avg_transparency": dimension_scores.get("transparency"),
+                        "avg_coherence": dimension_scores.get("coherence"),
+                        "avg_resonance": dimension_scores.get("resonance"),
+                        "avg_ai_readiness": dimension_scores.get("resonance"),  # Fallback
+                        "overall_score": trust_score.overall / 100.0,  # 0-1 scale
+                        "authenticity_ratio": trust_score.overall / 100.0,
+                    }
+        except Exception as e:
+            logger.warning(f"v5.1 aggregation failed, falling back to simple averages: {e}")
+
+        # Fallback: simple per-item averages (legacy behavior)
         def _avg(key):
             vals = [s.get(key) for s in scores if s.get(key) is not None]
             return sum(vals) / len(vals) if vals else None

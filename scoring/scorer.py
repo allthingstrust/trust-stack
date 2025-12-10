@@ -1209,7 +1209,30 @@ class ContentScorer:
                 except Exception as e:
                     logger.warning(f"Attribute detection failed for {content.content_id}: {e}")
 
-            # Step 3: Create ContentScores object
+            # Step 3: Serialize dimension signals for downstream aggregation
+            # This enables run_manager to use v5.1 aggregator with proper caps/penalties
+            dimensions_for_meta = {}
+            for dim_name, dim_score in trust_score.dimensions.items():
+                dimensions_for_meta[dim_name] = {
+                    "value": dim_score.value,
+                    "confidence": dim_score.confidence,
+                    "coverage": dim_score.coverage,
+                    "signals": [
+                        {
+                            "id": sig.id,
+                            "label": sig.label,
+                            "dimension": sig.dimension,
+                            "value": sig.value,
+                            "weight": sig.weight,
+                            "evidence": sig.evidence,
+                            "rationale": sig.rationale,
+                            "confidence": sig.confidence
+                        }
+                        for sig in dim_score.signals
+                    ]
+                }
+
+            # Step 4: Create ContentScores object
             content_scores = ContentScores(
                 content_id=content.content_id,
                 brand=brand_context.get('brand_name', 'unknown'),
@@ -1242,6 +1265,8 @@ class ContentScorer:
                         "platform_type": getattr(content, 'platform_type', 'unknown'),
                         "url": getattr(content, 'url', ''),
                         "language": getattr(content, 'language', 'en'),
+                        # v5.1: Include dimension signals for downstream aggregation
+                        "dimensions": dimensions_for_meta,
                         # Include detected attributes for downstream analysis
                         "detected_attributes": [
                             {
