@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Dict, Any, List, Optional
 import yaml
 from scoring.llm_client import ChatClient
+from data.models import EvidenceItem
 
 logger = logging.getLogger(__name__)
 
@@ -518,12 +519,36 @@ def _generate_dimension_analysis(
     signals_with_status = []
     for signal_name in signals:
         if signal_name in computed_statuses:
-            status, avg_score, evidence_list = computed_statuses[signal_name]
-            evidence_str = "; ".join(evidence_list) if evidence_list else "No evidence"
+            status, avg_score, evidence_items = computed_statuses[signal_name]
+            # Format evidence items in [ISSUE][EXAMPLE][URL] format
+            if evidence_items:
+                evidence_lines = []
+                for item in evidence_items:
+                    if isinstance(item, EvidenceItem):
+                        # Format: • [Issue] | [Example] | [URL]
+                        parts = [item.description]
+                        if item.example:
+                            parts.append(f'"{item.example}"')
+                        if item.url:
+                            # Shorten URL for display
+                            from urllib.parse import urlparse
+                            try:
+                                parsed = urlparse(item.url)
+                                short_url = parsed.netloc + (parsed.path[:30] + '...' if len(parsed.path) > 30 else parsed.path)
+                            except:
+                                short_url = item.url[:50]
+                            parts.append(f'[{short_url}]({item.url})')
+                        evidence_lines.append('• ' + ' | '.join(parts))
+                    else:
+                        # Legacy string format fallback
+                        evidence_lines.append(f'• {item}')
+                evidence_str = '\n   '.join(evidence_lines) if evidence_lines else 'No evidence'
+            else:
+                evidence_str = 'No evidence'
             signals_with_status.append(
                 f"**{signal_name}**\n"
                 f"   Status: {status} (Score: {avg_score:.1f}/10)\n"
-                f"   Evidence: {evidence_str}"
+                f"   Evidence:\n   {evidence_str}"
             )
         else:
             # Signal has no mapped attributes - mark as unknown

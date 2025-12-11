@@ -307,6 +307,20 @@ ContentRatings = ContentScores
 
 
 @dataclass
+class EvidenceItem:
+    """A single piece of evidence with contextual URL for Key Signal Evaluation.
+    
+    Enables the [ISSUE][EXAMPLE][URL] format in reports, providing:
+    - description: The issue or finding (e.g., "Missing author byline")
+    - example: Specific quote or observation from content (e.g., "No 'By' attribution found")
+    - url: URL where this can be viewed in context
+    """
+    description: str  # The issue or finding
+    example: str = ""  # Specific example from the content
+    url: str = ""  # URL where this can be viewed
+
+
+@dataclass
 class DetectedAttribute:
     """Represents a Trust Stack attribute detected in content"""
 
@@ -314,9 +328,10 @@ class DetectedAttribute:
     dimension: str  # provenance, resonance, coherence, transparency, verification (5 dimensions)
     label: str
     value: float  # 1-10 rating from Trust Stack scoring rules
-    evidence: str  # What triggered the detection
+    evidence: str  # What triggered the detection (legacy string format)
     confidence: float = 1.0  # 0.0-1.0 confidence in detection
     suggestion: Optional[str] = None  # LLM-generated improvement suggestion (e.g., "Change 'X' → 'Y'")
+    source_url: str = ""  # URL of the content where this attribute was detected
 
 
 @dataclass

@@ -6,7 +6,7 @@ Computes status DETERMINISTICALLY from detected attributes, then uses LLM for ex
 
 import logging
 from typing import Dict, List, Any, Optional, Tuple
-from data.models import NormalizedContent
+from data.models import NormalizedContent, EvidenceItem
 
 logger = logging.getLogger(__name__)
 
@@ -192,7 +192,7 @@ class KeySignalEvaluator:
         self,
         dimension: str,
         items: List[Dict[str, Any]]
-    ) -> Dict[str, Tuple[str, float, List[str]]]:
+    ) -> Dict[str, Tuple[str, float, List[EvidenceItem]]]:
         """
         Compute key signal statuses DETERMINISTICALLY from detected attributes.
         
@@ -201,15 +201,29 @@ class KeySignalEvaluator:
             items: List of content items with 'meta.detected_attributes'
             
         Returns:
-            Dict mapping signal_name -> (status_icon, avg_score, evidence_list)
+            Dict mapping signal_name -> (status_icon, avg_score, evidence_items)
             Status icons: ✅ (>=7), ⚠️ (4-6.9), ❌ (<4 or no data)
+            Evidence items contain: description, example, and source URL
         """
         if dimension not in self.dimension_signals:
             return {}
         
-        # Collect all detected attributes from all items
-        all_attributes = []
-        for item in items:
+        # Build a mapping from item to its source URL for evidence tracking
+        item_urls = {}
+        for idx, item in enumerate(items):
+            meta = item.get('meta', {})
+            if isinstance(meta, str):
+                try:
+                    import json
+                    meta = json.loads(meta) if meta else {}
+                except:
+                    meta = {}
+            url = meta.get('source_url') or meta.get('url') or item.get('url', '')
+            item_urls[idx] = url
+        
+        # Collect all detected attributes from all items WITH their source URLs
+        all_attributes_with_urls = []  # List of (attribute_dict, source_url)
+        for idx, item in enumerate(items):
             meta = item.get('meta', {})
             if isinstance(meta, str):
                 try:
@@ -218,11 +232,14 @@ class KeySignalEvaluator:
                 except:
                     meta = {}
             detected = meta.get('detected_attributes', [])
-            all_attributes.extend(detected)
+            url = item_urls.get(idx, '')
+            for attr in detected:
+                all_attributes_with_urls.append((attr, url))
         
-        # Aggregate scores per key signal
-        signal_scores: Dict[str, List[Tuple[float, str]]] = {}
-        for attr in all_attributes:
+        # Aggregate scores per key signal with URLs
+        # signal_scores: signal_name -> list of (score, evidence_str, url)
+        signal_scores: Dict[str, List[Tuple[float, str, str]]] = {}
+        for attr, source_url in all_attributes_with_urls:
             attr_id = attr.get('attribute_id', '')
             attr_label = attr.get('label', '')
             attr_dimension = attr.get('dimension', '').lower()
@@ -240,17 +257,17 @@ class KeySignalEvaluator:
                 logger.debug(f"Unmapped attribute: id='{attr_id}', label='{attr_label}'")
                 continue
             
-            # Record score and evidence
+            # Record score, evidence, and URL
             score = float(attr.get('value', 0))
             evidence = attr.get('evidence', '')
             
             if key_signal not in signal_scores:
                 signal_scores[key_signal] = []
-            signal_scores[key_signal].append((score, evidence))
+            signal_scores[key_signal].append((score, evidence, source_url))
         
-        # === NEW: Also extract LLM-derived signals from dimension_details ===
+        # === Also extract LLM-derived signals from dimension_details ===
         # This fills in gaps where attribute detection didn't find anything
-        for item in items:
+        for idx, item in enumerate(items):
             dim_details = item.get('dimension_details', {})
             if not dim_details:
                 continue
@@ -258,6 +275,9 @@ class KeySignalEvaluator:
             target_dim = dim_details.get(dimension.lower())
             if not target_dim or not isinstance(target_dim, dict):
                 continue
+            
+            # Get item's URL for evidence tracking
+            source_url = item_urls.get(idx, '')
             
             signals_list = target_dim.get('signals', [])
             for sig in signals_list:
@@ -289,8 +309,8 @@ class KeySignalEvaluator:
                 
                 if key_signal not in signal_scores:
                     signal_scores[key_signal] = []
-                signal_scores[key_signal].append((score, evidence))
-        # === END NEW ===
+                signal_scores[key_signal].append((score, evidence, source_url))
+        # === END LLM-derived signals ===
         
         # Compute status for each key signal
         results = {}
@@ -299,17 +319,28 @@ class KeySignalEvaluator:
             
             if not scores_evidence:
                 # No data for this signal
-                results[signal_name] = ('❌', 0.0, ['No attributes detected'])
+                no_data_item = EvidenceItem(
+                    description="No attributes detected",
+                    example="",
+                    url=""
+                )
+                results[signal_name] = ('❌', 0.0, [no_data_item])
             else:
-                scores = [s for s, _ in scores_evidence]
-                # Deduplicate evidence strings before limiting to 3
-                seen_evidence = set()
-                unique_evidence = []
-                for _, e in scores_evidence:
-                    if e and e not in seen_evidence:
-                        seen_evidence.add(e)
-                        unique_evidence.append(e)
-                evidence = unique_evidence[:3]  # Limit to 3 unique entries
+                scores = [s for s, _, _ in scores_evidence]
+                # Deduplicate evidence by (description, url) tuple before limiting to 3
+                seen_keys = set()
+                unique_evidence_items = []
+                for _, evidence_str, url in scores_evidence:
+                    if evidence_str:
+                        key = (evidence_str, url)
+                        if key not in seen_keys:
+                            seen_keys.add(key)
+                            unique_evidence_items.append(EvidenceItem(
+                                description=evidence_str,
+                                example="",  # Could be populated with content snippet later
+                                url=url
+                            ))
+                evidence_items = unique_evidence_items[:3]  # Limit to 3 unique entries
                 avg_score = sum(scores) / len(scores)
                 
                 if avg_score >= 7.0:
@@ -319,7 +350,7 @@ class KeySignalEvaluator:
                 else:
                     status = '❌'
                 
-                results[signal_name] = (status, avg_score, evidence)
+                results[signal_name] = (status, avg_score, evidence_items)
         
         return results
     
