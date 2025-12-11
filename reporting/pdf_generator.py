@@ -10,16 +10,90 @@ from reportlab.lib import colors
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak
 from reportlab.platypus import Image
 from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
 from typing import Dict, Any, List
 import logging
 from datetime import datetime
 import io
+import re
 import matplotlib.pyplot as plt
 import matplotlib
 matplotlib.use('Agg')  # Use non-interactive backend
 import os
 
 from config.settings import SETTINGS
+
+# ============================================================================
+# EMOJI HANDLING FOR PDF
+# ============================================================================
+# ReportLab's default fonts (Helvetica) don't support emoji Unicode characters.
+# We convert emojis to readable text labels for PDF compatibility.
+
+# Comprehensive emoji-to-text mapping for PDF rendering
+EMOJI_TO_TEXT = {
+    # Trust Stack icons
+    '🧠': '(BRAIN)',
+    '🗝️': '(KEY)',
+    '🔑': '(KEY)',
+    '✨': '(STAR)',
+    '🧮': '(CALC)',
+    '📊': '(CHART)',
+    '🛠️': '(TOOLS)',
+    '📄': '(DOC)',
+    '🔐': '(LOCK)',
+    '📣': '(ANNOUNCE)',
+    '🔍': '(SEARCH)',
+    '📌': '(PIN)',
+    '⭐': '(STAR)',
+    # Status indicators
+    '✅': '[OK]',
+    '⚠️': '[WARN]',
+    '❌': '[X]',
+    '🟢': '[GREEN]',
+    '🟡': '[YELLOW]',
+    '🟠': '[ORANGE]',
+    '🔴': '[RED]',
+    # Platform icons
+    '🏢': '(OFFICE)',
+    '👥': '(PEOPLE)',
+    '🛒': '(CART)',
+    '📧': '(EMAIL)',
+    '🌐': '(WEB)',
+    '❓': '(?)',
+    # Misc
+    '●': '*',
+    '•': '*',
+}
+
+
+def clean_emoji_for_pdf(text: str) -> str:
+    """
+    Replace all emojis with text equivalents for PDF rendering.
+    
+    This ensures emojis display as readable text rather than boxes or blanks
+    in the generated PDF, since ReportLab's default fonts don't support emoji.
+    """
+    if not text:
+        return text
+    
+    # Apply known emoji replacements
+    for emoji, replacement in EMOJI_TO_TEXT.items():
+        text = text.replace(emoji, replacement)
+    
+    # Remove any remaining emoji Unicode characters that we don't have mappings for
+    # This covers the major emoji Unicode blocks
+    text = re.sub(r'[\U0001F600-\U0001F64F]', '', text)  # Emoticons
+    text = re.sub(r'[\U0001F300-\U0001F5FF]', '', text)  # Symbols & Pictographs
+    text = re.sub(r'[\U0001F680-\U0001F6FF]', '', text)  # Transport & Map
+    text = re.sub(r'[\U0001F1E0-\U0001F1FF]', '', text)  # Flags
+    text = re.sub(r'[\U0001F900-\U0001F9FF]', '', text)  # Supplemental Symbols
+    text = re.sub(r'[\U0001FA00-\U0001FA6F]', '', text)  # Chess Symbols
+    text = re.sub(r'[\U0001FA70-\U0001FAFF]', '', text)  # Symbols Extended-A
+    text = re.sub(r'[\U00002702-\U000027B0]', '', text)  # Dingbats
+    text = re.sub(r'[\U0000FE00-\U0000FE0F]', '', text)  # Variation Selectors
+    
+    return text
 
 logger = logging.getLogger(__name__)
 
@@ -235,7 +309,7 @@ class PDFReportGenerator:
         # =========================================================================
         
         # Title: Trust Stack Results
-        story.append(Paragraph("⭐ Trust Stack Results", self.styles['CustomTitle']))
+        story.append(Paragraph(clean_emoji_for_pdf("⭐ Trust Stack Results"), self.styles['CustomTitle']))
         story.append(Spacer(1, 10))
         
         # Date
@@ -541,40 +615,9 @@ class PDFReportGenerator:
         - Headers (##, ###)
         - Bullet points (- or *)
         - Tables (| col | col |)
-        - Emojis (converted to text or removed)
+        - Emojis (converted to text via clean_emoji_for_pdf)
         """
-        import re
         story = []
-        
-        # Emoji replacements for better PDF compatibility
-        emoji_map = {
-            '🧠': '[BRAIN]',
-            '🗝️': '[KEY]',
-            '🧮': '[CALC]',
-            '📊': '[CHART]',
-            '🛠️': '[TOOLS]',
-            '📄': '[DOC]',
-            '🔐': '[LOCK]',
-            '📣': '[SPEAKER]',
-            '🔍': '[SEARCH]',
-            '📌': '[PIN]',
-            '✅': '[OK]',
-            '⚠️': '[WARN]',
-            '❌': '[X]',
-            '●': '*',
-            '⭐': '[STAR]',
-        }
-        
-        def clean_emoji(text):
-            """Replace emojis with text equivalents"""
-            for emoji, replacement in emoji_map.items():
-                text = text.replace(emoji, replacement)
-            # Remove any remaining emojis (unicode ranges)
-            text = re.sub(r'[\U0001F600-\U0001F64F]', '', text)  # emoticons
-            text = re.sub(r'[\U0001F300-\U0001F5FF]', '', text)  # symbols & pictographs
-            text = re.sub(r'[\U0001F680-\U0001F6FF]', '', text)  # transport & map
-            text = re.sub(r'[\U0001F1E0-\U0001F1FF]', '', text)  # flags
-            return text
         
         def md_to_html(text):
             """Convert markdown formatting to HTML tags for ReportLab"""
@@ -582,8 +625,8 @@ class PDFReportGenerator:
             text = re.sub(r'\*\*([^*]+)\*\*', r'<b>\1</b>', text)
             # Italic: *text* -> <i>text</i> (but not ** which is bold)
             text = re.sub(r'(?<!\*)\*([^*]+)\*(?!\*)', r'<i>\1</i>', text)
-            # Clean emojis
-            text = clean_emoji(text)
+            # Clean emojis using global function
+            text = clean_emoji_for_pdf(text)
             return text
         
         # Split into lines
@@ -971,7 +1014,7 @@ class PDFReportGenerator:
 
         # Success Highlights section with LLM insights
         if high_trust:
-            story.append(Paragraph("⭐ Success Highlights", self.styles['Heading2']))
+            story.append(Paragraph(clean_emoji_for_pdf("⭐ Success Highlights"), self.styles['Heading2']))
             story.append(Spacer(1, 10))
 
             # Generate LLM insights
