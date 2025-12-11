@@ -17,6 +17,7 @@ from scoring.verification_manager import VerificationManager
 from scoring.linguistic_analyzer import LinguisticAnalyzer
 from scoring.triage import TriageScorer
 from scoring.signal_mapper import SignalMapper
+from scoring.types import SignalScore
 
 logger = logging.getLogger(__name__)
 
@@ -221,6 +222,10 @@ class ContentScorer:
                 confidence=res_conf
             ))
 
+            # 6. Visual Analysis (if enabled)
+            if SETTINGS.get('visual_analysis_enabled', False) and getattr(content, 'screenshot_path', None):
+                self._score_visual_signals(content, signals)
+
             # Detect attributes if enabled and map to signals
             if self.attribute_detector:
                 try:
@@ -264,6 +269,70 @@ class ContentScorer:
             # Return neutral scores on error
             from scoring.types import TrustScore
             return TrustScore(overall=50.0, confidence=0.0, coverage=0.0, dimensions={}, metadata={})
+
+    def _score_visual_signals(self, content: NormalizedContent, signals: List[SignalScore]) -> None:
+        """
+        Perform visual analysis and append signals.
+        """
+        try:
+            from ingestion.screenshot_capture import get_screenshot_capture
+            from scoring.visual_analyzer import get_visual_analyzer
+            
+            logger.info(f"Starting visual analysis for {content.content_id} (screenshot: {content.screenshot_path})")
+            
+            capture = get_screenshot_capture()
+            image_bytes = capture.get_screenshot_bytes(content.screenshot_path)
+            
+            if not image_bytes:
+                logger.warning(f"Could not retrieve screenshot for {content.content_id} from {content.screenshot_path}")
+                return
+                
+            analyzer = get_visual_analyzer()
+            result = analyzer.analyze(image_bytes, content.url)
+            
+            if not result.success:
+                logger.warning(f"Visual analysis failed for {content.content_id}: {result.error}")
+                return
+                
+            # Store full result in metadata
+            if content.meta is None:
+                content.meta = {}
+            content.meta['visual_analysis'] = result.to_dict()
+            
+            # Map signals
+            mapped_count = 0
+            for sig_id, vis_sig in result.signals.items():
+                # Get weight from config
+                weight = self._signal_weight(sig_id, 0.1)
+                
+                # Determine dimension from config (fallback to Coherence/Transparency if not found)
+                dimension = "Coherence"
+                sig_config = self._signals_cfg.get(sig_id, {})
+                if sig_config:
+                    dimension = sig_config.get('dimension', dimension)
+                elif sig_id == "vis_dark_patterns": 
+                    dimension = "Transparency"
+                elif sig_id == "vis_accessibility": 
+                    dimension = "Transparency"
+                elif sig_id == "vis_trust_indicators": 
+                    dimension = "Verification"
+                
+                signals.append(SignalScore(
+                    id=sig_id,
+                    label=vis_sig.label,
+                    dimension=dimension,
+                    value=vis_sig.score,
+                    weight=weight,
+                    evidence=[vis_sig.evidence] if vis_sig.evidence else [],
+                    rationale=f"Visual Analysis: {vis_sig.evidence}",
+                    confidence=vis_sig.confidence
+                ))
+                mapped_count += 1
+                
+            logger.info(f"Added {mapped_count} visual signals for {content.content_id}")
+            
+        except Exception as e:
+            logger.error(f"Error in _score_visual_signals for {content.content_id}: {e}")
 
     def _score_freshness(self, content: NormalizedContent) -> float:
         """Score content freshness based on publication date"""

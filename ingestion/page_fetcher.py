@@ -10,6 +10,9 @@ import requests
 from typing import List, Dict, Optional
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin, urlparse
+import hashlib
+from ingestion.screenshot_capture import get_screenshot_capture, should_capture_screenshot
+from config.settings import SETTINGS
 import urllib.robotparser as robotparser
 import os
 import time
@@ -1029,11 +1032,25 @@ def _fetch_with_playwright(url: str, user_agent: str, browser_manager=None) -> D
     page = None
     browser = None
     pw_context = None
+    screenshot_key = None
     
     try:
+        # Check if visual analysis is enabled
+        visual_enabled = SETTINGS.get('visual_analysis_enabled', False)
+        
+        # Determine if we should capture screenshot
+        capture_needed = False
+        if visual_enabled:
+            # Basic scope check
+            path = urlparse(url).path
+            is_home = path in ['', '/', '/index.html']
+            # We treat ambiguous pages as potential landing pages if they are root
+            if is_home or should_capture_screenshot("landing_page", "brand_owned"):
+                capture_needed = True
+
         # Use persistent browser if available
         if browser_manager and browser_manager.is_started:
-            result = browser_manager.fetch_page(url, user_agent)
+            result = browser_manager.fetch_page(url, user_agent, capture_screenshot=capture_needed)
             
             # Extract footer links from raw_content if available
             if 'raw_content' in result:
@@ -1115,19 +1132,34 @@ def _fetch_with_playwright(url: str, user_agent: str, browser_manager=None) -> D
         except Exception:
             links = {"terms": "", "privacy": ""}
         
-        # Extract verification badges for social media pages
-        try:
-            verification_badges = _extract_verification_badges(page_content, url)
         except Exception:
             verification_badges = {"verified": False, "platform": "unknown", "badge_type": "", "evidence": ""}
         
+        # Capture screenshot if enabled
+        if capture_needed and page:
+            try:
+                capture = get_screenshot_capture()
+                # Capture above fold for speed, unless full page needed
+                # Note: valid capture requires active page object
+                png_bytes, meta = capture.capture_above_fold(page, url)
+                
+                if meta.get('success'):
+                    # Generate a run_id (using date if not available)
+                    run_id = f"fetch_{datetime.now().strftime('%Y%m%d')}"
+                    screenshot_key = capture.upload_to_s3(png_bytes, url, run_id)
+                    if screenshot_key:
+                        logger.info(f"Screenshot captured and uploaded: {screenshot_key}")
+            except Exception as e:
+                logger.warning(f"Screenshot capture failed for {url}: {e}")
+
         return {
             "title": page_title.strip(),
             "body": page_body.strip(),
             "url": url,
             "terms": links.get("terms", ""),
             "privacy": links.get("privacy", ""),
-            "verification_badges": verification_badges
+            "verification_badges": verification_badges,
+            "screenshot_path": screenshot_key
         }
 
         
@@ -1171,6 +1203,16 @@ def fetch_page(url: str, timeout: int = 10, browser_manager=None) -> Dict[str, s
     # Smart Fallback: Check if we already know this domain needs Playwright
     # But only if Playwright is available and enabled
     use_pw_config = should_use_playwright(url)
+    
+    # Force Playwright if visual analysis is enabled and it's a likely candidate
+    visual_enabled = SETTINGS.get('visual_analysis_enabled', False)
+    if visual_enabled and _PLAYWRIGHT_AVAILABLE:
+        # Check if it's a root domain (landing page)
+        is_home = parsed.path in ['', '/', '/index.html']
+        if is_home:
+            use_pw_config = True
+            logger.info(f"Visual Analysis: Forcing Playwright for landing page {url}")
+
     if _PLAYWRIGHT_AVAILABLE and (use_pw_config or _domain_config.requires_playwright(url)):
         logger.info('Smart Fallback: Skipping lxml fetch for %s (known to require Playwright)', url)
         # Use realistic browser headers for Playwright too
@@ -1330,7 +1372,8 @@ def fetch_page(url: str, timeout: int = 10, browser_manager=None) -> Dict[str, s
             "url": url, 
             "terms": links.get("terms", ""), 
             "privacy": links.get("privacy", ""),
-            "verification_badges": verification_badges
+            "verification_badges": verification_badges,
+            "screenshot_path": None  # No screenshot from LXML fetch
         }
 
     except Exception as e:

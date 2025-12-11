@@ -91,6 +91,8 @@ class ContentAsset(Base):
     normalized_content = Column(Text, nullable=True)
     modality = Column(String, default="text")
     language = Column(String, nullable=True)
+    screenshot_path = Column(Text, nullable=True)  # Path to S3 screenshot
+    visual_analysis = Column(JSON, default=dict)   # Full visual analysis result
     meta_info = Column(JSON, default=dict)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
@@ -204,6 +206,10 @@ class NormalizedContent:
     # Structure-aware text extraction for improved tone shift detection
     structured_body: Optional[List[Dict[str, str]]] = None  # HTML structure metadata
     # Format: [{"text": "...", "element_type": "h1", "semantic_role": "headline"}, ...]
+
+    # Visual Analysis fields
+    screenshot_path: Optional[str] = None
+    visual_analysis: Optional[Dict[str, Any]] = None
 
     def __post_init__(self):
         if self.meta is None:

@@ -1,9 +1,15 @@
+```python
 import logging
 import threading
 import queue
-from typing import Optional, Dict, Any
+import time
+import asyncio
+from typing import Optional, Dict, Any, Tuple
+from datetime import datetime
+from ingestion.screenshot_capture import get_screenshot_capture, should_capture_screenshot
+from config.settings import SETTINGS
 
-logger = logging.getLogger('ingestion.playwright_manager')
+logger = logging.getLogger(__name__)
 
 # Optional Playwright import
 try:
@@ -91,36 +97,22 @@ class PlaywrightBrowserManager:
             logger.info('Playwright browser initialized successfully')
             
             while True:
-                item = self._request_queue.get()
-                if item is None:
+                task = self._request_queue.get()
+                if task is None:
                     break
                     
-                url, user_agent, result_queue = item
-                logger.debug(f'Browser thread processing fetch request for: {url}')
-                
-                try:
-                    # Check if browser is still connected
-                    if not browser.is_connected():
-                        logger.warning('Browser disconnected, restarting...')
-                        try:
-                            browser.close()
-                        except: pass
-                        browser = playwright.chromium.launch(
-                            headless=True,
-                            args=launch_args,
-                            handle_sigint=False,
-                            handle_sigterm=False,
-                            handle_sighup=False
-                        )
-                        
-                    result = self._process_fetch(browser, url, user_agent)
-                    result_queue.put(result)
-                except Exception as e:
-                    error_msg = str(e)
-                    # If target closed, try one restart
-                    if "Target page, context or browser has been closed" in error_msg or "Connection closed" in error_msg:
-                        logger.warning('Browser crashed during fetch, restarting and retrying: %s', e)
-                        try:
+                task_type = task.get("type")
+                if task_type == "fetch":
+                    url = task.get("url")
+                    user_agent = task.get("user_agent")
+                    capture_screenshot = task.get("capture_screenshot", False)
+                    result_queue = task.get("result_queue")
+                    logger.debug(f'Browser thread processing fetch request for: {url}')
+                    
+                    try:
+                        # Check if browser is still connected
+                        if not browser.is_connected():
+                            logger.warning('Browser disconnected, restarting...')
                             try:
                                 browser.close()
                             except: pass
@@ -131,17 +123,36 @@ class PlaywrightBrowserManager:
                                 handle_sigterm=False,
                                 handle_sighup=False
                             )
-                            # Retry fetch once
-                            result = self._process_fetch(browser, url, user_agent)
-                            result_queue.put(result)
-                        except Exception as retry_e:
-                            logger.error('Retry failed for %s: %s', url, retry_e)
-                            result_queue.put({"title": "", "body": "", "url": url, "error": str(retry_e)})
-                    else:
-                        logger.error('Error processing fetch for %s: %s', url, e)
-                        result_queue.put({"title": "", "body": "", "url": url, "error": str(e)})
-                finally:
-                    self._request_queue.task_done()
+                            
+                        data = self._process_fetch(browser, url, user_agent, capture_screenshot)
+                        result_queue.put(data)
+                    except Exception as e:
+                        error_msg = str(e)
+                        # If target closed, try one restart
+                        if "Target page, context or browser has been closed" in error_msg or "Connection closed" in error_msg:
+                            logger.warning('Browser crashed during fetch, restarting and retrying: %s', e)
+                            try:
+                                try:
+                                    browser.close()
+                                except: pass
+                                browser = playwright.chromium.launch(
+                                    headless=True,
+                                    args=launch_args,
+                                    handle_sigint=False,
+                                    handle_sigterm=False,
+                                    handle_sighup=False
+                                )
+                                # Retry fetch once
+                                data = self._process_fetch(browser, url, user_agent, capture_screenshot)
+                                result_queue.put(data)
+                            except Exception as retry_e:
+                                logger.error('Retry failed for %s: %s', url, retry_e)
+                                result_queue.put({"title": "", "body": "", "url": url, "error": str(retry_e)})
+                        else:
+                            logger.error('Error processing fetch for %s: %s', url, e)
+                            result_queue.put({"title": "", "body": "", "url": url, "error": str(e)})
+                    finally:
+                        self._request_queue.task_done()
                     
         except Exception as e:
             # Suppress errors during shutdown (like BrokenPipeError, Event loop is closed)
@@ -178,9 +189,10 @@ class PlaywrightBrowserManager:
                 self._is_started = False
                 self._thread = None
 
-    def _process_fetch(self, browser: Browser, url: str, user_agent: str) -> Dict[str, str]:
+    def _process_fetch(self, browser: Browser, url: str, user_agent: str, capture_screenshot: bool = False) -> Dict[str, str]:
         """Perform the actual fetch logic inside the browser thread."""
         page = None
+        screenshot_key = None
         try:
             logger.debug(f'[PLAYWRIGHT] Creating new page for: {url}')
             page = browser.new_page(user_agent=user_agent)
@@ -241,11 +253,26 @@ class PlaywrightBrowserManager:
             except Exception:
                 page_body = page_content
 
+            # Capture screenshot if requested
+            if capture_screenshot:
+                try:
+                    capture_tool = get_screenshot_capture()
+                    # Capture above fold
+                    png_bytes, meta = capture_tool.capture_above_fold(page, url)
+                    if meta.get('success'):
+                        run_id = f"fetch_{datetime.now().strftime('%Y%m%d')}"
+                        screenshot_key = capture_tool.upload_to_s3(png_bytes, url, run_id)
+                        if screenshot_key:
+                            logger.info(f"[PLAYWRIGHT] Screenshot uploaded: {screenshot_key}")
+                except Exception as e:
+                    logger.warning(f"[PLAYWRIGHT] Screenshot capture failed for {url}: {e}")
+
             return {
                 "title": page_title.strip(),
                 "body": page_body.strip(),
                 "url": url,
-                "raw_content": page_content # Return raw content for footer link extraction
+                "raw_content": page_content, # Return raw content for footer link extraction
+                "screenshot_path": screenshot_key
             }
         finally:
             if page:
@@ -254,28 +281,30 @@ class PlaywrightBrowserManager:
                 except Exception:
                     pass
 
-    def fetch_page(self, url: str, user_agent: str, timeout: int = 30) -> Dict[str, str]:
-        """Submit a fetch request to the browser thread and wait for result."""
+    def fetch_page(self, url: str, user_agent: str, capture_screenshot: bool = False) -> Dict[str, Any]:
+        """
+        Fetch a page using the background browser.
+        Returns a dict with title, body, etc.
+        """
         if not self.is_started:
-            # Try to auto-restart if not started
-            logger.info(f'Browser not started, attempting to start for: {url}')
-            if not self.start():
-                return {"title": "", "body": "", "url": url, "error": "Browser not started"}
-            
-        logger.debug(f'[PLAYWRIGHT] Submitting fetch request for: {url}')
+            raise RuntimeError("Browser not started")
+
         result_queue = queue.Queue()
-        self._request_queue.put((url, user_agent, result_queue))
+        self._request_queue.put({
+            "type": "fetch",
+            "url": url,
+            "user_agent": user_agent,
+            "capture_screenshot": capture_screenshot,
+            "result_queue": result_queue
+        })
         
         try:
-            result = result_queue.get(timeout=timeout)
-            logger.debug(f'[PLAYWRIGHT] Got result for: {url}')
+            result = result_queue.get(timeout=30)  # 30s timeout
+            if isinstance(result, Exception):
+                raise result
             return result
         except queue.Empty:
-            # Check if thread is still alive for better diagnostics
-            thread_alive = self._thread.is_alive() if self._thread else False
-            queue_size = self._request_queue.qsize()
-            logger.error(f"Timeout waiting for Playwright fetch: {url} (thread_alive={thread_alive}, queue_size={queue_size})")
-            return {"title": "", "body": "", "url": url, "error": f"Timeout waiting for browser (thread_alive={thread_alive})"}
+            raise TimeoutError(f"Playwright fetch timed out for {url}")
 
     def close(self):
         """Stop the browser thread."""

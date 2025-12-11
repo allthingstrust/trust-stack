@@ -164,6 +164,7 @@ class RunManager:
                         asset["raw_content"] = body
                         asset["normalized_content"] = body
                         asset["title"] = asset.get("title") or result.get("title") or ""
+                        asset["screenshot_path"] = result.get("screenshot_path")
                         
                         # Preserve structured body if available
                         if result.get("structured_body"):
@@ -429,6 +430,7 @@ class RunManager:
                         platform_type=meta.get("platform_type", "web"),
                         source_type=asset.source_type or "web",
                         source_tier=meta.get("source_tier", "unknown"),
+                        screenshot_path=asset.screenshot_path,
                     )
                     normalized_content_list.append(nc)
                 

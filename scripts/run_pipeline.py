@@ -47,8 +47,15 @@ def main():
     parser.add_argument("--export-to-s3", action="store_true", help="Upload raw + analytics outputs to S3 after completion")
     parser.add_argument("--s3-bucket", help="Override S3 bucket name")
     parser.add_argument("--print-report", action="store_true", help="Generate and print full Trust Stack Report to console")
+    parser.add_argument("--visual-analysis", action="store_true", help="Enable Visual Analysis (screenshot capture + AI scoring)")
 
     args = parser.parse_args()
+    
+    # Update settings overrides from CLI
+    from config.settings import SETTINGS
+    if args.visual_analysis:
+        SETTINGS['visual_analysis_enabled'] = True
+        logger.info("Visual Analysis ENABLED via CLI flag")
 
     # Load environment variables (critical for API keys)
     load_dotenv(os.path.join(PROJECT_ROOT, '.env'))

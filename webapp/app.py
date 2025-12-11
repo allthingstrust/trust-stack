@@ -900,6 +900,15 @@ def show_analyze_page():
             # Use max_items for web pages to fetch (removed separate input to avoid confusion)
             web_pages = max_items if use_web_search else max_items
 
+            # Visual Analysis
+            visual_analysis_available = bool(cfg.gemini_api_key)
+            use_visual_analysis = st.checkbox(
+                "📸 Enable Visual Analysis",
+                value=False,
+                disabled=not visual_analysis_available,
+                help="Requires Gemini API Key. Captures screenshots and scores design/branding capability."
+            )
+
             # Reddit
             reddit_available = bool(cfg.reddit_client_id and cfg.reddit_client_secret)
             use_reddit = st.checkbox(
@@ -1385,7 +1394,8 @@ def show_analyze_page():
                 "assets": assets_config if assets_config else None,
                 "brand_name": brand_id, # Use ID as name for now
                 "scenario_name": "Web Analysis",
-                "scenario_description": f"Analysis of {brand_id} via {', '.join(sources)}",
+
+                "scenario_description": f"Analysis of {brand_id} via {', '.join(sources)} (Visual: {'On' if use_visual_analysis else 'Off'})",
                 "scenario_config": {
                     "include_comments": include_comments,
                     "search_provider": search_provider,
@@ -1400,11 +1410,21 @@ def show_analyze_page():
 
             progress_animator.show("Scoring content across 5 trust dimensions...", "🔍")
             progress_bar.progress(30)
+            # Run analysis
+            # Temporarily enable visual analysis if requested
+            original_visual_setting = SETTINGS.get('visual_analysis_enabled', False)
+            if use_visual_analysis:
+                SETTINGS['visual_analysis_enabled'] = True
+                
+            try:
+                run = manager.run_analysis(brand_id, "web", run_config)
+            finally:
+                # Restore original setting
+                if use_visual_analysis:
+                    SETTINGS['visual_analysis_enabled'] = original_visual_setting
             
-            run = manager.run_analysis(brand_id, "web-analysis", run_config)
-            
-            progress_animator.show("Aggregating scores and generating summary...", "📊")
-            progress_bar.progress(70)
+            progress_animator.show("Analysis completed! Generating report...", "✨")
+            progress_bar.progress(90)
                 
             # Adapt Run object to legacy dict format for UI compatibility
             # This ensures show_results_page works without major rewrite

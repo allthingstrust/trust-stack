@@ -363,7 +363,9 @@ TRUST_STACK_DIMENSIONS = {
             "Visual/Design Coherence",
             "Cross-Channel Alignment",
             "Technical Health",
-            "Claim Consistency"
+            "Claim Consistency",
+            "Visual Brand Coherence", # Visual
+            "Visual Clutter Score" # Visual
         ]
     },
     'transparency': {
@@ -372,7 +374,9 @@ TRUST_STACK_DIMENSIONS = {
             "AI Usage Disclosure",
             "Contact/Business Info",
             "Privacy Policy Clarity",
-            "Data Source Citations"
+            "Data Source Citations",
+            "Visual Dark Patterns", # Visual
+            "Visual Accessibility" # Visual
         ]
     },
     'verification': {
@@ -381,7 +385,8 @@ TRUST_STACK_DIMENSIONS = {
             "Trust Badges & Certs",
             "External Social Proof",
             "Review Authenticity",
-            "Claim Traceability"
+            "Claim Traceability",
+            "Visual Trust Indicators" # Visual
         ]
     }
 }
@@ -413,6 +418,13 @@ SIGNAL_ID_TO_KEY_SIGNAL = {
     "ver_fact_accuracy": "Factual Accuracy",
     "ver_trust_badges": "Trust Badges & Certs",
     "ver_social_proof": "External Social Proof",
+    # Visual Analysis Signals
+    "vis_design_quality": "Visual/Design Coherence", # Overlap with existing? Let's treat as Visual/Design Coherence
+    "vis_dark_patterns": "Visual Dark Patterns",
+    "vis_brand_coherence": "Visual Brand Coherence",
+    "vis_accessibility": "Visual Accessibility",
+    "vis_trust_indicators": "Visual Trust Indicators",
+    "vis_clutter_score": "Visual Clutter Score",
 }
 
 # Define specific diagnostic metrics for each dimension
@@ -489,6 +501,11 @@ def generate_trust_stack_report(report_data: Dict[str, Any], model: str = 'gpt-4
     # 2. Full Trust Audit Report (Executive Summary)
     audit_report = _generate_full_audit_report(report_data, model)
     content.append(audit_report)
+    
+    # 3. Visual Analysis Snapshot (New)
+    visual_snapshot = _generate_visual_snapshot(items)
+    if visual_snapshot:
+        content.append(visual_snapshot)
     
     return "\n\n".join(content)
 
@@ -792,3 +809,87 @@ INSTRUCTIONS:
     except Exception as e:
         logger.error(f"Failed to generate audit report: {e}")
         return f"Error generating audit report: {str(e)}"
+
+def _generate_visual_snapshot(items: List[Dict[str, Any]]) -> str:
+    """Generate the Visual Analysis Snapshot section with screenshots."""
+    
+    # Filter items with screenshots and visual analysis
+    visual_items = []
+    for item in items:
+        # Check normalization locations for screenshot_path
+        path = item.get('screenshot_path')
+        if not path:
+             # Try meta
+             meta = item.get('meta', {})
+             if isinstance(meta, str):
+                 try: meta = json.loads(meta) 
+                 except: meta = {}
+             if isinstance(meta, dict):
+                 path = meta.get('screenshot_path')
+        
+        if path:
+            visual_items.append(item)
+            
+    if not visual_items:
+        return ""
+        
+    content = ["\n\n🎨 **Visual Analysis Snapshot**\n"]
+    content.append("AI-powered analysis of visual design, dark patterns, and brand coherence.\n")
+    
+    # Sort by design quality score if available (descending)
+    
+    # Limit to top 3 distinct items
+    display_items = visual_items[:3]
+    
+    for item in display_items:
+        title = item.get('title', 'Web Page')
+        url = item.get('url', '')
+        # Get path (re-extract)
+        path = item.get('screenshot_path') or item.get('meta', {}).get('screenshot_path')
+        
+        # If path is s3://, we need a way to display it. 
+        # Markdown reports can't show S3 auth images easily unless presigned or public.
+        # Impl plan says "Embed screenshots... linked from S3". 
+        # If output is PDF/HTML, we might need presigned URLs.
+        # For now, we display the link.
+        
+        # Extract visual analysis results
+        analysis = item.get('visual_analysis')
+        if not analysis:
+            meta = item.get('meta', {})
+            if isinstance(meta, str):
+                 try: meta = json.loads(meta)
+                 except: meta = {}
+            if isinstance(meta, dict):
+                analysis = meta.get('visual_analysis')
+        
+        analysis_summary = ""
+        if analysis and isinstance(analysis, dict):
+            signals = analysis.get('signals', {})
+            design = signals.get('vis_design_quality', {}).get('score')
+            brand = signals.get('vis_brand_coherence', {}).get('score')
+            dark = signals.get('vis_dark_patterns', {}).get('score')
+            
+            summary_parts = []
+            if design is not None: summary_parts.append(f"Design Quality: {float(design)*10:.1f}/10")
+            if brand is not None: summary_parts.append(f"Brand Coherence: {float(brand)*10:.1f}/10")
+            if dark is not None: summary_parts.append(f"Dark Patterns Risk: {float(dark)*10:.1f}/10")
+            
+            analysis_summary = " | ".join(summary_parts)
+            
+        content.append(f"### {title}")
+        content.append(f"URL: {url}")
+        content.append(f"**Visual Scores**: {analysis_summary}")
+        
+        if path:
+            # We can't easily embed private S3 images in standard markdown without presigned URLs.
+            # But the requirement is to integrate. 
+            # Ideally, the report viewer (webapp) handles S3 links, or we generate presigned URLs here.
+            # Generating presigned URLs here might be expiring.
+            # Let's format as image link assuming generic viewer support or just link.
+            # ![Screenshot]({path})
+            content.append(f"\n![Visual Analysis Screenshot]({path})\n")
+            
+        content.append("---\n")
+        
+    return "\n".join(content)

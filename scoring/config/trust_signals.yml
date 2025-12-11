@@ -256,3 +256,80 @@ signals:
     include_in_coverage: false
     discoverability_signal: "machine_visible"
     visibility_signal: "user_visible_high"
+
+  # --- VISUAL ANALYSIS SIGNALS ---
+  # These signals are detected via multimodal AI analysis of page screenshots.
+  # They are only computed when visual_analysis_enabled=true and content is in scope.
+
+  vis_design_quality:
+    dimension: Coherence
+    label: "Visual Design Quality"
+    weight: 0.15
+    detection: "visual"
+    description: "Professional typography, spacing, color harmony, and visual hierarchy."
+    requirement_level: "amplifier"
+    knockout_flag: false
+    include_in_coverage: false
+    discoverability_signal: "machine_visible"
+    visibility_signal: "user_visible_high"
+
+  vis_dark_patterns:
+    dimension: Transparency
+    label: "Dark Pattern Absence"
+    weight: 0.20
+    detection: "visual"
+    description: "Absence of deceptive UI patterns that manipulate users (urgency, misdirection, etc.)."
+    requirement_level: "core"
+    knockout_flag: true
+    knockout_threshold_norm: 0.30
+    include_in_coverage: true
+    discoverability_signal: "machine_visible"
+    visibility_signal: "user_visible_high"
+
+  vis_brand_coherence:
+    dimension: Coherence
+    label: "Visual Brand Coherence"
+    weight: 0.15
+    detection: "visual"
+    description: "Consistent logo usage, color palette, and visual identity across the page."
+    requirement_level: "amplifier"
+    knockout_flag: false
+    include_in_coverage: false
+    discoverability_signal: "machine_visible"
+    visibility_signal: "user_visible_high"
+
+  vis_accessibility:
+    dimension: Transparency
+    label: "Visual Accessibility"
+    weight: 0.10
+    detection: "visual"
+    description: "Good contrast ratios, readable fonts, color-blind friendly design."
+    requirement_level: "amplifier"
+    knockout_flag: false
+    include_in_coverage: false
+    discoverability_signal: "machine_visible"
+    visibility_signal: "user_visible_low"
+
+  vis_trust_indicators:
+    dimension: Verification
+    label: "Visual Trust Indicators"
+    weight: 0.10
+    detection: "visual"
+    description: "Visible trust badges, security seals, and professional certifications."
+    requirement_level: "amplifier"
+    knockout_flag: false
+    include_in_coverage: false
+    discoverability_signal: "machine_visible"
+    visibility_signal: "user_visible_high"
+
+  vis_clutter_score:
+    dimension: Coherence
+    label: "Visual Clutter (Clean Design)"
+    weight: 0.10
+    detection: "visual"
+    description: "Low ad density, minimal popups, focused rather than cluttered layout."
+    requirement_level: "amplifier"
+    knockout_flag: false
+    include_in_coverage: false
+    discoverability_signal: "machine_visible"
+    visibility_signal: "user_visible_low"
