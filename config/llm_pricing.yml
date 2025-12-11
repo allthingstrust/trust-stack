@@ -1,0 +1,56 @@
+# LLM Pricing Configuration
+# Costs per 1 million (1M) tokens, as of December 2024
+
+models:
+  # OpenAI Models
+  gpt-4o:
+    input: 2.50
+    output: 10.00
+  gpt-4o-mini:
+    input: 0.15
+    output: 0.60
+  gpt-3.5-turbo:
+    input: 0.50
+    output: 1.50
+  o1-preview:
+    input: 15.00
+    output: 60.00
+  o1-mini:
+    input: 3.00
+    output: 12.00
+
+  # Anthropic Models
+  claude-3-5-sonnet-20241022:
+    input: 3.00
+    output: 15.00
+  claude-3-5-haiku-20241022:
+    input: 1.00
+    output: 5.00
+  claude-3-opus-20240229:
+    input: 15.00
+    output: 75.00
+
+  # Google Models
+  gemini-1.5-pro:
+    input: 1.25
+    output: 5.00
+  gemini-1.5-flash:
+    input: 0.075
+    output: 0.30
+  gemini-2.0-flash-exp:
+    input: 0.00
+    output: 0.00
+
+  # DeepSeek Models
+  deepseek-chat:
+    input: 0.14
+    output: 0.28
+  deepseek-reasoner:
+    input: 0.55
+    output: 2.19
+
+# Quota alerts (per run thresholds)
+quotas:
+  warn_input_tokens: 100000   # Warn if input tokens exceed 100K
+  warn_output_tokens: 50000   # Warn if output tokens exceed 50K
+  warn_cost_usd: 1.00         # Warn if estimated cost exceeds $1.00

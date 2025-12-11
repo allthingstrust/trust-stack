@@ -213,7 +213,7 @@ def _render_diagnostics_table(
     # Add legend only for provenance (first dimension)
     if dimension.lower() == 'provenance':
         rows = [
-            "🔑 = Core Signal | ✨ = Amplifier (Bonus)",
+            "🗝 = Core Signal | ✨ = Amplifier (Bonus)",
             "",
             "| Metric | Score |",
             "|---|---|"
@@ -232,7 +232,7 @@ def _render_diagnostics_table(
         requirement_level = cfg["requirement_level"]
         
         # Determine icon
-        icon = "🔑" if requirement_level == "core" else "✨"
+        icon = "🗝" if requirement_level == "core" else "✨"
         
         if label in enhanced_statuses:
             _, avg_score, _ = enhanced_statuses[label]

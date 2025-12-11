@@ -35,6 +35,7 @@ EMOJI_TO_TEXT = {
     # Trust Stack icons
     '🧠': '(BRAIN)',
     '🗝️': '(KEY)',
+    '🗝': '(KEY)',
     '🔑': '(KEY)',
     '✨': '(STAR)',
     '🧮': '(CALC)',
@@ -66,32 +67,63 @@ EMOJI_TO_TEXT = {
     '•': '*',
 }
 
+# Global flag to track if emoji font is loaded
+HAS_EMOJI_FONT = False
+
 
 def clean_emoji_for_pdf(text: str) -> str:
     """
-    Replace all emojis with text equivalents for PDF rendering.
+    Process emojis for PDF rendering.
     
-    This ensures emojis display as readable text rather than boxes or blanks
-    in the generated PDF, since ReportLab's default fonts don't support emoji.
+    If Noto Emoji font is available, wraps emojis in font tags.
+    Otherwise, replaces them with text equivalents or strips them.
     """
     if not text:
         return text
+        
+    if HAS_EMOJI_FONT:
+        # If font is loaded, wrap emojis in font tag instead of replacing them
+        # We still need to help ReportLab by explicitly switching fonts for emoji characters
+        
+        # Regex for emoji characters
+        # Matches: Emoticons, Symbols & Pictographs, Transport, specific ranges
+        emoji_pattern = re.compile(
+            r'('
+            r'[\U0001F600-\U0001F64F]|'  # Emoticons
+            r'[\U0001F300-\U0001F5FF]|'  # Symbols & Pictographs
+            r'[\U0001F680-\U0001F6FF]|'  # Transport & Map
+            r'[\U0001F1E0-\U0001F1FF]|'  # Flags
+            r'[\U0001F900-\U0001F9FF]|'  # Supplemental Symbols
+            r'[\U0001FA00-\U0001FA6F]|'  # Chess Symbols
+            r'[\U0001FA70-\U0001FAFF]|'  # Symbols Extended-A
+            r'[\U00002702-\U000027B0]|'  # Dingbats
+            r'[\U000024C2-\U0001F251]'   # Enclosed Ideographic Supplement
+            r')+'
+        )
+        
+        def wrap_emoji(match):
+            # Strip variation selectors from the match before wrapping
+            # This helps NotoEmoji (monochrome) render correctly
+            content = match.group(0).replace('\ufe0f', '').replace('\ufe0e', '')
+            return f'<font face="NotoEmoji">{content}</font>'
+            
+        return emoji_pattern.sub(wrap_emoji, text)
     
+    # Fallback to text replacement
     # Apply known emoji replacements
     for emoji, replacement in EMOJI_TO_TEXT.items():
         text = text.replace(emoji, replacement)
     
     # Remove any remaining emoji Unicode characters that we don't have mappings for
-    # This covers the major emoji Unicode blocks
-    text = re.sub(r'[\U0001F600-\U0001F64F]', '', text)  # Emoticons
-    text = re.sub(r'[\U0001F300-\U0001F5FF]', '', text)  # Symbols & Pictographs
-    text = re.sub(r'[\U0001F680-\U0001F6FF]', '', text)  # Transport & Map
-    text = re.sub(r'[\U0001F1E0-\U0001F1FF]', '', text)  # Flags
-    text = re.sub(r'[\U0001F900-\U0001F9FF]', '', text)  # Supplemental Symbols
-    text = re.sub(r'[\U0001FA00-\U0001FA6F]', '', text)  # Chess Symbols
-    text = re.sub(r'[\U0001FA70-\U0001FAFF]', '', text)  # Symbols Extended-A
-    text = re.sub(r'[\U00002702-\U000027B0]', '', text)  # Dingbats
-    text = re.sub(r'[\U0000FE00-\U0000FE0F]', '', text)  # Variation Selectors
+    text = re.sub(r'[\U0001F600-\U0001F64F]', '', text)
+    text = re.sub(r'[\U0001F300-\U0001F5FF]', '', text)
+    text = re.sub(r'[\U0001F680-\U0001F6FF]', '', text)
+    text = re.sub(r'[\U0001F1E0-\U0001F1FF]', '', text)
+    text = re.sub(r'[\U0001F900-\U0001F9FF]', '', text)
+    text = re.sub(r'[\U0001FA00-\U0001FA6F]', '', text)
+    text = re.sub(r'[\U0001FA70-\U0001FAFF]', '', text)
+    text = re.sub(r'[\U00002702-\U000027B0]', '', text)
+    text = re.sub(r'[\U0000FE00-\U0000FE0F]', '', text)
     
     return text
 
@@ -220,8 +252,26 @@ class PDFReportGenerator:
     """Generates PDF reports for Trust Stack Rating analysis"""
     
     def __init__(self):
+        self._register_fonts()
         self.styles = getSampleStyleSheet()
         self._setup_custom_styles()
+    
+    def _register_fonts(self):
+        """Register NotoEmoji font if available"""
+        global HAS_EMOJI_FONT
+        try:
+            # Look for font in assets/fonts
+            base_dir = os.path.dirname(os.path.dirname(__file__))
+            font_path = os.path.join(base_dir, 'assets', 'fonts', 'NotoEmoji-Regular.ttf')
+            
+            if os.path.exists(font_path):
+                pdfmetrics.registerFont(TTFont('NotoEmoji', font_path))
+                HAS_EMOJI_FONT = True
+                logger.info(f"Successfully registered NotoEmoji font from {font_path}")
+            else:
+                logger.warning(f"NotoEmoji font not found at {font_path}. Emojis will be replaced with text.")
+        except Exception as e:
+            logger.error(f"Failed to register NotoEmoji font: {e}")
     
     def _setup_custom_styles(self):
         """Setup custom paragraph styles"""
@@ -277,6 +327,13 @@ class PDFReportGenerator:
             leftIndent=20,
             bulletIndent=10,
             leading=11
+        ))
+        
+        self.styles.add(ParagraphStyle(
+            name='TableText',
+            parent=self.styles['Normal'],
+            fontSize=8,
+            leading=10
         ))
     
     def generate_report(self, report_data: Dict[str, Any], output_path: str, include_items_table: bool = False) -> str:
@@ -668,9 +725,9 @@ class PDFReportGenerator:
             
             # Create table
             try:
-                # Limit cell content length
+                # Limit cell content length, process emojis, and wrap in Paragraph for markup rendering
                 for i, row in enumerate(parsed_rows):
-                    parsed_rows[i] = [cell[:60] for cell in row]
+                    parsed_rows[i] = [Paragraph(clean_emoji_for_pdf(cell[:60]), self.styles['TableText']) for cell in row]
                 
                 # Calculate column widths
                 num_cols = max(len(row) for row in parsed_rows)

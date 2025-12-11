@@ -170,5 +170,43 @@ def test_fetch_page_respects_robots(monkeypatch, tmp_path):
     assert result['privacy'] == ''
 
 
+class TestSocialMediaPlaywrightConfig:
+    """Test that social media platforms are configured for Playwright rendering"""
+    
+    def test_instagram_uses_playwright(self):
+        """Instagram should use Playwright to capture JS-rendered verification badges"""
+        from ingestion.fetch_config import should_use_playwright
+        assert should_use_playwright("https://instagram.com/murrayscheese") == True
+        assert should_use_playwright("https://www.instagram.com/murrayscheese") == True
+    
+    def test_twitter_uses_playwright(self):
+        """Twitter/X should use Playwright to capture verification badges"""
+        from ingestion.fetch_config import should_use_playwright
+        assert should_use_playwright("https://twitter.com/nike") == True
+        assert should_use_playwright("https://x.com/nike") == True
+    
+    def test_linkedin_uses_playwright(self):
+        """LinkedIn should use Playwright to capture verification badges"""
+        from ingestion.fetch_config import should_use_playwright
+        assert should_use_playwright("https://linkedin.com/company/microsoft") == True
+        assert should_use_playwright("https://www.linkedin.com/in/someone") == True
+    
+    def test_regular_domain_no_playwright(self):
+        """Regular domains should not require Playwright by default"""
+        from ingestion.fetch_config import should_use_playwright
+        # Without env var override, regular domains should return False
+        import os
+        old_val = os.environ.get('AR_USE_PLAYWRIGHT')
+        if 'AR_USE_PLAYWRIGHT' in os.environ:
+            del os.environ['AR_USE_PLAYWRIGHT']
+        try:
+            assert should_use_playwright("https://example.com/article") == False
+            assert should_use_playwright("https://murrayscheese.com") == False
+        finally:
+            if old_val is not None:
+                os.environ['AR_USE_PLAYWRIGHT'] = old_val
+
+
 if __name__ == '__main__':
     pytest.main([__file__])
+

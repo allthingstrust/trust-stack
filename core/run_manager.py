@@ -79,6 +79,16 @@ class RunManager:
 
             if run_config.get("export_to_s3"):
                 export_s3.export_run_to_s3(self.engine, run_id, bucket=run_config.get("s3_bucket"))
+                
+            # Print LLM cost summary at end of run
+            try:
+                from scoring.cost_tracker import cost_tracker
+                cost_tracker.print_summary()
+                cost_tracker.check_quotas()
+                cost_tracker.reset()
+            except Exception as e:
+                logger.debug(f"Cost tracking summary failed: {e}")
+                
         except Exception as exc:  # pragma: no cover - safety net
             logger.exception("Run %s failed", external_id)
             with store.session_scope(self.engine) as session:

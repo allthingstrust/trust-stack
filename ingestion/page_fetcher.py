@@ -236,6 +236,15 @@ def _extract_verification_badges(html: str, url: str) -> Dict[str, any]:
     except Exception as e:
         logger.debug("Error extracting verification badges from %s: %s", url, e)
     
+    # Log the result for debugging verification detection issues
+    if result["platform"] != "unknown":
+        if result["verified"]:
+            logger.info("[VERIFICATION] Detected verified %s account at %s: %s", 
+                       result["platform"], url, result["evidence"])
+        else:
+            logger.debug("[VERIFICATION] No verification badge found for %s account at %s", 
+                        result["platform"], url)
+    
     return result
 
 

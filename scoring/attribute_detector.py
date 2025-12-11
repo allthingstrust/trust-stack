@@ -905,6 +905,8 @@ class TrustStackAttributeDetector:
         
         if is_social:
             # Social media without detected verification badge
+            logger.debug("[VERIFICATION] No verification badge in meta for social URL: %s (badges: %s)", 
+                        url_lower[:50], verification_badges)
             return DetectedAttribute(
                 attribute_id="verified_platform_account",
                 dimension="provenance",

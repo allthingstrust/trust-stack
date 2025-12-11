@@ -13,6 +13,35 @@ from urllib.parse import urlparse
 
 # Domain-specific configurations
 DOMAIN_CONFIGS = {
+    # Social media platforms - require JS rendering for verification badges
+    "instagram.com": {
+        "use_playwright": True,
+        "min_delay": 2.0,
+        "max_delay": 4.0,
+        "timeout": 15,
+        "max_retries": 3,
+    },
+    "twitter.com": {
+        "use_playwright": True,
+        "min_delay": 2.0,
+        "max_delay": 4.0,
+        "timeout": 15,
+        "max_retries": 3,
+    },
+    "x.com": {
+        "use_playwright": True,
+        "min_delay": 2.0,
+        "max_delay": 4.0,
+        "timeout": 15,
+        "max_retries": 3,
+    },
+    "linkedin.com": {
+        "use_playwright": True,
+        "min_delay": 2.0,
+        "max_delay": 4.0,
+        "timeout": 15,
+        "max_retries": 3,
+    },
     # Enterprise financial/banking sites - often have sophisticated anti-bot protection
     "mastercard.com": {
         "use_playwright": True,

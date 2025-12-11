@@ -146,7 +146,22 @@ class ChatClient:
         }
         
         try:
-            return dispatch[provider](messages, model, max_tokens, temperature, **kwargs)
+            result = dispatch[provider](messages, model, max_tokens, temperature, **kwargs)
+            
+            # Record usage for cost tracking
+            usage = result.get('usage', {})
+            if usage:
+                try:
+                    from scoring.cost_tracker import cost_tracker
+                    cost_tracker.record(
+                        model=result.get('model', model),
+                        prompt_tokens=usage.get('prompt_tokens', 0),
+                        completion_tokens=usage.get('completion_tokens', 0)
+                    )
+                except Exception:
+                    pass  # Don't fail if cost tracking has issues
+            
+            return result
         except Exception as e:
             logger.error(f"Chat error ({provider.value}/{model}): {e}")
             raise
