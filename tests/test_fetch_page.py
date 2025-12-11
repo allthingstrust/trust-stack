@@ -56,7 +56,7 @@ def test_fetch_page_playwright_fallback(monkeypatch, tmp_path):
         def __init__(self):
             self._html = '<html><head><title>Rendered Title</title></head><body><article><p>Rendered paragraph.</p></article><footer><a href="/privacy">Privacy</a></footer></body></html>'
 
-        def goto(self, url, timeout=None):
+        def goto(self, url, timeout=None, **kwargs):
             pass
 
         def wait_for_selector(self, sel, timeout=None):
@@ -104,7 +104,7 @@ def test_fetch_page_playwright_fallback(monkeypatch, tmp_path):
         @property
         def chromium(self):
             class C:
-                def launch(self, headless=True):
+                def launch(self, headless=True, **kwargs):
                     return FakeBrowser()
 
             return C()

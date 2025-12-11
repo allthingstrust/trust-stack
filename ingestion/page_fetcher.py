@@ -249,92 +249,145 @@ def _extract_verification_badges(html: str, url: str) -> Dict[str, any]:
 
 
 def _detect_instagram_badge(soup: BeautifulSoup, result: Dict) -> Dict:
-    """Detect Instagram verification badge patterns."""
+    """Detect Instagram verification badge patterns (2024 updated).
     
-    # Pattern 1: Look for title="Verified" attribute
+    Instagram verified badge HTML structure (as of 2024):
+    <svg aria-label="Verified" class="x1lliihq x1n2onr6" fill="rgb(0, 149, 246)" 
+         height="18" role="img" viewBox="0 0 40 40" width="18">
+        <title>Verified</title>
+        <path d="M19.998 3.094..."></path>
+    </svg>
+    """
+    
+    # Pattern 1 (PRIMARY): SVG with aria-label="Verified" - exact match
+    for svg in soup.find_all('svg', attrs={'aria-label': 'Verified'}):
+        fill = svg.get('fill', '')
+        # Instagram blue: rgb(0, 149, 246) or #0095f6
+        if 'rgb(0, 149, 246)' in fill or '#0095f6' in fill.lower() or '0095f6' in fill.lower():
+            result["verified"] = True
+            result["badge_type"] = "blue_checkmark"
+            result["evidence"] = f"Found Instagram verified SVG with fill={fill}"
+            logger.info("[IG-VERIFY] Pattern 1 matched: SVG aria-label='Verified' with blue fill")
+            return result
+    
+    # Pattern 2: SVG with <title>Verified</title> child element
+    for svg in soup.find_all('svg'):
+        title = svg.find('title')
+        if title and title.get_text().strip().lower() == 'verified':
+            result["verified"] = True
+            result["badge_type"] = "blue_checkmark"
+            result["evidence"] = "Found SVG with <title>Verified</title>"
+            logger.info("[IG-VERIFY] Pattern 2 matched: SVG with <title>Verified</title>")
+            return result
+    
+    # Pattern 3: SVG with aria-label containing "Verified" (case-insensitive)
+    for svg in soup.find_all('svg', attrs={'aria-label': re.compile(r'^Verified$', re.I)}):
+        fill = svg.get('fill', '')
+        result["verified"] = True
+        result["badge_type"] = "blue_checkmark"
+        result["evidence"] = f"Found SVG with aria-label='Verified' (fill={fill})"
+        logger.info("[IG-VERIFY] Pattern 3 matched: SVG aria-label case-insensitive")
+        return result
+    
+    # Pattern 4: 2024 obfuscated class names (x1lliihq, x1n2onr6)
+    instagram_2024_classes = ['x1lliihq', 'x1n2onr6', 'x1q0g3np']
+    for pattern in instagram_2024_classes:
+        elements = soup.find_all(class_=re.compile(rf'\b{pattern}\b'))
+        for elem in elements:
+            # Check if it's an SVG with verification characteristics
+            if elem.name == 'svg':
+                fill = elem.get('fill', '')
+                aria_label = elem.get('aria-label', '')
+                if 'rgb(0, 149, 246)' in fill or '0095f6' in fill.lower() or aria_label.lower() == 'verified':
+                    result["verified"] = True
+                    result["badge_type"] = "blue_checkmark"
+                    result["evidence"] = f"Found SVG with 2024 class '{pattern}'"
+                    logger.info("[IG-VERIFY] Pattern 4 matched: 2024 obfuscated class")
+                    return result
+    
+    # Pattern 5: Generic verified aria-label (fallback)
+    verified_aria = soup.find_all(attrs={'aria-label': re.compile(r'(?i)^verified$')})
+    if verified_aria:
+        result["verified"] = True
+        result["badge_type"] = "blue_checkmark"
+        result["evidence"] = f"Found element with aria-label='Verified': {verified_aria[0].get('aria-label', '')[:50]}"
+        logger.info("[IG-VERIFY] Pattern 5 matched: generic aria-label")
+        return result
+    
+    # Pattern 6: Legacy patterns (fallback)
+    legacy_class_patterns = ['coreSpriteVerifiedBadge', 'VerifiedBadge', '_acan']
+    for pattern in legacy_class_patterns:
+        elements = soup.find_all(class_=re.compile(rf'(?i){pattern}'))
+        if elements:
+            result["verified"] = True
+            result["badge_type"] = "blue_checkmark"
+            result["evidence"] = f"Found element with legacy class '{pattern}'"
+            logger.info("[IG-VERIFY] Pattern 6 matched: legacy class")
+            return result
+    
+    # Pattern 7: title="Verified" attribute
     verified_title = soup.find_all(attrs={"title": re.compile(r"(?i)^verified$")})
     if verified_title:
         result["verified"] = True
         result["badge_type"] = "blue_checkmark"
         result["evidence"] = "Found element with title='Verified'"
+        logger.info("[IG-VERIFY] Pattern 7 matched: title attribute")
         return result
     
-    # Pattern 2: Look for aria-label containing "Verified"
-    verified_aria = soup.find_all(attrs={"aria-label": re.compile(r"(?i)verified")})
-    if verified_aria:
-        result["verified"] = True
-        result["badge_type"] = "blue_checkmark"
-        result["evidence"] = f"Found element with aria-label containing 'Verified': {verified_aria[0].get('aria-label', '')[:50]}"
-        return result
-    
-    # Pattern 3: Look for class names containing verified badge indicators
-    verified_class_patterns = [
-        'coreSpriteVerifiedBadge',
-        'verified',
-        'VerifiedBadge',
-        '_acan',  # Instagram's obfuscated class for verified badge
-    ]
-    for pattern in verified_class_patterns:
-        elements = soup.find_all(class_=re.compile(rf"(?i){pattern}"))
-        if elements:
-            result["verified"] = True
-            result["badge_type"] = "blue_checkmark"
-            result["evidence"] = f"Found element with class matching '{pattern}'"
-            return result
-    
-    # Pattern 4: Look for SVG with verified checkmark path
-    svgs = soup.find_all('svg')
-    for svg in svgs:
-        aria_label = svg.get('aria-label', '').lower()
-        if 'verified' in aria_label:
-            result["verified"] = True
-            result["badge_type"] = "blue_checkmark"
-            result["evidence"] = f"Found SVG with aria-label: {aria_label}"
-            return result
-        
-        title = svg.find('title')
-        if title and 'verified' in title.get_text().lower():
-            result["verified"] = True
-            result["badge_type"] = "blue_checkmark"
-            result["evidence"] = "Found SVG with 'Verified' title"
-            return result
-    
-    # Pattern 5: Text content check in profile header
-    header = soup.find('header') or soup.find('div', class_=re.compile(r'profile|header'))
-    if header:
-        header_text = header.get_text().lower()
-        if 'verified' in header_text or '✓' in header_text or '☑' in header_text:
-            result["verified"] = True
-            result["badge_type"] = "blue_checkmark"
-            result["evidence"] = "Found verification indicator in profile header"
-            return result
-    
+    logger.debug("[IG-VERIFY] No verification badge detected after all patterns")
     return result
 
 
+
+
 def _detect_linkedin_badge(soup: BeautifulSoup, result: Dict) -> Dict:
-    """Detect LinkedIn verification badge patterns."""
+    """Detect LinkedIn verification badge patterns (2024 updated).
     
-    # Pattern 1: Look for verification badge aria-label
+    LinkedIn verified badge HTML structure (as of 2024):
+    <use href="#verified-medium" width="24" height="24"></use>
+    """
+    
+    # Pattern 1 (PRIMARY): <use href="#verified-medium"> or similar
+    for use in soup.find_all('use'):
+        href = use.get('href', '') or use.get('xlink:href', '')
+        if 'verified' in href.lower():
+            result["verified"] = True
+            result["badge_type"] = "verified_account"
+            result["evidence"] = f"Found LinkedIn <use href='{href}'>"
+            logger.info("[LI-VERIFY] Pattern 1 matched: <use> element with verified href")
+            return result
+    
+    # Pattern 2: SVG with verification aria-label
+    for svg in soup.find_all('svg'):
+        aria_label = svg.get('aria-label', '').lower()
+        if 'verified' in aria_label or 'verification' in aria_label:
+            result["verified"] = True
+            result["badge_type"] = "verification_badge"
+            result["evidence"] = f"Found SVG with verification aria-label: {aria_label}"
+            logger.info("[LI-VERIFY] Pattern 2 matched: SVG with verification aria-label")
+            return result
+    
+    # Pattern 3: aria-label containing verified
     verified_aria = soup.find_all(attrs={"aria-label": re.compile(r"(?i)verif")})
-    if verified_aria:
-        for elem in verified_aria:
-            aria_text = elem.get('aria-label', '').lower()
-            if 'verified' in aria_text and 'not' not in aria_text:
-                result["verified"] = True
-                result["badge_type"] = "verified_account" if 'account' in aria_text else "verification_badge"
-                result["evidence"] = f"Found element with aria-label: {elem.get('aria-label', '')[:50]}"
-                return result
+    for elem in verified_aria:
+        aria_text = elem.get('aria-label', '').lower()
+        if 'verified' in aria_text and 'not' not in aria_text:
+            result["verified"] = True
+            result["badge_type"] = "verified_account" if 'account' in aria_text else "verification_badge"
+            result["evidence"] = f"Found element with aria-label: {elem.get('aria-label', '')[:50]}"
+            logger.info("[LI-VERIFY] Pattern 3 matched: aria-label")
+            return result
     
-    # Pattern 2: Look for shield/badge SVG icons
+    # Pattern 4: Look for shield/badge icons
     badge_icons = soup.find_all(['span', 'div', 'li-icon'], class_=re.compile(r"(?i)(badge|verif|shield)"))
     if badge_icons:
         result["verified"] = True
         result["badge_type"] = "verification_badge"
         result["evidence"] = "Found verification badge element"
+        logger.info("[LI-VERIFY] Pattern 4 matched: badge/shield class")
         return result
     
-    # Pattern 3: Look for LinkedIn verification text patterns
+    # Pattern 5: LinkedIn verification text patterns
     profile_sections = soup.find_all(['section', 'div'], class_=re.compile(r"(?i)(profile|about|contact)"))
     for section in profile_sections:
         section_text = section.get_text().lower()
@@ -345,79 +398,102 @@ def _detect_linkedin_badge(soup: BeautifulSoup, result: Dict) -> Dict:
             result["verified"] = True
             result["badge_type"] = "identity_verified"
             result["evidence"] = "Found LinkedIn verification indicator in profile"
+            logger.info("[LI-VERIFY] Pattern 5 matched: text content")
             return result
     
-    # Pattern 4: Check for SVGs with verification indicators
-    svgs = soup.find_all('svg')
-    for svg in svgs:
-        aria_label = svg.get('aria-label', '').lower()
-        if 'verified' in aria_label or 'verification' in aria_label:
-            result["verified"] = True
-            result["badge_type"] = "verification_badge"
-            result["evidence"] = f"Found SVG with verification aria-label: {aria_label}"
-            return result
-    
+    logger.debug("[LI-VERIFY] No verification badge detected after all patterns")
     return result
 
 
 def _detect_twitter_badge(soup: BeautifulSoup, result: Dict) -> Dict:
-    """Detect X/Twitter verification badge patterns."""
+    """Detect X/Twitter verification badge patterns (2024 updated).
     
-    # Pattern 1: Look for data-testid="icon-verified"
-    verified_testid = soup.find_all(attrs={"data-testid": re.compile(r"(?i)verif")})
+    X.com verified badge HTML structure (as of 2024):
+    <svg viewBox="0 0 22 22" aria-label="Verified account" role="img" 
+         data-testid="icon-verified">
+        <linearGradient id="..." ...><!-- gold gradient --></linearGradient>
+    </svg>
+    """
+    
+    # Pattern 1 (PRIMARY): data-testid="icon-verified"
+    verified_testid = soup.find_all(attrs={"data-testid": "icon-verified"})
     if verified_testid:
         result["verified"] = True
-        result["badge_type"] = "blue_checkmark"
-        result["evidence"] = "Found element with data-testid containing 'verified'"
+        result["badge_type"] = "gold_checkmark"
+        result["evidence"] = "Found element with data-testid='icon-verified'"
+        logger.info("[X-VERIFY] Pattern 1 matched: data-testid='icon-verified'")
         return result
     
-    # Pattern 2: Look for aria-label containing "Verified account"
+    # Pattern 2: data-testid containing "verif" (fallback)
+    verified_testid_partial = soup.find_all(attrs={"data-testid": re.compile(r"(?i)verif")})
+    if verified_testid_partial:
+        result["verified"] = True
+        result["badge_type"] = "gold_checkmark"
+        result["evidence"] = f"Found element with data-testid containing 'verified'"
+        logger.info("[X-VERIFY] Pattern 2 matched: data-testid partial match")
+        return result
+    
+    # Pattern 3: SVG with aria-label="Verified account" (exact match)
+    for svg in soup.find_all('svg', attrs={'aria-label': 'Verified account'}):
+        result["verified"] = True
+        result["badge_type"] = "gold_checkmark"
+        result["evidence"] = "Found SVG with aria-label='Verified account'"
+        logger.info("[X-VERIFY] Pattern 3 matched: SVG aria-label='Verified account'")
+        return result
+    
+    # Pattern 4: aria-label containing "Verified" (case-insensitive)
     verified_aria = soup.find_all(attrs={"aria-label": re.compile(r"(?i)verified\s*(account)?")})
-    if verified_aria:
-        for elem in verified_aria:
-            aria_text = elem.get('aria-label', '').lower()
-            if 'verified' in aria_text:
-                if 'organization' in aria_text:
-                    badge_type = "verified_organization"
-                elif 'government' in aria_text:
-                    badge_type = "government_badge"
-                else:
-                    badge_type = "blue_checkmark"
-                    
+    for elem in verified_aria:
+        aria_text = elem.get('aria-label', '').lower()
+        if 'verified' in aria_text:
+            if 'organization' in aria_text:
+                badge_type = "verified_organization"
+            elif 'government' in aria_text:
+                badge_type = "government_badge"
+            else:
+                badge_type = "gold_checkmark"
+                
+            result["verified"] = True
+            result["badge_type"] = badge_type
+            result["evidence"] = f"Found element with aria-label: {elem.get('aria-label', '')[:50]}"
+            logger.info("[X-VERIFY] Pattern 4 matched: aria-label")
+            return result
+    
+    # Pattern 5: SVG with gold gradient (X.com uses gold gradients for verified)
+    for svg in soup.find_all('svg'):
+        # Check for linearGradient with gold colors
+        gradients = svg.find_all('lineargradient') or svg.find_all('linearGradient')
+        for gradient in gradients:
+            gradient_str = str(gradient).lower()
+            if any(color in gradient_str for color in ['#f4e72a', '#cd8105', '#cb7b00', '#e2b719']):
                 result["verified"] = True
-                result["badge_type"] = badge_type
-                result["evidence"] = f"Found element with aria-label: {elem.get('aria-label', '')[:50]}"
+                result["badge_type"] = "gold_checkmark"
+                result["evidence"] = "Found SVG with gold gradient (X.com verified badge)"
+                logger.info("[X-VERIFY] Pattern 5 matched: gold gradient")
                 return result
     
-    # Pattern 3: Look for SVG with verification badge 
-    svgs = soup.find_all('svg')
-    for svg in svgs:
+    # Pattern 6: SVG with verified aria-label
+    for svg in soup.find_all('svg'):
         aria_label = svg.get('aria-label', '').lower()
         if 'verified' in aria_label:
             result["verified"] = True
-            result["badge_type"] = "blue_checkmark"
+            result["badge_type"] = "gold_checkmark"
             result["evidence"] = f"Found SVG with verified aria-label: {aria_label}"
+            logger.info("[X-VERIFY] Pattern 6 matched: SVG aria-label")
             return result
-        
-        parent = svg.parent
-        if parent:
-            parent_classes = ' '.join(parent.get('class', []))
-            if 'verified' in parent_classes.lower():
-                result["verified"] = True
-                result["badge_type"] = "blue_checkmark"
-                result["evidence"] = "Found SVG inside verified container"
-                return result
     
-    # Pattern 4: Check for verification badge class names
-    verified_classes = soup.find_all(class_=re.compile(r"(?i)(verified|checkmark|badge)"))
+    # Pattern 7: Legacy class-based detection
+    verified_classes = soup.find_all(class_=re.compile(r"(?i)(verified|checkmark)"))
     for elem in verified_classes:
         classes = ' '.join(elem.get('class', []))
-        if 'verified' in classes.lower() or ('badge' in classes.lower() and 'blue' in classes.lower()):
+        if 'verified' in classes.lower():
             result["verified"] = True
-            result["badge_type"] = "blue_checkmark"
+            result["badge_type"] = "gold_checkmark"
             result["evidence"] = f"Found element with verification class: {classes[:50]}"
+            logger.info("[X-VERIFY] Pattern 7 matched: legacy class")
             return result
     
+    logger.debug("[X-VERIFY] No verification badge detected after all patterns")
     return result
 
 
