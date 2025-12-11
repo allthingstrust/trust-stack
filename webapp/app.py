@@ -901,7 +901,7 @@ def show_analyze_page():
             web_pages = max_items if use_web_search else max_items
 
             # Visual Analysis
-            visual_analysis_available = bool(cfg.gemini_api_key)
+            visual_analysis_available = bool(cfg.google_api_key)
             use_visual_analysis = st.checkbox(
                 "📸 Enable Visual Analysis",
                 value=False,
