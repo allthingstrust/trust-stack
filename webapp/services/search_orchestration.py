@@ -79,6 +79,18 @@ def perform_initial_search(brand_id: str, keywords: List[str], sources: List[str
                     st.session_state[cache_key] = llm_domains
 
                 if llm_domains:
+                    # Merge LLM-discovered domains into brand_domains for classification
+                    # This ensures URLs from these domains are classified as brand-owned
+                    existing_domains = set(d.lower() for d in (brand_domains or []))
+                    for llm_domain in llm_domains:
+                        clean_domain = llm_domain.lower().strip()
+                        if clean_domain not in existing_domains:
+                            if brand_domains is None:
+                                brand_domains = []
+                            brand_domains.append(clean_domain)
+                            existing_domains.add(clean_domain)
+                    logger.info(f'Merged LLM domains into brand_domains: {brand_domains}')
+                    
                     # Build site-restricted query using discovered domains
                     site_filters = " OR ".join([f"site:{domain}" for domain in llm_domains[:10]])
                     query = f"{base_query} ({site_filters})"
