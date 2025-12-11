@@ -648,9 +648,6 @@ You must output the analysis in the EXACT following format. Use the provided HTM
 
 🗝️ **Key Signal Evaluation**
 
-IMPORTANT: The status icons and scores below are PRE-COMPUTED from actual detected attributes. 
-You MUST use these EXACT statuses. Do NOT change them. Only add 2-3 bullet points explaining each.
-
 {signals_formatted}
 
 🧮 **Diagnostics Snapshot**
@@ -668,7 +665,7 @@ You MUST use these EXACT statuses. Do NOT change them. Only add 2-3 bullet point
 INSTRUCTIONS:
 - Be professional, objective, and detailed.
 - Use the provided score to guide the tone.
-- CRITICAL: The Key Signal statuses are FIXED. Copy them exactly as provided above.
+- CRITICAL: The Key Signal Evaluation section above is PRE-COMPUTED and PRE-FORMATTED. You MUST COPY IT EXACTLY AS PROVIDED - including the status icons, scores, and evidence bullets with URLs. DO NOT modify, rephrase, or add to the Key Signal Evaluation section.
 - CRITICAL: You MUST use the provided "Attributes" and "Issues" data in your Rationale.
 - CRITICAL: Recommendations must be specific and actionable. Use the provided content snippets to identify specific gaps.
 - CRITICAL: Output '{{{{DIAGNOSTICS_TABLE}}}}' exactly where shown. Do not try to generate the table yourself.

@@ -108,12 +108,17 @@ def main():
             # Construct report_data dictionary expected by the report generator
             items = []
             for asset in run_data.assets:
+                # Ensure meta includes source_url for evidence tracking
+                meta = asset.meta_info.copy() if asset.meta_info else {}
+                if asset.url and not meta.get('source_url'):
+                    meta['source_url'] = asset.url
+                
                 item = {
                     "id": asset.id,
                     "url": asset.url,
                     "title": asset.title,
                     "body": asset.raw_content, # simplified
-                    "meta": asset.meta_info or {},
+                    "meta": meta,
                     "dimension_scores": {}
                 }
                 
