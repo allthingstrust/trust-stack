@@ -221,6 +221,10 @@ def _render_diagnostics_table(
     else:
         rows = ["| Metric | Score |", "|---|---|"]
     
+    # Pre-calculate all contributions and round them
+    # Then adjust the last non-zero contribution to make the sum match the dimension score exactly
+    contributions_data = []  # List of (label, icon, avg_score, contribution, requirement_level)
+    
     for label in expected_signals:
         signal_id = KEY_SIGNAL_TO_SIGNAL_ID.get(label, "")
         cfg = signal_config.get(signal_id, {"weight": 0.2, "requirement_level": "core"})
@@ -238,6 +242,30 @@ def _render_diagnostics_table(
         if avg_score > 0.0 and weighted_sum > 0:
             # Each signal's contribution is its proportional share of the dimension score
             contribution = (avg_score * raw_weight / weighted_sum) * fallback_score
+        else:
+            contribution = 0.0
+            
+        contributions_data.append((label, icon, avg_score, contribution, requirement_level))
+    
+    # Round contributions and calculate sum
+    rounded_contributions = [round(c[3], 1) for c in contributions_data]
+    contributions_sum = sum(rounded_contributions)
+    target_score = round(fallback_score, 1)
+    
+    # Find the last non-zero contribution and adjust it to make sum match target
+    if contributions_sum != target_score:
+        adjustment = round(target_score - contributions_sum, 1)
+        # Find last non-zero contribution to adjust
+        for i in range(len(rounded_contributions) - 1, -1, -1):
+            if rounded_contributions[i] > 0.0:
+                rounded_contributions[i] = round(rounded_contributions[i] + adjustment, 1)
+                break
+    
+    # Build table rows with adjusted values
+    for i, (label, icon, avg_score, _, requirement_level) in enumerate(contributions_data):
+        contribution = rounded_contributions[i]
+        
+        if avg_score > 0.0:
             score_display = f"{avg_score:.1f}/10 → {contribution:.1f}/10 final score"
         else:
             # No data: show N/A for amplifiers, 0.0 for core
