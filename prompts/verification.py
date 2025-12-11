@@ -25,6 +25,12 @@ DO NOT extract:
 - Self-referential statements that can't be externally verified
 - Common knowledge facts
 - Future predictions or intentions
+- FIRST-PARTY PRODUCT/ECOMMERCE DATA when content is from the brand's own website:
+  * Product prices, shipping costs, delivery times
+  * Inventory/availability status
+  * Product specifications (sizes, weights, dimensions, ingredients)
+  * SKUs, product codes, or internal identifiers
+  These are authoritative first-party data that cannot be externally verified.
 
 Output format: Return ONLY a JSON object with a "claims" array containing string claims."""
 
@@ -116,12 +122,36 @@ VERIFICATION_EXAMPLES = """
 # PROMPT BUILDERS
 # =============================================================================
 
-def build_claim_extraction_prompt(content_body: str, max_chars: int = 3000) -> str:
-    """Build the complete claim extraction prompt with few-shot examples."""
+def build_claim_extraction_prompt(
+    content_body: str, 
+    max_chars: int = 3000,
+    is_brand_owned: bool = False
+) -> str:
+    """Build the complete claim extraction prompt with few-shot examples.
+    
+    Args:
+        content_body: The text content to extract claims from
+        max_chars: Maximum characters to include from content
+        is_brand_owned: If True, adds context that this is brand-owned content
+                       and first-party ecommerce data should be excluded
+    """
+    source_context = ""
+    if is_brand_owned:
+        source_context = """\n<source_context>
+IMPORTANT: This content is from the BRAND'S OWN website (e-commerce/D2C).
+Do NOT extract first-party product data as claims:
+- Product prices, shipping costs, or delivery estimates
+- Inventory/stock status
+- Product sizes, weights, dimensions, or specifications
+- Ingredients or materials lists
+These are authoritative first-party data from the product seller.
+ONLY extract claims about external facts (awards, partnerships, founding dates, etc.)
+</source_context>\n"""
+    
     return f"""{CLAIM_EXTRACTION_EXAMPLES}
 
 Now extract verifiable claims from this content:
-
+{source_context}
 <content>
 {content_body[:max_chars]}
 </content>

@@ -46,8 +46,20 @@ class VerificationManager:
         return self._aggregate_results(verified_claims)
 
     def _extract_claims(self, content: NormalizedContent) -> List[str]:
-        """Extract 3-5 key factual claims from content."""
-        prompt = build_claim_extraction_prompt(content.body)
+        """Extract 3-5 key factual claims from content.
+        
+        For brand-owned content (ecommerce, D2C), first-party product data
+        (prices, specs, inventory) is excluded from extraction since the
+        brand IS the authoritative source for this data.
+        """
+        # Check if content is from brand-owned source
+        source_type = getattr(content, 'source_type', 'unknown')
+        is_brand_owned = source_type.lower() in ('brand_owned', 'brand-owned', 'owned')
+        
+        if is_brand_owned:
+            logger.info(f"Brand-owned content detected for {content.content_id} - excluding first-party product data from claims")
+        
+        prompt = build_claim_extraction_prompt(content.body, is_brand_owned=is_brand_owned)
         
         try:
             response = self.llm_client.client.chat(

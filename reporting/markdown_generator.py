@@ -302,8 +302,8 @@ class MarkdownReportGenerator:
         # Title
         content.append(self._create_header(report_data))
 
-        # Data Source Description
-        content.append(self._create_data_source_description(report_data))
+        # NOTE: Data Source Description removed - URLs are surfaced throughout the report
+        # and in the Content Items Detail table footer
 
         # Trust Stack Analysis (Detailed 5D Analysis + Full Audit Report)
         # This replaces the old Executive Summary and Dimension Breakdown

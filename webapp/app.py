@@ -1715,42 +1715,14 @@ def show_results_page():
     st.markdown(f"**Date:** {current_date}")
     st.markdown("")  # Spacing
     
-    # Data Source Description Section (NEW - matches reference format)
+    # Brand Header Section
     brand_id = run_data.get("brand_id", "Unknown Brand")
     brand_name_display = brand_id.replace('_', ' ').replace('-', ' ').title()
     
     st.markdown(f"### {brand_name_display}")
     
-    # Get actual URLs from items instead of just source type
-    sources = report.get('sources', [])
-    actual_urls = set()
-    
-    for item in items:
-        meta = item.get('meta', {})
-        if isinstance(meta, str):
-            try:
-                meta = json.loads(meta) if meta else {}
-            except:
-                meta = {}
-        
-        # Extract URL from metadata
-        url = meta.get('source_url') or meta.get('url') or meta.get('link')
-        if url and url.startswith('http'):
-            # Extract domain for cleaner display
-            from urllib.parse import urlparse
-            parsed = urlparse(url)
-            domain = f"{parsed.scheme}://{parsed.netloc}"
-            actual_urls.add(domain)
-    
-    # Display sources
-    if actual_urls:
-        sources_str = ', '.join(sorted(actual_urls))
-        st.markdown(f"**Data Source(s):** {sources_str}")
-    elif sources and sources != ['web']:
-        sources_str = ', '.join(sources)
-        st.markdown(f"**Data Source(s):** {sources_str}")
-    else:
-        st.markdown(f"**Data Source(s):** Brand content analysis")
+    # NOTE: Data Source(s) URL display removed - URLs are surfaced in
+    # the Content Items Detail table and throughout the report
     
     st.markdown("")  # Spacing
     

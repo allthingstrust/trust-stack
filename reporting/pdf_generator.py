@@ -381,30 +381,9 @@ class PDFReportGenerator:
         story.append(Paragraph(brand_name_display, self.styles['SectionHeader']))
         story.append(Spacer(1, 8))
         
-        # Data Sources
+        # NOTE: Data Sources section removed - URLs are surfaced throughout the report
+        # and in the Content Items Detail table
         items = report_data.get('items', [])
-        actual_urls = set()
-        for item in items:
-            meta = item.get('meta', {})
-            if isinstance(meta, str):
-                try:
-                    import json
-                    meta = json.loads(meta) if meta else {}
-                except:
-                    meta = {}
-            url = meta.get('source_url') or meta.get('url') or meta.get('link')
-            if url and url.startswith('http'):
-                from urllib.parse import urlparse
-                parsed = urlparse(url)
-                domain = f"{parsed.scheme}://{parsed.netloc}"
-                actual_urls.add(domain)
-        
-        if actual_urls:
-            sources_str = ', '.join(sorted(actual_urls))
-            story.append(Paragraph(f"<b>Data Source(s):</b> {sources_str}", self.styles['Normal']))
-        else:
-            story.append(Paragraph("<b>Data Source(s):</b> Brand content analysis", self.styles['Normal']))
-        story.append(Spacer(1, 10))
         
         # Description
         total_items = len(items)
@@ -434,7 +413,7 @@ class PDFReportGenerator:
         story.append(Spacer(1, 10))
         
         if items:
-            # Create simplified items table
+            # Create simplified items table with clickable Source column
             table_data = [['Source', 'Title', 'Score', 'Rating']]
             
             for item in items[:50]:  # Limit to 50 items for PDF
@@ -446,7 +425,7 @@ class PDFReportGenerator:
                     except:
                         meta = {}
                 
-                source = str(item.get('source', '')).upper()[:10]
+                source_text = str(item.get('source', '')).upper()[:10]
                 title = (meta.get('title') or meta.get('name') or 'N/A')[:40]
                 if len(title) == 40:
                     title += '...'
@@ -462,7 +441,19 @@ class PDFReportGenerator:
                 else:
                     rating = 'Poor'
                 
-                table_data.append([source, title, f"{score:.1f}", rating])
+                # Extract URL from metadata and make Source clickable
+                url = meta.get('source_url') or meta.get('url') or meta.get('link') or ''
+                
+                if url and url.startswith('http'):
+                    # Make Source text a clickable link
+                    source_cell = Paragraph(
+                        f'<a href="{url}" color="blue"><u>{source_text}</u></a>',
+                        self.styles['TableText']
+                    )
+                else:
+                    source_cell = Paragraph(source_text, self.styles['TableText'])
+                
+                table_data.append([source_cell, title, f"{score:.1f}", rating])
             
             table = Table(table_data, colWidths=[0.8*inch, 3*inch, 0.8*inch, 1*inch])
             table.setStyle(TableStyle([
@@ -473,8 +464,10 @@ class PDFReportGenerator:
                 ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
                 ('FONTSIZE', (0, 0), (-1, -1), 8),
                 ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+                ('TOPPADDING', (0, 0), (-1, -1), 4),
                 ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
-                ('GRID', (0, 0), (-1, -1), 0.5, colors.grey)
+                ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
             ]))
             story.append(table)
         
