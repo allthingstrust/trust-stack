@@ -16,24 +16,27 @@ from scoring.llm_client import ChatClient
 logger = logging.getLogger(__name__)
 
 
-def _load_signal_weights() -> Dict[str, float]:
+def _load_signal_config() -> Dict[str, Dict[str, Any]]:
     """
-    Load signal weights from trust_signals.yml.
+    Load signal configuration from trust_signals.yml.
     
     Returns:
-        Dict mapping signal_id -> weight (e.g., {"res_cultural_fit": 0.40})
+        Dict mapping signal_id -> {"weight": float, "requirement_level": str}
     """
     try:
         config_path = Path(__file__).parent.parent / "scoring" / "config" / "trust_signals.yml"
         with open(config_path, 'r') as f:
             config = yaml.safe_load(f)
         
-        weights = {}
+        result = {}
         for signal_id, signal_def in config.get('signals', {}).items():
-            weights[signal_id] = float(signal_def.get('weight', 0.2))
-        return weights
+            result[signal_id] = {
+                "weight": float(signal_def.get('weight', 0.2)),
+                "requirement_level": signal_def.get('requirement_level', 'core')
+            }
+        return result
     except Exception as e:
-        logger.warning(f"Failed to load signal weights: {e}")
+        logger.warning(f"Failed to load signal config: {e}")
         return {}
 
 
@@ -157,6 +160,8 @@ def _render_diagnostics_table(
     
     v5.1 Fix: Uses actual weights from trust_signals.yml and normalizes across only
     signals with data so contributions sum to the dimension score.
+    
+    Includes 🔑 (Core) and ✨ (Amplifier) icons with legend on first dimension only.
     """
     # Get the strict list of signals for this dimension
     expected_signals = TRUST_STACK_DIMENSIONS.get(dimension.lower(), {}).get('signals', [])
@@ -164,8 +169,8 @@ def _render_diagnostics_table(
     if not expected_signals:
          return f"| Metric | Contribution |\n|---|---|\n| No signals defined | {fallback_score:.1f} points |"
 
-    # Load actual signal weights from config
-    signal_weights = _load_signal_weights()
+    # Load signal config (weights + requirement_level)
+    signal_config = _load_signal_config()
     
     # Build enhanced signal scores by merging LLM signals from dimension_details
     enhanced_statuses = dict(key_signal_statuses)  # Start with attribute-based
@@ -190,57 +195,58 @@ def _render_diagnostics_table(
     
     # Collect scores and weights for signals WITH data
     active_signals = []  # [(label, score, weight)]
-    inactive_signals = []  # [(label, 0.0, weight)] - shown but don't contribute
     
     for label in expected_signals:
         signal_id = KEY_SIGNAL_TO_SIGNAL_ID.get(label, "")
-        weight = signal_weights.get(signal_id, 0.2)  # Default 0.2 if not found
+        cfg = signal_config.get(signal_id, {"weight": 0.2, "requirement_level": "core"})
+        weight = cfg["weight"]
         
         if label in enhanced_statuses:
             _, avg_score, _ = enhanced_statuses[label]
             if avg_score > 0.0:
                 active_signals.append((label, avg_score, weight))
-            else:
-                inactive_signals.append((label, 0.0, weight))
-        else:
-            inactive_signals.append((label, 0.0, weight))
     
-    # Calculate weighted average of active signals to verify math
-    if active_signals:
-        weighted_sum = sum(s * w for _, s, w in active_signals)
-        total_active_weight = sum(w for _, _, w in active_signals)
-        weighted_avg = weighted_sum / total_active_weight if total_active_weight > 0 else 0.0
+    # Calculate weighted sum for contribution normalization
+    weighted_sum = sum(s * w for _, s, w in active_signals) if active_signals else 0.0
+    
+    # Build table rows with icons
+    # Add legend only for provenance (first dimension)
+    if dimension.lower() == 'provenance':
+        rows = [
+            "🔑 = Core Signal | ✨ = Amplifier (Bonus)",
+            "",
+            "| Metric | Score |",
+            "|---|---|"
+        ]
     else:
-        total_active_weight = 1.0
-        weighted_avg = 0.0
-    
-    # Build table rows - contribution = (signal_score / weighted_avg) * normalized_weight * fallback_score
-    # This ensures: sum of contributions = fallback_score
-    rows = ["| Metric | Score |", "|---|---|"]
+        rows = ["| Metric | Score |", "|---|---|"]
     
     for label in expected_signals:
         signal_id = KEY_SIGNAL_TO_SIGNAL_ID.get(label, "")
-        raw_weight = signal_weights.get(signal_id, 0.2)
+        cfg = signal_config.get(signal_id, {"weight": 0.2, "requirement_level": "core"})
+        raw_weight = cfg["weight"]
+        requirement_level = cfg["requirement_level"]
+        
+        # Determine icon
+        icon = "🔑" if requirement_level == "core" else "✨"
         
         if label in enhanced_statuses:
             _, avg_score, _ = enhanced_statuses[label]
         else:
             avg_score = 0.0
         
-        if avg_score > 0.0 and total_active_weight > 0:
+        if avg_score > 0.0 and weighted_sum > 0:
             # Each signal's contribution is its proportional share of the dimension score
-            # Formula: contribution = (score * weight) / weighted_sum * fallback_score
-            weighted_sum = sum(s * w for _, s, w in active_signals)
-            if weighted_sum > 0:
-                contribution = (avg_score * raw_weight / weighted_sum) * fallback_score
-            else:
-                contribution = 0.0
+            contribution = (avg_score * raw_weight / weighted_sum) * fallback_score
+            score_display = f"{avg_score:.1f}/10 → {contribution:.1f}/10 final score"
         else:
-            # Inactive signals show 0 contribution
-            contribution = 0.0
+            # No data: show N/A for amplifiers, 0.0 for core
+            if requirement_level == "amplifier":
+                score_display = "N/A (optional)"
+            else:
+                score_display = "0.0/10 → 0.0/10 final score"
         
-        # Format: "6.0/10 → 1.2/10 final score"
-        rows.append(f"| {label} | {avg_score:.1f}/10 → {contribution:.1f}/10 final score |")
+        rows.append(f"| {icon} {label} | {score_display} |")
     
     return "\n".join(rows)
 

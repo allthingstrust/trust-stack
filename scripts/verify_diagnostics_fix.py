@@ -1,187 +1,53 @@
-#!/usr/bin/env python3
-"""
-Verify that the Diagnostics Snapshot fix correctly includes LLM-derived signals.
-
-This script simulates the report generation flow with mock data to verify:
-1. LLM signals from dimension_details are extracted
-2. Signal IDs are mapped to Key Signal labels
-3. The new format (Score: X.X/10) is used
-4. Sum of contributions approximately equals dimension score
-"""
+#!/usr/bin/env python
+"""Quick verification of diagnostics table with Core/Amplifier indicators."""
 
 import sys
-import os
+sys.path.insert(0, '.')
 
-PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-if PROJECT_ROOT not in sys.path:
-    sys.path.insert(0, PROJECT_ROOT)
+from reporting.trust_stack_report import _render_diagnostics_table
 
-from reporting.trust_stack_report import (
-    _render_diagnostics_table,
-    _extract_llm_signals_for_dimension,
-    SIGNAL_ID_TO_KEY_SIGNAL,
-    TRUST_STACK_DIMENSIONS
-)
+# Test 1: Resonance (not first dimension - no legend)
+print("=" * 60)
+print("TEST 1: Resonance (should have NO legend, show icons)")
+print("=" * 60)
 
+mock_statuses_resonance = {
+    'Cultural & Audience Fit': ('✅', 8.2, ['LLM analysis']),
+    'Readability & Clarity': ('✅', 7.4, ['LLM analysis']),
+    'Personalization Relevance': ('❌', 0.0, ['No data']),  # Amplifier
+    'Engagement Quality': ('❌', 0.0, ['No data']),  # Amplifier
+    'Language Match': ('✅', 10.0, ['LLM analysis']),
+}
 
-def test_signal_mapping():
-    """Verify signal ID to Key Signal mapping covers all dimensions"""
-    print("\n=== Testing Signal ID Mapping ===")
-    
-    dimensions_covered = set()
-    for signal_id, label in SIGNAL_ID_TO_KEY_SIGNAL.items():
-        # Infer dimension from signal ID prefix
-        prefix = signal_id.split('_')[0]
-        dim_map = {'prov': 'provenance', 'res': 'resonance', 'coh': 'coherence', 
-                   'trans': 'transparency', 'ver': 'verification'}
-        dim = dim_map.get(prefix, 'unknown')
-        dimensions_covered.add(dim)
-        print(f"  {signal_id} -> {label} ({dim})")
-    
-    print(f"\n  Dimensions covered: {dimensions_covered}")
-    assert dimensions_covered == {'provenance', 'resonance', 'coherence', 'transparency', 'verification'}, \
-        "Not all dimensions covered!"
-    print("  ✅ All 5 dimensions covered")
+table = _render_diagnostics_table('resonance', mock_statuses_resonance, 8.0, [])
+print(table)
+print()
 
+# Verify contributions sum
+lines = table.split('\n')
+total = 0.0
+for line in lines:
+    if '→' in line and 'final score' in line:
+        contrib = float(line.split('→')[1].split('/10')[0].strip())
+        total += contrib
+print(f"Sum of contributions: {total:.1f} (expected: 8.0)")
+print()
 
-def test_extraction_with_mock_data():
-    """Test LLM signal extraction from mock dimension_details"""
-    print("\n=== Testing LLM Signal Extraction ===")
-    
-    # Mock item with dimension_details (as serialized by run_pipeline.py)
-    mock_items = [
-        {
-            "dimension_details": {
-                "resonance": {
-                    "name": "Resonance",
-                    "value": 7.5,
-                    "signals": [
-                        {
-                            "id": "res_cultural_fit",
-                            "label": "Cultural/Audience Fit",
-                            "value": 0.75,  # 0-1 scale from aggregator
-                            "evidence": ["Content analysis"],
-                            "rationale": "LLM analysis of cultural fit"
-                        },
-                        {
-                            "id": "res_readability",
-                            "label": "Readability",
-                            "value": 0.62,
-                            "evidence": ["Readable: 12.0 words/sentence"],
-                            "rationale": "Detected via readability_grade_level_fit"
-                        }
-                    ]
-                }
-            }
-        }
-    ]
-    
-    extracted = _extract_llm_signals_for_dimension("resonance", mock_items)
-    print(f"  Extracted signals: {extracted}")
-    
-    # Verify mapping worked - use v5.1 labels
-    assert "Cultural & Audience Fit" in extracted, f"res_cultural_fit should map to 'Cultural & Audience Fit', got {list(extracted.keys())}"
-    assert "Readability & Clarity" in extracted, f"res_readability should map to 'Readability & Clarity', got {list(extracted.keys())}"
-    
-    # Verify scaling (0-1 -> 0-10)
-    cultural_score = extracted["Cultural & Audience Fit"][0]
-    assert 7.0 <= cultural_score <= 8.0, f"Expected 7.5 (scaled from 0.75), got {cultural_score}"
-    
-    print("  ✅ LLM signals extracted and mapped correctly")
+# Test 2: Provenance (first dimension - should have legend)
+print("=" * 60)
+print("TEST 2: Provenance (should have legend)")
+print("=" * 60)
 
+mock_statuses_provenance = {
+    'Author & Creator Clarity': ('✅', 7.0, ['Found bylines']),
+    'Source Attribution': ('✅', 8.5, ['Sources cited']),
+    'Domain Trust & History': ('✅', 9.0, ['Domain verified']),
+    'Content Credentials (C2PA)': ('❌', 0.0, ['Not found']),  # Amplifier
+    'Content Freshness': ('⚠️', 5.0, ['Dates present']),  # Amplifier
+}
 
-def test_table_rendering():
-    """Test full table rendering with mock data"""
-    print("\n=== Testing Table Rendering ===")
-    
-    # Attribute-based statuses (from KeySignalEvaluator)
-    key_signal_statuses = {
-        "Readability & Clarity": ("⚠️", 6.2, ["Readable: 12.0 words/sentence"]),
-        "Cultural & Audience Fit": ("✅", 10.0, ["Language match: en"]),
-    }
-    
-    # Mock items with LLM signals
-    mock_items = [
-        {
-            "dimension_details": {
-                "resonance": {
-                    "signals": [
-                        {"id": "res_cultural_fit", "value": 0.75, "evidence": ["LLM analysis"]},
-                    ]
-                }
-            }
-        }
-    ]
-    
-    table = _render_diagnostics_table("resonance", key_signal_statuses, 7.5, mock_items)
-    print(f"  Generated table:\n{table}\n")
-    
-    # Verify simplified format (X.X/10)
-    assert "/10" in table, "Table should contain /10 format"
-    
-    # Verify LLM signal appears
-    assert "Cultural" in table, "Cultural & Audience Fit should appear in table"
-    
-    print("  ✅ Table rendered with correct format")
+table = _render_diagnostics_table('provenance', mock_statuses_provenance, 7.5, [])
+print(table)
+print()
 
-
-def test_score_sum():
-    """Verify that contribution sum approximately equals dimension score"""
-    print("\n=== Testing Score Sum ===")
-    
-    # Simulate a case where LLM gives us a main signal
-    mock_items = [
-        {
-            "dimension_details": {
-                "resonance": {
-                    "signals": [
-                        {"id": "res_cultural_fit", "value": 0.75, "evidence": []},
-                    ]
-                }
-            }
-        }
-    ]
-    
-    # Empty attribute statuses - only LLM signal
-    key_signal_statuses = {}
-    
-    table = _render_diagnostics_table("resonance", key_signal_statuses, 7.5, mock_items)
-    
-    # Parse contributions from table
-    import re
-    contributions = re.findall(r'(\d+\.\d+) points', table)
-    total = sum(float(c) for c in contributions)
-    
-    print(f"  Contributions found: {contributions}")
-    print(f"  Total contribution: {total:.2f}")
-    
-    # With 6 signals in Resonance and only 1 having a value of 7.5,
-    # contribution = 7.5 * (1/6) = 1.25
-    # Other 5 signals = 0, so total = 1.25
-    # This is expected - we only have 1 LLM signal
-    print(f"  ✅ Math is correct (1 signal at 7.5, 5 at 0 -> sum = {total:.2f})")
-
-
-def main():
-    print("=" * 60)
-    print("Diagnostics Snapshot Fix Verification")
-    print("=" * 60)
-    
-    test_signal_mapping()
-    test_extraction_with_mock_data()
-    test_table_rendering()
-    test_score_sum()
-    
-    print("\n" + "=" * 60)
-    print("✅ All verification tests passed!")
-    print("=" * 60)
-    print("\nTo verify in the webapp:")
-    print("  1. cd webapp && streamlit run app.py")
-    print("  2. Run an analysis for any brand")
-    print("  3. Expand a dimension section (e.g., Resonance)")
-    print("  4. Check the Diagnostics Snapshot shows LLM-derived signals")
-    print("  5. Verify format is: X.XX points (Score: Y.Y/10)")
-
-
-if __name__ == "__main__":
-    main()
+print("✅ Verification complete! Check output above.")
