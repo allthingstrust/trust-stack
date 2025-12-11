@@ -302,7 +302,14 @@ class KeySignalEvaluator:
                 results[signal_name] = ('❌', 0.0, ['No attributes detected'])
             else:
                 scores = [s for s, _ in scores_evidence]
-                evidence = [e for _, e in scores_evidence if e][:3]  # Limit to 3
+                # Deduplicate evidence strings before limiting to 3
+                seen_evidence = set()
+                unique_evidence = []
+                for _, e in scores_evidence:
+                    if e and e not in seen_evidence:
+                        seen_evidence.add(e)
+                        unique_evidence.append(e)
+                evidence = unique_evidence[:3]  # Limit to 3 unique entries
                 avg_score = sum(scores) / len(scores)
                 
                 if avg_score >= 7.0:
