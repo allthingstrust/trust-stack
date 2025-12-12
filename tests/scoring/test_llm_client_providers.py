@@ -34,7 +34,7 @@ class TestChatClientProviders:
         tracker = CostTracker()
         
         # Inject mocks
-        with patch('scoring.llm_client.cost_tracker', tracker):
+        with patch('scoring.cost_tracker.cost_tracker', tracker):
             client = ChatClient(api_key="sk-fake", anthropic_api_key="sk-ant-fake")
             
             # Call with Claude model
@@ -73,7 +73,7 @@ class TestChatClientProviders:
         
         tracker = CostTracker()
         
-        with patch('scoring.llm_client.cost_tracker', tracker):
+        with patch('scoring.cost_tracker.cost_tracker', tracker):
             client = ChatClient(api_key="sk-fake", google_api_key="fake-google")
             
             # Call with Gemini model

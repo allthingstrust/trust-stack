@@ -47,7 +47,9 @@ def main():
     parser.add_argument("--export-to-s3", action="store_true", help="Upload raw + analytics outputs to S3 after completion")
     parser.add_argument("--s3-bucket", help="Override S3 bucket name")
     parser.add_argument("--print-report", action="store_true", help="Generate and print full Trust Stack Report to console")
+    parser.add_argument("--print-report", action="store_true", help="Generate and print full Trust Stack Report to console")
     parser.add_argument("--visual-analysis", action="store_true", help="Enable Visual Analysis (screenshot capture + AI scoring)")
+    parser.add_argument("--model", help="Override LLM model (e.g. claude-3-5-sonnet-20240620, gemini-1.5-pro)")
 
     args = parser.parse_args()
     
@@ -83,7 +85,11 @@ def main():
         "external_id": args.external_id,
         "assets": assets,
         "export_to_s3": args.export_to_s3,
+        "export_to_s3": args.export_to_s3,
         "s3_bucket": args.s3_bucket,
+        "scenario_config": {
+            "summary_model": args.model
+        }
     }
 
     print(f"Starting analysis for brand: {args.brand}...")

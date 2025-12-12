@@ -44,8 +44,8 @@ class TestVisualAnalyzerCost:
         # Initialize analyzer with a specific model and fake API key
         analyzer = VisualAnalyzer(model="gemini-2.0-flash", api_key="fake_key")
         
-        # Patch cost_tracker global imported in visual_analyzer
-        with patch('scoring.visual_analyzer.cost_tracker', tracker):
+        # Patch cost_tracker global at source
+        with patch('scoring.cost_tracker.cost_tracker', tracker):
             # Run analysis
             analyzer.analyze(b"fake_image_bytes", "http://example.com")
             
@@ -73,7 +73,7 @@ class TestVisualAnalyzerCost:
         tracker = CostTracker()
         analyzer = VisualAnalyzer(model="gemini-2.0-flash", api_key="fake_key")
         
-        with patch('scoring.visual_analyzer.cost_tracker', tracker):
+        with patch('scoring.cost_tracker.cost_tracker', tracker):
             analyzer.analyze(b"fake_image_bytes", "http://example.com")
             
             # Verify usage was recorded (fallback values)
