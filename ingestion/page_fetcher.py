@@ -1146,9 +1146,9 @@ def _fetch_with_playwright(url: str, user_agent: str, browser_manager=None) -> D
                 if meta.get('success'):
                     # Generate a run_id (using date if not available)
                     run_id = f"fetch_{datetime.now().strftime('%Y%m%d')}"
-                    screenshot_key = capture.upload_to_s3(png_bytes, url, run_id)
+                    screenshot_key = capture.store_screenshot(png_bytes, url, run_id)
                     if screenshot_key:
-                        logger.info(f"Screenshot captured and uploaded: {screenshot_key}")
+                        logger.info(f"Screenshot stored: {screenshot_key}")
             except Exception as e:
                 logger.warning(f"Screenshot capture failed for {url}: {e}")
 

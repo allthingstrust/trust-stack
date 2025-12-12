@@ -12,6 +12,7 @@ import hashlib
 from datetime import datetime
 from typing import Dict, Any, Optional, Tuple
 from urllib.parse import urlparse
+from pathlib import Path
 
 logger = logging.getLogger('ingestion.screenshot_capture')
 
@@ -207,6 +208,53 @@ class ScreenshotCapture:
             logger.error(f"Failed to upload screenshot to S3: {e}")
             return None
 
+    def store_screenshot(
+        self,
+        screenshot_bytes: bytes,
+        url: str,
+        run_id: str,
+    ) -> Optional[str]:
+        """
+        Store screenshot in S3 if configured, otherwise locally.
+        
+        Args:
+            screenshot_bytes: PNG data
+            url: Source URL
+            run_id: Run ID
+            
+        Returns:
+            URI (s3://... or file://...) or None if failed
+        """
+        # Try S3 first if configured
+        if self.s3_bucket and _BOTO3_AVAILABLE:
+            s3_uri = self.upload_to_s3(screenshot_bytes, url, run_id)
+            if s3_uri:
+                return s3_uri
+                
+        # Fallback to local storage
+        try:
+            # Create local directory: output/screenshots/<run_id>/
+            base_dir = Path("output/screenshots") / run_id
+            base_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Generate filename
+            url_hash = hashlib.md5(url.encode()).hexdigest()[:12]
+            domain = urlparse(url).netloc.replace(".", "_")
+            timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+            filename = f"{domain}_{url_hash}_{timestamp}.png"
+            
+            filepath = base_dir / filename
+            with open(filepath, "wb") as f:
+                f.write(screenshot_bytes)
+                
+            uri = f"file://{filepath.absolute()}"
+            logger.info(f"Stored screenshot locally: {uri}")
+            return uri
+            
+        except Exception as e:
+            logger.error(f"Failed to store screenshot locally: {e}")
+            return None
+
     def get_screenshot_bytes(self, s3_key: str) -> Optional[bytes]:
         """
         Retrieve screenshot bytes from S3.
@@ -217,6 +265,15 @@ class ScreenshotCapture:
         Returns:
             Image bytes or None if failed
         """
+        if s3_key.startswith("file://"):
+            try:
+                path = s3_key.replace("file://", "")
+                with open(path, "rb") as f:
+                    return f.read()
+            except Exception as e:
+                logger.error(f"Failed to read local screenshot {s3_key}: {e}")
+                return None
+
         if not _BOTO3_AVAILABLE:
             logger.warning("Boto3 not available, cannot retrieve screenshot from S3")
             return None

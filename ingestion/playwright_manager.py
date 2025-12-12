@@ -258,11 +258,12 @@ class PlaywrightBrowserManager:
                     capture_tool = get_screenshot_capture()
                     # Capture above fold
                     png_bytes, meta = capture_tool.capture_above_fold(page, url)
+                    
                     if meta.get('success'):
                         run_id = f"fetch_{datetime.now().strftime('%Y%m%d')}"
-                        screenshot_key = capture_tool.upload_to_s3(png_bytes, url, run_id)
+                        screenshot_key = capture_tool.store_screenshot(png_bytes, url, run_id)
                         if screenshot_key:
-                            logger.info(f"[PLAYWRIGHT] Screenshot uploaded: {screenshot_key}")
+                            logger.info(f"[PLAYWRIGHT] Screenshot stored: {screenshot_key}")
                 except Exception as e:
                     logger.warning(f"[PLAYWRIGHT] Screenshot capture failed for {url}: {e}")
 
