@@ -291,10 +291,10 @@ class VisualAnalyzer:
                 from scoring.cost_tracker import cost_tracker
                 usage = response.usage_metadata
                 if usage:
-                    cost_tracker.record_cost(
+                    cost_tracker.record(
                         model=self.model,
-                        input_tokens=usage.prompt_token_count,
-                        output_tokens=usage.candidates_token_count
+                        prompt_tokens=usage.prompt_token_count,
+                        completion_tokens=usage.candidates_token_count
                     )
                 else:
                     # Fallback if no usage metadata
@@ -302,7 +302,7 @@ class VisualAnalyzer:
                     # Image is approx 258 tokens (standard) + text
                     est_input = 258 + len(prompt) // 4
                     est_output = len(response_text) // 4
-                    cost_tracker.record_cost(self.model, est_input, est_output)
+                    cost_tracker.record(self.model, est_input, est_output)
             except Exception as e:
                 logger.warning(f"Failed to record visual analysis cost: {e}")
             
