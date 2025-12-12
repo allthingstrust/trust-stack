@@ -21,11 +21,11 @@ def test_provenance_scoring():
     # Create neutral content
     content = NormalizedContent(
         content_id="test_content",
-        url="https://www.unknown-brand.com/some-page",
+        url="https://www.unknown-brand.com/",
         title="Test Page",
         body="This is a test page body with some content.",
         src="unknown-brand.com",
-        author="John Doe",
+        author="", # No author
         published_at="2024-01-01T00:00:00Z",
         platform_id="web",
         meta={
@@ -50,6 +50,7 @@ def test_provenance_scoring():
 
     # Simulate LLM-generated signal (prov_source_clarity) which is normally present
     from scoring.types import SignalScore
+    
     signals.append(SignalScore(
         id="prov_source_clarity", 
         label="Source Attribution", 

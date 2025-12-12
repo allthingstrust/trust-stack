@@ -341,8 +341,8 @@ class TrustStackAttributeDetector:
                     attribute_id="author_brand_identity_verified",
                     dimension="provenance",
                     label="Author/Brand Identity Verified",
-                    value=3.0,
-                    evidence="No attribution found - consider adding structured data or footer credits",
+                    value=5.0,
+                    evidence="No explicit attribution found - treated as neutral for landing page",
                     confidence=0.8
                 )
 
@@ -373,8 +373,8 @@ class TrustStackAttributeDetector:
                         attribute_id="author_brand_identity_verified",
                         dimension="provenance",
                         label="Author/Brand Identity Verified",
-                        value=3.0,
-                        evidence="Author verification status unknown",
+                        value=5.0,
+                        evidence="Author verification status unknown - treated as neutral",
                         confidence=0.8
                     )
 

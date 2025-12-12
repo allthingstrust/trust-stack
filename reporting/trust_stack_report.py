@@ -218,15 +218,15 @@ def _render_diagnostics_table(
         rows = [
             "🗝 = Core Signal | ✨ = Amplifier (Bonus)",
             "",
-            "| Metric | Score |",
-            "|---|---|"
+            "| Attribute | Attribute Raw Score | Weight Percentage | Weighted Score |",
+            "|---|---|---|---|"
         ]
     else:
-        rows = ["| Metric | Score |", "|---|---|"]
+        rows = ["| Attribute | Attribute Raw Score | Weight Percentage | Weighted Score |", "|---|---|---|---|"]
     
     # Pre-calculate all contributions and round them
     # Then adjust the last non-zero contribution to make the sum match the dimension score exactly
-    contributions_data = []  # List of (label, icon, avg_score, contribution, requirement_level)
+    contributions_data = []  # List of (label, icon, avg_score, contribution, requirement_level, raw_weight)
     
     for label in expected_signals:
         signal_id = KEY_SIGNAL_TO_SIGNAL_ID.get(label, "")
@@ -248,7 +248,7 @@ def _render_diagnostics_table(
         else:
             contribution = 0.0
             
-        contributions_data.append((label, icon, avg_score, contribution, requirement_level))
+        contributions_data.append((label, icon, avg_score, contribution, requirement_level, raw_weight))
     
     # Round contributions and calculate sum
     rounded_contributions = [round(c[3], 1) for c in contributions_data]
@@ -265,19 +265,25 @@ def _render_diagnostics_table(
                 break
     
     # Build table rows with adjusted values
-    for i, (label, icon, avg_score, _, requirement_level) in enumerate(contributions_data):
+    for i, (label, icon, avg_score, _, requirement_level, raw_weight) in enumerate(contributions_data):
         contribution = rounded_contributions[i]
         
+        # Format Weight Percentage
+        weight_pct = f"{int(raw_weight * 100)}%"
+        
         if avg_score > 0.0:
-            score_display = f"{avg_score:.1f}/10 → {contribution:.1f}/10 final score"
+            raw_score_display = f"{avg_score:.1f}/10"
+            weighted_score_display = f"{contribution:.1f}/10"
         else:
             # No data: show N/A for amplifiers, 0.0 for core
             if requirement_level == "amplifier":
-                score_display = "N/A (optional)"
+                raw_score_display = "N/A"
+                weighted_score_display = "0.0/10"
             else:
-                score_display = "0.0/10 → 0.0/10 final score"
+                raw_score_display = "0.0/10"
+                weighted_score_display = "0.0/10"
         
-        rows.append(f"| {icon} {label} | {score_display} |")
+        rows.append(f"| {icon} {label} | {raw_score_display} | {weight_pct} | {weighted_score_display} |")
     
     return "\n".join(rows)
 
