@@ -284,8 +284,38 @@ class VisualAnalyzer:
                 generation_config=config,
             )
 
+            response_text = response.text
+            
+            # Record cost
+            try:
+                from scoring.cost_tracker import cost_tracker
+                usage = response.usage_metadata
+                if usage:
+                    cost_tracker.record_cost(
+                        model=self.model,
+                        input_tokens=usage.prompt_token_count,
+                        output_tokens=usage.candidates_token_count
+                    )
+                else:
+                    # Fallback if no usage metadata
+                    # Estimate based on image + prompt chars
+                    # Image is approx 258 tokens (standard) + text
+                    est_input = 258 + len(prompt) // 4
+                    est_output = len(response_text) // 4
+                    cost_tracker.record_cost(self.model, est_input, est_output)
+            except Exception as e:
+                logger.warning(f"Failed to record visual analysis cost: {e}")
+            
+            # --- USER REQUEST: Log full visual analysis feedback to terminal ---
+            logger.info("="*60)
+            logger.info(f"🎨 VISUAL ANALYSIS FEEDBACK FOR: {url}")
+            logger.info("-" * 60)
+            logger.info(response_text)
+            logger.info("="*60)
+            # -------------------------------------------------------------------
+
             # Parse the response
-            return self._parse_response(response.text, url)
+            return self._parse_response(response_text, url)
 
         except Exception as e:
             logger.error("Visual analysis failed for %s: %s", url, e)

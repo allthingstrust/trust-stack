@@ -15,12 +15,16 @@ import yaml
 logger = logging.getLogger(__name__)
 
 # Default pricing if config file is missing (per 1M tokens, USD)
+# Default pricing if config file is missing (per 1M tokens, USD)
 DEFAULT_PRICING = {
     'gpt-4o': {'input': 2.50, 'output': 10.00},
     'gpt-4o-mini': {'input': 0.15, 'output': 0.60},
     'gpt-3.5-turbo': {'input': 0.50, 'output': 1.50},
     'claude-3-5-sonnet-20241022': {'input': 3.00, 'output': 15.00},
+    'claude-3-5-haiku-20241022': {'input': 1.00, 'output': 5.00},
+    'claude-3-opus-20240229': {'input': 15.00, 'output': 75.00},
     'gemini-1.5-pro': {'input': 1.25, 'output': 5.00},
+    'gemini-1.5-flash': {'input': 0.075, 'output': 0.30},
     'deepseek-chat': {'input': 0.14, 'output': 0.28},
 }
 
@@ -83,14 +87,18 @@ class CostTracker:
         logger.debug(f"Recorded usage for {model}: +{prompt_tokens} input, +{completion_tokens} output")
 
     def _get_model_pricing(self, model: str) -> Dict[str, float]:
-        """Get pricing for a model, with fuzzy matching for model variants."""
+        """Get pricing for a model."""
         # Exact match
         if model in self._pricing:
             return self._pricing[model]
         
-        # Fuzzy match for model variants (e.g., gpt-4o-2024-08-06 -> gpt-4o)
-        for known_model in self._pricing:
-            if model.startswith(known_model) or known_model.startswith(model.split('-')[0]):
+        # Sort known models by length (descending) to prioritize specific matches
+        # e.g. 'claude-3-opus' should match before 'claude-3' if both exist
+        sorted_models = sorted(self._pricing.keys(), key=len, reverse=True)
+        
+        # Prefix match
+        for known_model in sorted_models:
+            if model.startswith(known_model):
                 return self._pricing[known_model]
         
         # Default fallback - assume gpt-4o-mini pricing

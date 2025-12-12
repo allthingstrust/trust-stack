@@ -105,6 +105,12 @@ class ContentScorer:
         """
         logger.debug(f"Scoring content {content.content_id}")
 
+        # Extract LLM model override from context if present
+        # This comes from run_config['scenario_config']['summary_model'] or similar
+        llm_model = brand_context.get('llm_model')
+        if llm_model:
+            logger.info(f"Using explicit LLM model for scoring: {llm_model}")
+
         try:
             # Stage 1: Triage (if enabled)
             if SETTINGS.get('triage_enabled', False):
@@ -136,7 +142,7 @@ class ContentScorer:
             
             # 1. Provenance
             # LLM Score -> prov_source_clarity
-            prov_val, prov_conf = self._score_provenance(content, brand_context)
+            prov_val, prov_conf = self._score_provenance(content, brand_context, model=llm_model)
             logger.info(f"DEBUG: Raw Provenance LLM score for {content.content_id}: {prov_val}, Conf: {prov_conf}")
             signals.append(SignalScore(
                 id="prov_source_clarity",
@@ -164,7 +170,7 @@ class ContentScorer:
             
             # 2. Verification
             # LLM/RAG Score -> ver_fact_accuracy
-            ver_val, ver_conf = self._score_verification(content, brand_context)
+            ver_val, ver_conf = self._score_verification(content, brand_context, model=llm_model)
             logger.info(f"DEBUG: Raw Verification LLM score for {content.content_id}: {ver_val}, Conf: {ver_conf}")
             signals.append(SignalScore(
                 id="ver_fact_accuracy",
@@ -179,7 +185,7 @@ class ContentScorer:
             
             # 3. Transparency
             # LLM Score -> trans_disclosures
-            trans_val, trans_conf = self._score_transparency(content, brand_context)
+            trans_val, trans_conf = self._score_transparency(content, brand_context, model=llm_model)
             logger.info(f"DEBUG: Raw Transparency LLM score for {content.content_id}: {trans_val}, Conf: {trans_conf}")
             signals.append(SignalScore(
                 id="trans_disclosures",
@@ -194,7 +200,7 @@ class ContentScorer:
             
             # 4. Coherence
             # LLM Score -> coh_voice_consistency
-            coh_val, coh_conf = self._score_coherence(content, brand_context)
+            coh_val, coh_conf = self._score_coherence(content, brand_context, model=llm_model)
             logger.info(f"DEBUG: Raw Coherence LLM score for {content.content_id}: {coh_val}, Conf: {coh_conf}")
             signals.append(SignalScore(
                 id="coh_voice_consistency",
@@ -209,7 +215,7 @@ class ContentScorer:
             
             # 5. Resonance
             # LLM Score -> res_cultural_fit
-            res_val, res_conf = self._score_resonance(content, brand_context)
+            res_val, res_conf = self._score_resonance(content, brand_context, model=llm_model)
             logger.info(f"DEBUG: Raw Resonance LLM score for {content.content_id}: {res_val}, Conf: {res_conf}")
             signals.append(SignalScore(
                 id="res_cultural_fit",
@@ -378,7 +384,7 @@ class ContentScorer:
         except Exception:
             return 0.5
     
-    def _score_provenance(self, content: NormalizedContent, brand_context: Dict[str, Any]) -> Tuple[float, float]:
+    def _score_provenance(self, content: NormalizedContent, brand_context: Dict[str, Any], model: Optional[str] = None) -> Tuple[float, float]:
         """Score Provenance dimension: origin, traceability, metadata"""
         
         prompt = f"""
@@ -407,7 +413,7 @@ class ContentScorer:
         Return only a number between 0.0 and 1.0:
         """
         
-        score = self._get_llm_score(prompt)
+        score = self._get_llm_score(prompt, model=model)
         
         # Calculate confidence
         confidence = 1.0
@@ -424,7 +430,7 @@ class ContentScorer:
             
         return score, confidence
     
-    def _score_verification(self, content: NormalizedContent, brand_context: Dict[str, Any]) -> Tuple[float, float]:
+    def _score_verification(self, content: NormalizedContent, brand_context: Dict[str, Any], model: Optional[str] = None) -> Tuple[float, float]:
         """Score Verification dimension: factual accuracy vs trusted DBs (Fact-Checked)"""
         
         # Detect if content is from brand's own domain
@@ -497,7 +503,7 @@ class ContentScorer:
             
         return adjusted_score, confidence
     
-    def _score_transparency(self, content: NormalizedContent, brand_context: Dict[str, Any]) -> Tuple[float, float]:
+    def _score_transparency(self, content: NormalizedContent, brand_context: Dict[str, Any], model: Optional[str] = None) -> Tuple[float, float]:
         """Score Transparency dimension: disclosures, clarity"""
         
         prompt = f"""
@@ -537,7 +543,7 @@ class ContentScorer:
         Return valid JSON with score (0.0-1.0) and issues array.
         """
         
-        result = self._get_llm_score_with_reasoning(prompt)
+        result = self._get_llm_score_with_reasoning(prompt, model=model)
         
         # Store LLM-identified issues in content metadata for later merging
         if not hasattr(content, '_llm_issues'):
@@ -555,7 +561,7 @@ class ContentScorer:
             
         return score, confidence
     
-    def _score_coherence(self, content: NormalizedContent, brand_context: Dict[str, Any]) -> Tuple[float, float]:
+    def _score_coherence(self, content: NormalizedContent, brand_context: Dict[str, Any], model: Optional[str] = None) -> Tuple[float, float]:
         """Score Coherence dimension: consistency across channels with brand guidelines"""
         
         # Check if user wants to use guidelines (from session state/brand context)
@@ -692,7 +698,8 @@ class ContentScorer:
             score_prompt=score_prompt,
             content=content,
             dimension="Coherence",
-            context_guidance=context_guidance
+            context_guidance=context_guidance,
+            model=model
         )
         
         # Filter issues based on our strict criteria
@@ -861,7 +868,7 @@ class ContentScorer:
             logger.warning(f"Failed to load brand guidelines for {brand_id}: {e}")
             return None
     
-    def _score_resonance(self, content: NormalizedContent, brand_context: Dict[str, Any]) -> Tuple[float, float]:
+    def _score_resonance(self, content: NormalizedContent, brand_context: Dict[str, Any], model: Optional[str] = None) -> Tuple[float, float]:
         """Score Resonance dimension: cultural fit, organic engagement"""
         
         # Use engagement metrics for resonance scoring
@@ -895,7 +902,7 @@ class ContentScorer:
         Return only a number between 0.0 and 1.0:
         """
         
-        llm_score = self._get_llm_score(prompt)
+        llm_score = self._get_llm_score(prompt, model=model)
         
         # Combine LLM score with engagement metrics (70% LLM, 30% engagement)
         combined_score = (0.7 * llm_score) + (0.3 * engagement_score)
@@ -1025,21 +1032,21 @@ class ContentScorer:
             verification=adjusted['verification'] / 100
         )
     
-    def _get_llm_score(self, prompt: str) -> float:
+    def _get_llm_score(self, prompt: str, model: str = None) -> float:
         """Get score from LLM API (delegates to LLMScoringClient)"""
-        return self.llm_client.get_score(prompt)
+        return self.llm_client.get_score(prompt, model=model)
     
-    def _get_llm_score_with_reasoning(self, prompt: str) -> Dict[str, Any]:
+    def _get_llm_score_with_reasoning(self, prompt: str, model: str = None) -> Dict[str, Any]:
         """
         Get score AND reasoning from LLM API (delegates to LLMScoringClient)
         
         Returns:
             Dictionary with 'score' (float) and 'issues' (list of dicts)
         """
-        return self.llm_client.get_score_with_reasoning(prompt)
+        return self.llm_client.get_score_with_reasoning(prompt, model=model)
     
     def _get_llm_score_with_feedback(self, score_prompt: str, content: NormalizedContent, 
-                                     dimension: str, context_guidance: str = "") -> Dict[str, Any]:
+                                     dimension: str, context_guidance: str = "", model: str = None) -> Dict[str, Any]:
         """
         Two-step LLM scoring: Get score first, then get feedback (delegates to LLMScoringClient)
         
@@ -1048,11 +1055,12 @@ class ContentScorer:
             content: Content being scored
             dimension: Dimension name (for logging)
             context_guidance: Optional context about content type
+            model: Optional model override
         
         Returns:
             Dictionary with 'score' (float) and 'issues' (list of dicts)
         """
-        return self.llm_client.get_score_with_feedback(score_prompt, content, dimension, context_guidance)
+        return self.llm_client.get_score_with_feedback(score_prompt, content, dimension, context_guidance, model=model)
     
     def _merge_llm_and_detector_issues(self, content: NormalizedContent, 
                                       detected_attrs: List[DetectedAttribute]) -> List[DetectedAttribute]:

@@ -37,7 +37,7 @@ class LLMScoringClient:
         )
         self.model = model
 
-    def get_score(self, prompt: str) -> float:
+    def get_score(self, prompt: str, model: str = None) -> float:
         """Get a simple numeric score from LLM."""
         enhanced_prompt = f"""{SCORING_EXAMPLES}
 
@@ -48,7 +48,7 @@ Respond with ONLY a single decimal number between 0.0 and 1.0.
 
         try:
             response = self.client.chat(
-                model=self.model,
+                model=model or self.model,
                 messages=[
                     {"role": "system", "content": SCORING_SYSTEM + " Respond with only a number."},
                     {"role": "user", "content": enhanced_prompt}
@@ -65,11 +65,11 @@ Respond with ONLY a single decimal number between 0.0 and 1.0.
             logger.error(f"LLM scoring error: {e}")
             return 0.5
 
-    def get_score_with_reasoning(self, prompt: str) -> Dict[str, Any]:
+    def get_score_with_reasoning(self, prompt: str, model: str = None) -> Dict[str, Any]:
         """Get score AND reasoning from LLM with structured JSON output."""
         try:
             response = self.client.chat(
-                model=self.model,
+                model=model or self.model,
                 messages=[
                     {"role": "system", "content": SCORING_SYSTEM + " Respond with valid JSON."},
                     {"role": "user", "content": prompt}
@@ -90,10 +90,11 @@ Respond with ONLY a single decimal number between 0.0 and 1.0.
         score_prompt: str, 
         content: NormalizedContent,
         dimension: str, 
-        context_guidance: str = ""
+        context_guidance: str = "",
+        model: str = None
     ) -> Dict[str, Any]:
         """Two-step LLM scoring: Get score first, then get feedback based on score."""
-        score = self.get_score(score_prompt)
+        score = self.get_score(score_prompt, model=model)
         logger.debug(f"{dimension} base score: {score:.2f}")
         
         # Build appropriate feedback prompt based on score
@@ -116,7 +117,7 @@ Respond with ONLY a single decimal number between 0.0 and 1.0.
         
         try:
             response = self.client.chat(
-                model=self.model,
+                model=model or self.model,
                 messages=[
                     {"role": "system", "content": SCORING_SYSTEM + " Respond with valid JSON."},
                     {"role": "user", "content": feedback_prompt}
