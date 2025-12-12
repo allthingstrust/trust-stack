@@ -713,9 +713,21 @@ def show_home_page():
         ("7. Report", "Generate visual outputs (PDF, dashboard, Markdown) with trust maps, insights, and recommended actions.\n\n_→ Purpose: Communicate results and next steps._")
     ]
 
-    cols = st.columns(7)
-    for idx, (step, desc) in enumerate(pipeline_steps):
-        with cols[idx]:
+    # Split pipeline steps into two rows for better layout and stability
+    row1_steps = pipeline_steps[:4]
+    row2_steps = pipeline_steps[4:]
+
+    cols1 = st.columns(4)
+    for idx, (step, desc) in enumerate(row1_steps):
+        with cols1[idx]:
+            st.markdown(f"**{step}**")
+            st.caption(desc)
+            
+    st.write("") # Spacing
+    
+    cols2 = st.columns(3)
+    for idx, (step, desc) in enumerate(row2_steps):
+        with cols2[idx]:
             st.markdown(f"**{step}**")
             st.caption(desc)
 
