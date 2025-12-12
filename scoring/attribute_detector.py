@@ -733,8 +733,16 @@ class TrustStackAttributeDetector:
                 confidence=0.8
             )
         else:
-            # Neutral case - don't report as an issue
-            return None
+            # Neutral case - report as baseline trust (5.0)
+            # This ensures the prov_domain_trust signal is present and doesn't trigger "missing core signal" penalties
+            return DetectedAttribute(
+                attribute_id="source_domain_trust_baseline",
+                dimension="provenance",
+                label="Source Domain Trust Baseline",
+                value=5.0,
+                evidence=f"No specific trust indicators or red flags found for {domain}",
+                confidence=0.5
+            )
 
     def _detect_domain_age(self, content: NormalizedContent) -> Optional[DetectedAttribute]:
         """
