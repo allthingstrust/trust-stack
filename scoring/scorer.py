@@ -1339,6 +1339,7 @@ class ContentScorer:
                         "channel": getattr(content, 'channel', 'unknown'),
                         "platform_type": getattr(content, 'platform_type', 'unknown'),
                         "url": getattr(content, 'url', ''),
+                        "screenshot_path": getattr(content, 'screenshot_path', None),
                         "language": getattr(content, 'language', 'en'),
                         # v5.1: Include dimension signals for downstream aggregation
                         "dimensions": dimensions_for_meta,

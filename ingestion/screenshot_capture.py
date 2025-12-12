@@ -58,6 +58,7 @@ class ScreenshotCapture:
             retention_hours: Hours before screenshots expire (for lifecycle policy)
         """
         self.s3_bucket = s3_bucket or os.getenv("SCREENSHOT_S3_BUCKET", "")
+        self.report_bucket = os.getenv("REPORT_S3_BUCKET") or self.s3_bucket
         self.s3_prefix = s3_prefix
         self.retention_hours = retention_hours
         
@@ -280,52 +281,59 @@ class ScreenshotCapture:
             logger.error(f"Failed to store screenshot locally: {e}")
             return None
 
-    def get_screenshot_bytes(self, s3_key: str) -> Optional[bytes]:
+    def get_screenshot_bytes(self, path: str) -> Optional[bytes]:
         """
-        Retrieve screenshot bytes from S3.
+        Retrieve screenshot bytes from S3 or local file.
         
         Args:
-            s3_key: S3 key or full s3:// URI
+            path: S3 key, full s3:// URI, file:// URI, or https:// URI
             
         Returns:
             Image bytes or None if failed
         """
-        if s3_key.startswith("file://"):
+        if not path:
+            return None
+
+        # Handle local files
+        if path.startswith("file://"):
             try:
-                path = s3_key.replace("file://", "")
-                with open(path, "rb") as f:
-                    return f.read()
+                local_path = Path(path.replace("file://", ""))
+                if local_path.exists():
+                    return local_path.read_bytes()
             except Exception as e:
-                logger.error(f"Failed to read local screenshot {s3_key}: {e}")
+                logger.error(f"Failed to read local screenshot {path}: {e}")
                 return None
 
+        # Handle S3
         if not _BOTO3_AVAILABLE:
             logger.warning("Boto3 not available, cannot retrieve screenshot from S3")
             return None
             
         try:
-            # Parse key if full URI provided
             bucket = self.s3_bucket
-            key_to_retrieve = s3_key
+            key = path
 
-            if s3_key.startswith("s3://"):
-                parts = s3_key.replace("s3://", "").split("/", 1)
+            # Parse s3:// URI
+            if path.startswith("s3://"):
+                parts = path.replace("s3://", "").split("/", 1)
                 if len(parts) == 2:
-                    bucket = parts[0]
-                    key_to_retrieve = parts[1]
-                else:
-                    logger.error(f"Invalid S3 URI: {s3_key}")
-                    return None
+                    bucket, key = parts
             
+            # Parse https:// URI
+            elif path.startswith("https://") and ".s3.amazonaws.com/" in path:
+                 parts = path.replace("https://", "").split(".s3.amazonaws.com/", 1)
+                 bucket = parts[0]
+                 key = parts[1]
+
             if not bucket:
                 logger.error("S3 bucket not configured for retrieval.")
                 return None
 
-            response = self.s3_client.get_object(Bucket=bucket, Key=key_to_retrieve)
+            response = self.s3_client.get_object(Bucket=bucket, Key=key)
             return response['Body'].read()
             
         except Exception as e:
-            logger.error(f"Failed to retrieve screenshot from S3 ({s3_key}): {e}")
+            logger.error(f"Failed to retrieve screenshot from S3 ({path}): {e}")
             return None
 
     def get_presigned_url(self, s3_key: str, expires_in: int = 3600) -> Optional[str]:
@@ -365,27 +373,35 @@ class ScreenshotCapture:
             New path in report-images folder, or original path if copy failed
         """
         try:
-            # Handle S3
-            if path.startswith("s3://") and self.s3_bucket and _BOTO3_AVAILABLE:
+            # Handle S3 (s3:// or https://)
+            if (path.startswith("s3://") or (path.startswith("https://") and ".s3.amazonaws.com/" in path)) and self.s3_bucket and _BOTO3_AVAILABLE:
                 # Parse source key
-                parts = path.replace("s3://", "").split("/", 1)
-                if len(parts) != 2:
-                    return path
-                src_bucket, src_key = parts
+                if path.startswith("s3://"):
+                     parts = path.replace("s3://", "").split("/", 1)
+                     src_bucket, src_key = parts
+                else:
+                     parts = path.replace("https://", "").split(".s3.amazonaws.com/", 1)
+                     src_bucket, src_key = parts[0], parts[1]
                 
                 # Define dest key
                 filename = os.path.basename(src_key)
                 dest_key = f"report-images/{run_id}/{filename}"
                 
                 # Copy object
+                # Note: If buckets align, we copy. If different, we copy effectively.
                 copy_source = {'Bucket': src_bucket, 'Key': src_key}
+                
+                # Check validation: Destination bucket must exist
+                target_bucket = self.report_bucket
+                
                 self.s3_client.copy_object(
                     CopySource=copy_source,
-                    Bucket=self.s3_bucket,
-                    Key=dest_key
+                    Bucket=target_bucket,
+                    Key=dest_key,
+                    ACL='public-read'
                 )
-                logger.info(f"Archived S3 image to {dest_key}")
-                return f"s3://{self.s3_bucket}/{dest_key}"
+                logger.info(f"Archived S3 image to {target_bucket}/{dest_key}")
+                return f"https://{target_bucket}.s3.amazonaws.com/{dest_key}"
                 
             # Handle Local
             elif path.startswith("file://"):
