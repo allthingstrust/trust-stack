@@ -1471,7 +1471,9 @@ def show_analyze_page():
                         "meta": asset.meta_info or {},
                         "source": asset.source_type,
                         # Critical: Pass content body for analysis context
-                        "body": asset.normalized_content or asset.raw_content or ""
+                        "body": asset.normalized_content or asset.raw_content or "",
+                        "screenshot_path": asset.screenshot_path,
+                        "visual_analysis": asset.visual_analysis
                     }
                     # Populate meta with essential fields if missing
                     if not item["meta"].get("url"):

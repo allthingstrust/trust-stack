@@ -17,6 +17,7 @@ import logging
 from datetime import datetime
 import io
 import re
+import requests
 import matplotlib.pyplot as plt
 import matplotlib
 matplotlib.use('Agg')  # Use non-interactive backend
@@ -654,6 +655,60 @@ class PDFReportGenerator:
             ))
         
         return story
+
+    def _create_image_flowable(self, path: str, max_width: float = 6*inch, max_height: float = 4*inch):
+        """
+        Create a ReportLab Image flowable from a path or URL.
+        Handles local files (file://) and remote URLs (http://, https://).
+        S3 paths should be converted to http/file paths before calling this.
+        """
+        try:
+            img_data = None
+            
+            # Handle local file paths
+            if path.startswith('file://'):
+                local_path = path.replace('file://', '')
+                if os.path.exists(local_path):
+                    img_data = local_path
+            
+            # Handle remote URLs
+            elif path.startswith('http://') or path.startswith('https://'):
+                try:
+                    response = requests.get(path, timeout=10, stream=True)
+                    if response.status_code == 200:
+                        img_data = io.BytesIO(response.content)
+                except Exception as e:
+                    logger.warning(f"Failed to fetch remote image {path}: {e}")
+            
+            # Handle standard paths (assume local) as fallback
+            elif os.path.exists(path):
+                img_data = path
+                
+            if img_data:
+                img = Image(img_data)
+                
+                # Calculate aspect ratio
+                img_width = img.drawWidth
+                img_height = img.drawHeight
+                aspect = img_height / float(img_width)
+                
+                # Resize if needed
+                if img_width > max_width:
+                    img_width = max_width
+                    img_height = img_width * aspect
+                
+                if img_height > max_height:
+                    img_height = max_height
+                    img_width = img_height / aspect # Recalculate width to maintain aspect
+                
+                img.drawWidth = img_width
+                img.drawHeight = img_height
+                return img
+                
+        except Exception as e:
+            logger.warning(f"Error creating image flowable for {path}: {e}")
+            
+        return None
     
     def _markdown_to_pdf_elements(self, markdown_text: str) -> List:
         """
@@ -771,6 +826,32 @@ class PDFReportGenerator:
                 story.append(Spacer(1, 10))
                 continue
             
+            # Images: ![Alt text](url)
+            img_match = re.search(r'!\[(.*?)\]\((.*?)\)', stripped)
+            if img_match:
+                flush_paragraph()
+                # support both entire line being image or inline (though we treat as block for PDF)
+                # For now assuming block image behavior as typically used in our reports
+                alt_text = img_match.group(1)
+                img_path = img_match.group(2)
+                
+                # Check for title/tooltip in path "url 'title'"
+                if ' "' in img_path:
+                    img_path = img_path.split(' "')[0]
+                elif " '" in img_path:
+                    img_path = img_path.split(" '")[0]
+                
+                img_flowable = self._create_image_flowable(img_path)
+                if img_flowable:
+                    story.append(img_flowable)
+                    story.append(Spacer(1, 10))
+                    # If there's a caption/alt text, maybe show it?
+                    # story.append(Paragraph(f"<i>{alt_text}</i>", self.styles['TableText']))
+                else:
+                    # Fallback if image loading fails
+                    story.append(Paragraph(f"[Image: {alt_text}]", self.styles['TrustStackBody']))
+                continue
+
             # Headers
             if stripped.startswith('###'):
                 flush_paragraph()
