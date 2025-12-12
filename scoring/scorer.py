@@ -288,7 +288,13 @@ class ContentScorer:
                 return
                 
             analyzer = get_visual_analyzer()
-            result = analyzer.analyze(image_bytes, content.url)
+            
+            # Infer mime type from extension
+            mime_type = "image/png"
+            if content.screenshot_path and (content.screenshot_path.lower().endswith(".jpg") or content.screenshot_path.lower().endswith(".jpeg")):
+                mime_type = "image/jpeg"
+                
+            result = analyzer.analyze(image_bytes, content.url, mime_type=mime_type)
             
             if not result.success:
                 logger.warning(f"Visual analysis failed for {content.content_id}: {result.error}")

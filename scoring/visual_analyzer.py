@@ -223,14 +223,16 @@ class VisualAnalyzer:
         screenshot_bytes: bytes,
         url: str,
         brand_context: Optional[Dict[str, Any]] = None,
+        mime_type: str = "image/png",
     ) -> VisualAnalysisResult:
         """
         Analyze a page screenshot for visual trust signals.
 
         Args:
-            screenshot_bytes: PNG screenshot data
+            screenshot_bytes: Image data
             url: URL of the page
-            brand_context: Optional brand configuration with name, keywords, etc.
+            brand_context: Optional brand configuration
+            mime_type: MIME type of the image (image/png or image/jpeg)
 
         Returns:
             VisualAnalysisResult with all signal scores
@@ -267,7 +269,7 @@ class VisualAnalyzer:
 
             # Prepare the image for the API
             image_part = {
-                "mime_type": "image/png",
+                "mime_type": mime_type,
                 "data": screenshot_bytes,
             }
 

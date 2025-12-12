@@ -10,9 +10,11 @@ import logging
 import os
 from pathlib import Path
 from typing import Dict, Any, List, Optional
+from datetime import datetime
 import yaml
 from scoring.llm_client import ChatClient
 from data.models import EvidenceItem
+from ingestion.screenshot_capture import get_screenshot_capture
 
 logger = logging.getLogger(__name__)
 
@@ -502,10 +504,20 @@ def generate_trust_stack_report(report_data: Dict[str, Any], model: str = 'gpt-4
     audit_report = _generate_full_audit_report(report_data, model)
     content.append(audit_report)
     
-    # 3. Visual Analysis Snapshot (New)
-    visual_snapshot = _generate_visual_snapshot(items)
-    if visual_snapshot:
-        content.append(visual_snapshot)
+    # 2. Visual Analysis Snapshot
+    # Generate run_id for report images
+    timestamp = report_data.get('timestamp', datetime.now().isoformat())
+    if isinstance(timestamp, str):
+        # clean timestamp for filename safely
+        ts_safe = "".join([c if c.isalnum() else "_" for c in timestamp])[:15]
+    else:
+        ts_safe = datetime.now().strftime("%Y%m%d_%H%M%S")
+    run_id = f"report_{ts_safe}"
+    
+    items = report_data.get('items', [])
+    visual_section = _generate_visual_snapshot(items, run_id)
+    if visual_section:
+        content.append(visual_section)
     
     return "\n\n".join(content)
 
@@ -810,7 +822,7 @@ INSTRUCTIONS:
         logger.error(f"Failed to generate audit report: {e}")
         return f"Error generating audit report: {str(e)}"
 
-def _generate_visual_snapshot(items: List[Dict[str, Any]]) -> str:
+def _generate_visual_snapshot(items: List[Dict[str, Any]], run_id: str) -> str:
     """Generate the Visual Analysis Snapshot section with screenshots."""
     
     # Filter items with screenshots and visual analysis
@@ -848,6 +860,12 @@ def _generate_visual_snapshot(items: List[Dict[str, Any]]) -> str:
         path = item.get('screenshot_path') or item.get('meta', {}).get('screenshot_path')
         
         # If path is s3://, we need a way to display it. 
+        # Archive it to report-images folder first for persistence
+        capture = get_screenshot_capture()
+        new_path = capture.archive_report_image(path, run_id)
+        if new_path:
+            path = new_path
+        
         # Markdown reports can't show S3 auth images easily unless presigned or public.
         # Impl plan says "Embed screenshots... linked from S3". 
         # If output is PDF/HTML, we might need presigned URLs.

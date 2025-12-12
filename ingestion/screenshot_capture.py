@@ -13,6 +13,7 @@ from datetime import datetime
 from typing import Dict, Any, Optional, Tuple
 from urllib.parse import urlparse
 from pathlib import Path
+import shutil
 
 logger = logging.getLogger('ingestion.screenshot_capture')
 
@@ -59,6 +60,23 @@ class ScreenshotCapture:
         self.s3_bucket = s3_bucket or os.getenv("SCREENSHOT_S3_BUCKET", "")
         self.s3_prefix = s3_prefix
         self.retention_hours = retention_hours
+        
+        # Compression settings
+        self.format = os.getenv("SCREENSHOT_FORMAT", "png").lower()
+        if self.format not in ["png", "jpeg"]:
+            logger.warning(f"Invalid SCREENSHOT_FORMAT '{self.format}', defaulting to 'png'")
+            self.format = "png"
+            
+        self.quality = None
+        if self.format == "jpeg":
+            q_str = os.getenv("SCREENSHOT_QUALITY", "80")
+            try:
+                self.quality = int(q_str)
+                self.quality = max(0, min(100, self.quality))
+            except ValueError:
+                logger.warning(f"Invalid SCREENSHOT_QUALITY '{q_str}', defaulting to 80")
+                self.quality = 80
+                
         self._s3_client = None
 
     @property
@@ -110,11 +128,15 @@ class ScreenshotCapture:
                 # Network idle timeout is acceptable - content may still be loading
                 pass
 
-            # Capture screenshot as PNG
-            screenshot_bytes = page.screenshot(
-                type="png",
-                full_page=full_page,
-            )
+            # Capture screenshot
+            screenshot_args = {
+                "type": self.format,
+                "full_page": full_page,
+            }
+            if self.format == "jpeg" and self.quality is not None:
+                screenshot_args["quality"] = self.quality
+                
+            screenshot_bytes = page.screenshot(**screenshot_args)
 
             metadata["size_bytes"] = len(screenshot_bytes)
             metadata["success"] = True
@@ -188,15 +210,17 @@ class ScreenshotCapture:
         url_hash = hashlib.md5(url.encode()).hexdigest()[:12]
         domain = urlparse(url).netloc.replace(".", "_")
         timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+        ext = "jpg" if self.format == "jpeg" else "png"
+        content_type = "image/jpeg" if self.format == "jpeg" else "image/png"
         
-        s3_key = f"{self.s3_prefix}{run_id}/{domain}_{url_hash}_{timestamp}.png"
+        s3_key = f"{self.s3_prefix}{run_id}/{domain}_{url_hash}_{timestamp}.{ext}"
 
         try:
             self.s3_client.put_object(
                 Bucket=self.s3_bucket,
                 Key=s3_key,
                 Body=screenshot_bytes,
-                ContentType="image/png",
+                ContentType=content_type,
                 Metadata={
                     "source_url": url[:256],  # Limit metadata size
                     "run_id": run_id,
@@ -241,7 +265,8 @@ class ScreenshotCapture:
             url_hash = hashlib.md5(url.encode()).hexdigest()[:12]
             domain = urlparse(url).netloc.replace(".", "_")
             timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
-            filename = f"{domain}_{url_hash}_{timestamp}.png"
+            ext = "jpg" if self.format == "jpeg" else "png"
+            filename = f"{domain}_{url_hash}_{timestamp}.{ext}"
             
             filepath = base_dir / filename
             with open(filepath, "wb") as f:
@@ -327,6 +352,64 @@ class ScreenshotCapture:
         except ClientError as e:
             logger.error("Failed to generate presigned URL: %s", e)
             return None
+
+    def archive_report_image(self, path: str, run_id: str) -> str:
+        """
+        Copy a screenshot to the long-term 'report-images' folder.
+        
+        Args:
+            path: Current path (s3:// or file://)
+            run_id: Run ID for organization
+            
+        Returns:
+            New path in report-images folder, or original path if copy failed
+        """
+        try:
+            # Handle S3
+            if path.startswith("s3://") and self.s3_bucket and _BOTO3_AVAILABLE:
+                # Parse source key
+                parts = path.replace("s3://", "").split("/", 1)
+                if len(parts) != 2:
+                    return path
+                src_bucket, src_key = parts
+                
+                # Define dest key
+                filename = os.path.basename(src_key)
+                dest_key = f"report-images/{run_id}/{filename}"
+                
+                # Copy object
+                copy_source = {'Bucket': src_bucket, 'Key': src_key}
+                self.s3_client.copy_object(
+                    CopySource=copy_source,
+                    Bucket=self.s3_bucket,
+                    Key=dest_key
+                )
+                logger.info(f"Archived S3 image to {dest_key}")
+                return f"s3://{self.s3_bucket}/{dest_key}"
+                
+            # Handle Local
+            elif path.startswith("file://"):
+                src_path = Path(path.replace("file://", ""))
+                if not src_path.exists():
+                    return path
+                    
+                # Define dest path
+                filename = src_path.name
+                dest_dir = Path("output/report-images") / run_id
+                dest_dir.mkdir(parents=True, exist_ok=True)
+                dest_path = dest_dir / filename
+                
+                if src_path != dest_path:
+                    shutil.copy2(src_path, dest_path)
+                    logger.info(f"Archived local image to {dest_path}")
+                    
+                return f"file://{dest_path.absolute()}"
+                
+        except Exception as e:
+            logger.warning(f"Failed to archive image {path}: {e}")
+            
+        return path
+
 
 
 def should_capture_screenshot(content_type: str, source_type: str) -> bool:
