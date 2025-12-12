@@ -1962,7 +1962,14 @@ Summary of Analyzed Content:"""
             return ''
 
         styled_df = df.style.map(color_rating, subset=['Rating'])
-        st.dataframe(styled_df, width='stretch', height=400)
+        # Use a unique key based on run ID to prevent state issues (setIn error)
+        # when columns change between runs
+        st.dataframe(
+            styled_df, 
+            width='stretch', 
+            height=400,
+            key=f"items_detail_{run_data.get('run_id', 'unknown')}_{len(items)}"
+        )
 
         # Detailed view expander
         with st.expander("🔎 View Detailed Breakdown"):
