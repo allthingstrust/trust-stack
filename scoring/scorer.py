@@ -304,7 +304,7 @@ class ContentScorer:
             
             if not result.success:
                 logger.warning(f"Visual analysis failed for {content.content_id}: {result.error}")
-                return
+                # CONTINUE: We want to store the failure in metadata so report can show the error
                 
             # Store full result in metadata
             if content.meta is None:

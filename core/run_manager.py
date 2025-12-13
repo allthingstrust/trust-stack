@@ -468,7 +468,7 @@ class RunManager:
                 rationale['dimensions'] = dimensions
             
             # Also preserve other useful meta fields
-            for key in ['attribute_count', 'source_type', 'channel']:
+            for key in ['attribute_count', 'source_type', 'channel', 'visual_analysis']:
                 if key in meta:
                     rationale[key] = meta[key]
         

@@ -931,21 +931,26 @@ def _generate_visual_snapshot(items: List[Dict[str, Any]], run_id: str) -> str:
         design_assessment = ""
         
         if analysis and isinstance(analysis, dict):
-            signals = analysis.get('signals', {})
-            design = signals.get('vis_design_quality', {}).get('score')
-            brand = signals.get('vis_brand_coherence', {}).get('score')
-            dark = signals.get('vis_dark_patterns', {}).get('score')
-            
-            summary_parts = []
-            if design is not None: summary_parts.append(f"Design Quality: {float(design)*10:.1f}/10")
-            if brand is not None: summary_parts.append(f"Brand Coherence: {float(brand)*10:.1f}/10")
-            if dark is not None: summary_parts.append(f"Dark Patterns Risk: {float(dark)*10:.1f}/10")
-            
-            analysis_summary = " | ".join(summary_parts)
-            design_assessment = analysis.get('design_assessment', '')
-            
-            if not analysis_summary:
-                analysis_summary = analysis.get('reasoning') or analysis.get('description') or "Analysis pending"
+            if not analysis.get('success', True):
+                 # Display error message if analysis exists but failed
+                 error_msg = analysis.get('error', 'Unknown error')
+                 analysis_summary = f"⚠️ Analysis Failed: {error_msg}"
+            else:
+                signals = analysis.get('signals', {})
+                design = signals.get('vis_design_quality', {}).get('score')
+                brand = signals.get('vis_brand_coherence', {}).get('score')
+                dark = signals.get('vis_dark_patterns', {}).get('score')
+                
+                summary_parts = []
+                if design is not None: summary_parts.append(f"Design Quality: {float(design)*10:.1f}/10")
+                if brand is not None: summary_parts.append(f"Brand Coherence: {float(brand)*10:.1f}/10")
+                if dark is not None: summary_parts.append(f"Dark Patterns Risk: {float(dark)*10:.1f}/10")
+                
+                analysis_summary = " | ".join(summary_parts)
+                design_assessment = analysis.get('design_assessment', '')
+                
+                if not analysis_summary:
+                    analysis_summary = analysis.get('reasoning') or analysis.get('description') or "Analysis pending"
         else:
             analysis_summary = "Analysis not available"
             
