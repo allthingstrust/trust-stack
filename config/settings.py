@@ -118,7 +118,7 @@ SETTINGS = {
     'include_charts': True,
     'chart_format': 'png',
     # Triage configuration: enable cheap triage before LLM scoring
-    'triage_enabled': False,
+    'triage_enabled': str(get_secret('AR_TRIAGE_ENABLED', 'False')).lower() == 'true',
     'triage_promote_threshold': 0.6,
     # When true, items demoted by triage are excluded from S3 uploads and reports
     'exclude_demoted_from_upload': False,

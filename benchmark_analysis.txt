@@ -1,0 +1,367 @@
+INFO:__main__:
+--- Running Benchmark with Triage DISABLED ---
+INFO:httpx:HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+INFO:scoring.scorer:DEBUG: Raw Provenance LLM score for junk_1: 0.4, Conf: 0.6
+INFO:scoring.scorer:Starting RAG verification for junk_1
+INFO:httpx:HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+INFO:scoring.verification_manager:No verifiable claims found for junk_1
+INFO:scoring.scorer:Verification scoring for junk_1...
+INFO:scoring.scorer:  Content type: other
+INFO:scoring.scorer:  Base RAG score: 0.500
+INFO:scoring.scorer:  Multiplier applied: 1.30x
+INFO:scoring.scorer:  Adjusted score: 0.650
+INFO:scoring.scorer:DEBUG: Raw Verification LLM score for junk_1: 0.65, Conf: 0.3
+INFO:httpx:HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+INFO:scoring.scorer:DEBUG: Raw Transparency LLM score for junk_1: 0.3, Conf: 0.7
+INFO:utils.document_processor:Local cache directory: /Users/andrewdeutsch/Documents/AR/authenticity-ratio/config/brand_guidelines
+INFO:utils.document_processor:S3 storage enabled: s3://ar-ingestion-normalized/brand_guidelines/
+INFO:scoring.scorer:No guidelines found for examplebrand, using generic coherence standards
+INFO:httpx:HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+INFO:scoring.scorer:Coherence scoring for junk_1...
+INFO:scoring.scorer:  Content type: other
+INFO:scoring.scorer:  Base LLM score: 0.200 (20.0%)
+INFO:scoring.scorer:  Multiplier applied: 1.25x
+INFO:scoring.scorer:  Adjusted score: 0.250 (25.0%)
+INFO:scoring.scorer:DEBUG: Raw Coherence LLM score for junk_1: 0.25, Conf: 0.6
+INFO:httpx:HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+INFO:scoring.scorer:DEBUG: Raw Resonance LLM score for junk_1: 0.29, Conf: 0.5
+INFO:scoring.scorer:DEBUG: Sending 6 signals to aggregator for junk_1: ['prov_source_clarity', 'prov_date_freshness', 'ver_fact_accuracy', 'trans_disclosures', 'coh_voice_consistency', 'res_cultural_fit']
+INFO:scoring.aggregator:DEBUG: Aggregating Provenance with 2 signals: ['prov_source_clarity', 'prov_date_freshness']
+INFO:scoring.aggregator:DEBUG: Coverage for Provenance: 0.33 -> cap=6.0
+INFO:scoring.aggregator:DEBUG: Missing core signals for Provenance: ['prov_author_bylines', 'prov_domain_trust']. Applying core cap.
+INFO:scoring.aggregator:DEBUG: Provenance score: raw=4.5, coverage_cap=6.0, dim_cap=6.0, final=4.5, confidence=low
+INFO:scoring.aggregator:DEBUG: Aggregating Verification with 1 signals: ['ver_fact_accuracy']
+INFO:scoring.aggregator:DEBUG: Coverage for Verification: 1.00 -> cap=10.0
+INFO:scoring.aggregator:DEBUG: Verification score: raw=6.5, coverage_cap=10.0, dim_cap=10.0, final=6.5, confidence=high
+INFO:scoring.aggregator:DEBUG: Aggregating Transparency with 1 signals: ['trans_disclosures']
+INFO:scoring.aggregator:DEBUG: Coverage for Transparency: 0.50 -> cap=8.0
+INFO:scoring.aggregator:DEBUG: Core signal 'trans_disclosures' deficit (0.3 <= 0.3)
+INFO:scoring.aggregator:DEBUG: Missing core signals for Transparency: ['trans_ai_labeling']. Applying core cap.
+INFO:scoring.aggregator:DEBUG: Transparency score: raw=3.0, coverage_cap=8.0, dim_cap=6.0, final=3.0, confidence=medium
+INFO:scoring.aggregator:DEBUG: Aggregating Coherence with 1 signals: ['coh_voice_consistency']
+INFO:scoring.aggregator:DEBUG: Coverage for Coherence: 0.33 -> cap=6.0
+INFO:scoring.aggregator:DEBUG: Core signal 'coh_voice_consistency' deficit (0.25 <= 0.3)
+INFO:scoring.aggregator:DEBUG: Missing core signals for Coherence: ['coh_design_patterns', 'coh_cross_channel']. Applying core cap.
+INFO:scoring.aggregator:DEBUG: Coherence score: raw=2.5, coverage_cap=6.0, dim_cap=6.0, final=2.5, confidence=low
+INFO:scoring.aggregator:DEBUG: Aggregating Resonance with 1 signals: ['res_cultural_fit']
+INFO:scoring.aggregator:DEBUG: Coverage for Resonance: 0.50 -> cap=8.0
+INFO:scoring.aggregator:DEBUG: Core signal 'res_cultural_fit' deficit (0.29 <= 0.3)
+INFO:scoring.aggregator:DEBUG: Missing core signals for Resonance: ['res_readability']. Applying core cap.
+INFO:scoring.aggregator:DEBUG: Resonance score: raw=2.9, coverage_cap=8.0, dim_cap=6.0, final=2.9, confidence=medium
+INFO:httpx:HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+INFO:scoring.scorer:DEBUG: Raw Provenance LLM score for junk_2: 0.2, Conf: 1.0
+INFO:scoring.scorer:Starting RAG verification for junk_2
+INFO:httpx:HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+INFO:scoring.verification_manager:No verifiable claims found for junk_2
+INFO:scoring.scorer:Verification scoring for junk_2...
+INFO:scoring.scorer:  Content type: other
+INFO:scoring.scorer:  Base RAG score: 0.500
+INFO:scoring.scorer:  Multiplier applied: 1.30x
+INFO:scoring.scorer:  Adjusted score: 0.650
+INFO:scoring.scorer:DEBUG: Raw Verification LLM score for junk_2: 0.65, Conf: 0.3
+INFO:httpx:HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+INFO:scoring.scorer:DEBUG: Raw Transparency LLM score for junk_2: 0.5, Conf: 0.7
+INFO:utils.document_processor:Local cache directory: /Users/andrewdeutsch/Documents/AR/authenticity-ratio/config/brand_guidelines
+INFO:utils.document_processor:S3 storage enabled: s3://ar-ingestion-normalized/brand_guidelines/
+INFO:scoring.scorer:No guidelines found for examplebrand, using generic coherence standards
+INFO:httpx:HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+INFO:scoring.scorer:Coherence scoring for junk_2...
+INFO:scoring.scorer:  Content type: other
+INFO:scoring.scorer:  Base LLM score: 0.300 (30.0%)
+INFO:scoring.scorer:  Multiplier applied: 1.25x
+INFO:scoring.scorer:  Adjusted score: 0.375 (37.5%)
+INFO:scoring.scorer:DEBUG: Raw Coherence LLM score for junk_2: 0.375, Conf: 0.6
+INFO:httpx:HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+INFO:scoring.scorer:DEBUG: Raw Resonance LLM score for junk_2: 0.29, Conf: 0.5
+INFO:scoring.scorer:DEBUG: Sending 6 signals to aggregator for junk_2: ['prov_source_clarity', 'prov_date_freshness', 'ver_fact_accuracy', 'trans_disclosures', 'coh_voice_consistency', 'res_cultural_fit']
+INFO:scoring.aggregator:DEBUG: Aggregating Provenance with 2 signals: ['prov_source_clarity', 'prov_date_freshness']
+INFO:scoring.aggregator:DEBUG: Coverage for Provenance: 0.33 -> cap=6.0
+INFO:scoring.aggregator:DEBUG: Knockout signal 'prov_source_clarity' below threshold (0.2 <= 0.3)
+INFO:scoring.aggregator:DEBUG: Core signal 'prov_source_clarity' deficit (0.2 <= 0.3)
+INFO:scoring.aggregator:DEBUG: Missing core signals for Provenance: ['prov_author_bylines', 'prov_domain_trust']. Applying core cap.
+INFO:scoring.aggregator:DEBUG: Provenance score: raw=3.5, coverage_cap=6.0, dim_cap=4.0, final=3.5, confidence=low
+INFO:scoring.aggregator:DEBUG: Aggregating Verification with 1 signals: ['ver_fact_accuracy']
+INFO:scoring.aggregator:DEBUG: Coverage for Verification: 1.00 -> cap=10.0
+INFO:scoring.aggregator:DEBUG: Verification score: raw=6.5, coverage_cap=10.0, dim_cap=10.0, final=6.5, confidence=high
+INFO:scoring.aggregator:DEBUG: Aggregating Transparency with 1 signals: ['trans_disclosures']
+INFO:scoring.aggregator:DEBUG: Coverage for Transparency: 0.50 -> cap=8.0
+INFO:scoring.aggregator:DEBUG: Missing core signals for Transparency: ['trans_ai_labeling']. Applying core cap.
+INFO:scoring.aggregator:DEBUG: Transparency score: raw=5.0, coverage_cap=8.0, dim_cap=6.0, final=5.0, confidence=medium
+INFO:scoring.aggregator:DEBUG: Aggregating Coherence with 1 signals: ['coh_voice_consistency']
+INFO:scoring.aggregator:DEBUG: Coverage for Coherence: 0.33 -> cap=6.0
+INFO:scoring.aggregator:DEBUG: Missing core signals for Coherence: ['coh_design_patterns', 'coh_cross_channel']. Applying core cap.
+INFO:scoring.aggregator:DEBUG: Coherence score: raw=3.8, coverage_cap=6.0, dim_cap=6.0, final=3.8, confidence=low
+INFO:scoring.aggregator:DEBUG: Aggregating Resonance with 1 signals: ['res_cultural_fit']
+INFO:scoring.aggregator:DEBUG: Coverage for Resonance: 0.50 -> cap=8.0
+INFO:scoring.aggregator:DEBUG: Core signal 'res_cultural_fit' deficit (0.29 <= 0.3)
+INFO:scoring.aggregator:DEBUG: Missing core signals for Resonance: ['res_readability']. Applying core cap.
+INFO:scoring.aggregator:DEBUG: Resonance score: raw=2.9, coverage_cap=8.0, dim_cap=6.0, final=2.9, confidence=medium
+INFO:httpx:HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+INFO:scoring.scorer:DEBUG: Raw Provenance LLM score for valid_short: 0.4, Conf: 0.6
+INFO:scoring.scorer:Starting RAG verification for valid_short
+INFO:httpx:HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+INFO:scoring.verification_manager:No verifiable claims found for valid_short
+INFO:scoring.scorer:Verification scoring for valid_short...
+INFO:scoring.scorer:  Content type: other
+INFO:scoring.scorer:  Base RAG score: 0.500
+INFO:scoring.scorer:  Multiplier applied: 1.30x
+INFO:scoring.scorer:  Adjusted score: 0.650
+INFO:scoring.scorer:DEBUG: Raw Verification LLM score for valid_short: 0.65, Conf: 0.3
+INFO:httpx:HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+INFO:scoring.scorer:DEBUG: Raw Transparency LLM score for valid_short: 0.4, Conf: 0.7
+INFO:utils.document_processor:Local cache directory: /Users/andrewdeutsch/Documents/AR/authenticity-ratio/config/brand_guidelines
+INFO:utils.document_processor:S3 storage enabled: s3://ar-ingestion-normalized/brand_guidelines/
+INFO:scoring.scorer:No guidelines found for examplebrand, using generic coherence standards
+INFO:httpx:HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+INFO:scoring.scorer:Coherence scoring for valid_short...
+INFO:scoring.scorer:  Content type: other
+INFO:scoring.scorer:  Base LLM score: 0.750 (75.0%)
+INFO:scoring.scorer:  Multiplier applied: 1.25x
+INFO:scoring.scorer:  Adjusted score: 0.938 (93.8%)
+INFO:scoring.scorer:DEBUG: Raw Coherence LLM score for valid_short: 0.9375, Conf: 0.6
+INFO:httpx:HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+INFO:scoring.scorer:DEBUG: Raw Resonance LLM score for valid_short: 0.42999999999999994, Conf: 0.5
+INFO:scoring.scorer:DEBUG: Sending 6 signals to aggregator for valid_short: ['prov_source_clarity', 'prov_date_freshness', 'ver_fact_accuracy', 'trans_disclosures', 'coh_voice_consistency', 'res_cultural_fit']
+INFO:scoring.aggregator:DEBUG: Aggregating Provenance with 2 signals: ['prov_source_clarity', 'prov_date_freshness']
+INFO:scoring.aggregator:DEBUG: Coverage for Provenance: 0.33 -> cap=6.0
+INFO:scoring.aggregator:DEBUG: Missing core signals for Provenance: ['prov_author_bylines', 'prov_domain_trust']. Applying core cap.
+INFO:scoring.aggregator:DEBUG: Provenance score: raw=4.5, coverage_cap=6.0, dim_cap=6.0, final=4.5, confidence=low
+INFO:scoring.aggregator:DEBUG: Aggregating Verification with 1 signals: ['ver_fact_accuracy']
+INFO:scoring.aggregator:DEBUG: Coverage for Verification: 1.00 -> cap=10.0
+INFO:scoring.aggregator:DEBUG: Verification score: raw=6.5, coverage_cap=10.0, dim_cap=10.0, final=6.5, confidence=high
+INFO:scoring.aggregator:DEBUG: Aggregating Transparency with 1 signals: ['trans_disclosures']
+INFO:scoring.aggregator:DEBUG: Coverage for Transparency: 0.50 -> cap=8.0
+INFO:scoring.aggregator:DEBUG: Missing core signals for Transparency: ['trans_ai_labeling']. Applying core cap.
+INFO:scoring.aggregator:DEBUG: Transparency score: raw=4.0, coverage_cap=8.0, dim_cap=6.0, final=4.0, confidence=medium
+INFO:scoring.aggregator:DEBUG: Aggregating Coherence with 1 signals: ['coh_voice_consistency']
+INFO:scoring.aggregator:DEBUG: Coverage for Coherence: 0.33 -> cap=6.0
+INFO:scoring.aggregator:DEBUG: Missing core signals for Coherence: ['coh_design_patterns', 'coh_cross_channel']. Applying core cap.
+INFO:scoring.aggregator:DEBUG: Coherence score: raw=9.4, coverage_cap=6.0, dim_cap=6.0, final=6.0, confidence=low
+INFO:scoring.aggregator:DEBUG: Aggregating Resonance with 1 signals: ['res_cultural_fit']
+INFO:scoring.aggregator:DEBUG: Coverage for Resonance: 0.50 -> cap=8.0
+INFO:scoring.aggregator:DEBUG: Missing core signals for Resonance: ['res_readability']. Applying core cap.
+INFO:scoring.aggregator:DEBUG: Resonance score: raw=4.3, coverage_cap=8.0, dim_cap=6.0, final=4.3, confidence=medium
+INFO:httpx:HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+INFO:scoring.scorer:DEBUG: Raw Provenance LLM score for valid_long: 0.2, Conf: 1.0
+INFO:scoring.scorer:Starting RAG verification for valid_long
+INFO:httpx:HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+INFO:scoring.verification_manager:No verifiable claims found for valid_long
+INFO:scoring.scorer:Verification scoring for valid_long...
+INFO:scoring.scorer:  Content type: other
+INFO:scoring.scorer:  Base RAG score: 0.500
+INFO:scoring.scorer:  Multiplier applied: 1.30x
+INFO:scoring.scorer:  Adjusted score: 0.650
+INFO:scoring.scorer:DEBUG: Raw Verification LLM score for valid_long: 0.65, Conf: 0.3
+INFO:httpx:HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+INFO:scoring.scorer:DEBUG: Raw Transparency LLM score for valid_long: 0.2, Conf: 1.0
+INFO:utils.document_processor:Local cache directory: /Users/andrewdeutsch/Documents/AR/authenticity-ratio/config/brand_guidelines
+INFO:utils.document_processor:S3 storage enabled: s3://ar-ingestion-normalized/brand_guidelines/
+INFO:scoring.scorer:No guidelines found for examplebrand, using generic coherence standards
+INFO:httpx:HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+INFO:scoring.scorer:Coherence scoring for valid_long...
+INFO:scoring.scorer:  Content type: other
+INFO:scoring.scorer:  Base LLM score: 0.100 (10.0%)
+INFO:scoring.scorer:  Multiplier applied: 1.25x
+INFO:scoring.scorer:  Adjusted score: 0.125 (12.5%)
+INFO:scoring.scorer:DEBUG: Raw Coherence LLM score for valid_long: 0.125, Conf: 0.6
+INFO:httpx:HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+INFO:scoring.scorer:DEBUG: Raw Resonance LLM score for valid_long: 0.29, Conf: 0.5
+INFO:scoring.scorer:DEBUG: Sending 6 signals to aggregator for valid_long: ['prov_source_clarity', 'prov_date_freshness', 'ver_fact_accuracy', 'trans_disclosures', 'coh_voice_consistency', 'res_cultural_fit']
+INFO:scoring.aggregator:DEBUG: Aggregating Provenance with 2 signals: ['prov_source_clarity', 'prov_date_freshness']
+INFO:scoring.aggregator:DEBUG: Coverage for Provenance: 0.33 -> cap=6.0
+INFO:scoring.aggregator:DEBUG: Knockout signal 'prov_source_clarity' below threshold (0.2 <= 0.3)
+INFO:scoring.aggregator:DEBUG: Core signal 'prov_source_clarity' deficit (0.2 <= 0.3)
+INFO:scoring.aggregator:DEBUG: Missing core signals for Provenance: ['prov_author_bylines', 'prov_domain_trust']. Applying core cap.
+INFO:scoring.aggregator:DEBUG: Provenance score: raw=3.5, coverage_cap=6.0, dim_cap=4.0, final=3.5, confidence=low
+INFO:scoring.aggregator:DEBUG: Aggregating Verification with 1 signals: ['ver_fact_accuracy']
+INFO:scoring.aggregator:DEBUG: Coverage for Verification: 1.00 -> cap=10.0
+INFO:scoring.aggregator:DEBUG: Verification score: raw=6.5, coverage_cap=10.0, dim_cap=10.0, final=6.5, confidence=high
+INFO:scoring.aggregator:DEBUG: Aggregating Transparency with 1 signals: ['trans_disclosures']
+INFO:scoring.aggregator:DEBUG: Coverage for Transparency: 0.50 -> cap=8.0
+INFO:scoring.aggregator:DEBUG: Core signal 'trans_disclosures' deficit (0.2 <= 0.3)
+INFO:scoring.aggregator:DEBUG: Missing core signals for Transparency: ['trans_ai_labeling']. Applying core cap.
+INFO:scoring.aggregator:DEBUG: Transparency score: raw=2.0, coverage_cap=8.0, dim_cap=6.0, final=2.0, confidence=medium
+INFO:scoring.aggregator:DEBUG: Aggregating Coherence with 1 signals: ['coh_voice_consistency']
+INFO:scoring.aggregator:DEBUG: Coverage for Coherence: 0.33 -> cap=6.0
+INFO:scoring.aggregator:DEBUG: Core signal 'coh_voice_consistency' deficit (0.125 <= 0.3)
+INFO:scoring.aggregator:DEBUG: Missing core signals for Coherence: ['coh_design_patterns', 'coh_cross_channel']. Applying core cap.
+INFO:scoring.aggregator:DEBUG: Coherence score: raw=1.2, coverage_cap=6.0, dim_cap=6.0, final=1.2, confidence=low
+INFO:scoring.aggregator:DEBUG: Aggregating Resonance with 1 signals: ['res_cultural_fit']
+INFO:scoring.aggregator:DEBUG: Coverage for Resonance: 0.50 -> cap=8.0
+INFO:scoring.aggregator:DEBUG: Core signal 'res_cultural_fit' deficit (0.29 <= 0.3)
+INFO:scoring.aggregator:DEBUG: Missing core signals for Resonance: ['res_readability']. Applying core cap.
+INFO:scoring.aggregator:DEBUG: Resonance score: raw=2.9, coverage_cap=8.0, dim_cap=6.0, final=2.9, confidence=medium
+
+Results (Triage=False):
+ID              | Status     | Duration (s) | Reason
+------------------------------------------------------------
+junk_1          | scored     | 6.1862       | 
+junk_2          | scored     | 5.9132       | 
+valid_short     | scored     | 6.4190       | 
+valid_long      | scored     | 5.1497       | 
+------------------------------------------------------------
+Total Time: 23.6683s
+INFO:__main__:
+--- Running Benchmark with Triage ENABLED ---
+INFO:scoring.scorer:Skipping LLM scoring for junk_1: Content too short (< 100 chars)
+INFO:httpx:HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+INFO:scoring.scorer:DEBUG: Raw Provenance LLM score for junk_2: 0.2, Conf: 1.0
+INFO:scoring.scorer:Starting RAG verification for junk_2
+INFO:httpx:HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+INFO:scoring.verification_manager:No verifiable claims found for junk_2
+INFO:scoring.scorer:Verification scoring for junk_2...
+INFO:scoring.scorer:  Content type: other
+INFO:scoring.scorer:  Base RAG score: 0.500
+INFO:scoring.scorer:  Multiplier applied: 1.30x
+INFO:scoring.scorer:  Adjusted score: 0.650
+INFO:scoring.scorer:DEBUG: Raw Verification LLM score for junk_2: 0.65, Conf: 0.3
+INFO:httpx:HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+INFO:scoring.scorer:DEBUG: Raw Transparency LLM score for junk_2: 0.5, Conf: 0.7
+INFO:utils.document_processor:Local cache directory: /Users/andrewdeutsch/Documents/AR/authenticity-ratio/config/brand_guidelines
+INFO:utils.document_processor:S3 storage enabled: s3://ar-ingestion-normalized/brand_guidelines/
+INFO:scoring.scorer:No guidelines found for examplebrand, using generic coherence standards
+INFO:httpx:HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+INFO:scoring.scorer:Coherence scoring for junk_2...
+INFO:scoring.scorer:  Content type: other
+INFO:scoring.scorer:  Base LLM score: 0.200 (20.0%)
+INFO:scoring.scorer:  Multiplier applied: 1.25x
+INFO:scoring.scorer:  Adjusted score: 0.250 (25.0%)
+INFO:scoring.scorer:DEBUG: Raw Coherence LLM score for junk_2: 0.25, Conf: 0.6
+INFO:httpx:HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+INFO:scoring.scorer:DEBUG: Raw Resonance LLM score for junk_2: 0.29, Conf: 0.5
+INFO:scoring.scorer:DEBUG: Sending 6 signals to aggregator for junk_2: ['prov_source_clarity', 'prov_date_freshness', 'ver_fact_accuracy', 'trans_disclosures', 'coh_voice_consistency', 'res_cultural_fit']
+INFO:scoring.aggregator:DEBUG: Aggregating Provenance with 2 signals: ['prov_source_clarity', 'prov_date_freshness']
+INFO:scoring.aggregator:DEBUG: Coverage for Provenance: 0.33 -> cap=6.0
+INFO:scoring.aggregator:DEBUG: Knockout signal 'prov_source_clarity' below threshold (0.2 <= 0.3)
+INFO:scoring.aggregator:DEBUG: Core signal 'prov_source_clarity' deficit (0.2 <= 0.3)
+INFO:scoring.aggregator:DEBUG: Missing core signals for Provenance: ['prov_author_bylines', 'prov_domain_trust']. Applying core cap.
+INFO:scoring.aggregator:DEBUG: Provenance score: raw=3.5, coverage_cap=6.0, dim_cap=4.0, final=3.5, confidence=low
+INFO:scoring.aggregator:DEBUG: Aggregating Verification with 1 signals: ['ver_fact_accuracy']
+INFO:scoring.aggregator:DEBUG: Coverage for Verification: 1.00 -> cap=10.0
+INFO:scoring.aggregator:DEBUG: Verification score: raw=6.5, coverage_cap=10.0, dim_cap=10.0, final=6.5, confidence=high
+INFO:scoring.aggregator:DEBUG: Aggregating Transparency with 1 signals: ['trans_disclosures']
+INFO:scoring.aggregator:DEBUG: Coverage for Transparency: 0.50 -> cap=8.0
+INFO:scoring.aggregator:DEBUG: Missing core signals for Transparency: ['trans_ai_labeling']. Applying core cap.
+INFO:scoring.aggregator:DEBUG: Transparency score: raw=5.0, coverage_cap=8.0, dim_cap=6.0, final=5.0, confidence=medium
+INFO:scoring.aggregator:DEBUG: Aggregating Coherence with 1 signals: ['coh_voice_consistency']
+INFO:scoring.aggregator:DEBUG: Coverage for Coherence: 0.33 -> cap=6.0
+INFO:scoring.aggregator:DEBUG: Core signal 'coh_voice_consistency' deficit (0.25 <= 0.3)
+INFO:scoring.aggregator:DEBUG: Missing core signals for Coherence: ['coh_design_patterns', 'coh_cross_channel']. Applying core cap.
+INFO:scoring.aggregator:DEBUG: Coherence score: raw=2.5, coverage_cap=6.0, dim_cap=6.0, final=2.5, confidence=low
+INFO:scoring.aggregator:DEBUG: Aggregating Resonance with 1 signals: ['res_cultural_fit']
+INFO:scoring.aggregator:DEBUG: Coverage for Resonance: 0.50 -> cap=8.0
+INFO:scoring.aggregator:DEBUG: Core signal 'res_cultural_fit' deficit (0.29 <= 0.3)
+INFO:scoring.aggregator:DEBUG: Missing core signals for Resonance: ['res_readability']. Applying core cap.
+INFO:scoring.aggregator:DEBUG: Resonance score: raw=2.9, coverage_cap=8.0, dim_cap=6.0, final=2.9, confidence=medium
+INFO:httpx:HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+INFO:scoring.scorer:DEBUG: Raw Provenance LLM score for valid_short: 0.4, Conf: 0.6
+INFO:scoring.scorer:Starting RAG verification for valid_short
+INFO:httpx:HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+INFO:scoring.verification_manager:No verifiable claims found for valid_short
+INFO:scoring.scorer:Verification scoring for valid_short...
+INFO:scoring.scorer:  Content type: other
+INFO:scoring.scorer:  Base RAG score: 0.500
+INFO:scoring.scorer:  Multiplier applied: 1.30x
+INFO:scoring.scorer:  Adjusted score: 0.650
+INFO:scoring.scorer:DEBUG: Raw Verification LLM score for valid_short: 0.65, Conf: 0.3
+INFO:httpx:HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+INFO:scoring.scorer:DEBUG: Raw Transparency LLM score for valid_short: 0.4, Conf: 0.7
+INFO:utils.document_processor:Local cache directory: /Users/andrewdeutsch/Documents/AR/authenticity-ratio/config/brand_guidelines
+INFO:utils.document_processor:S3 storage enabled: s3://ar-ingestion-normalized/brand_guidelines/
+INFO:scoring.scorer:No guidelines found for examplebrand, using generic coherence standards
+INFO:httpx:HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+INFO:scoring.scorer:Coherence scoring for valid_short...
+INFO:scoring.scorer:  Content type: other
+INFO:scoring.scorer:  Base LLM score: 0.700 (70.0%)
+INFO:scoring.scorer:  Multiplier applied: 1.25x
+INFO:scoring.scorer:  Adjusted score: 0.875 (87.5%)
+INFO:scoring.scorer:DEBUG: Raw Coherence LLM score for valid_short: 0.875, Conf: 0.6
+INFO:httpx:HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+INFO:scoring.scorer:DEBUG: Raw Resonance LLM score for valid_short: 0.42999999999999994, Conf: 0.5
+INFO:scoring.scorer:DEBUG: Sending 6 signals to aggregator for valid_short: ['prov_source_clarity', 'prov_date_freshness', 'ver_fact_accuracy', 'trans_disclosures', 'coh_voice_consistency', 'res_cultural_fit']
+INFO:scoring.aggregator:DEBUG: Aggregating Provenance with 2 signals: ['prov_source_clarity', 'prov_date_freshness']
+INFO:scoring.aggregator:DEBUG: Coverage for Provenance: 0.33 -> cap=6.0
+INFO:scoring.aggregator:DEBUG: Missing core signals for Provenance: ['prov_author_bylines', 'prov_domain_trust']. Applying core cap.
+INFO:scoring.aggregator:DEBUG: Provenance score: raw=4.5, coverage_cap=6.0, dim_cap=6.0, final=4.5, confidence=low
+INFO:scoring.aggregator:DEBUG: Aggregating Verification with 1 signals: ['ver_fact_accuracy']
+INFO:scoring.aggregator:DEBUG: Coverage for Verification: 1.00 -> cap=10.0
+INFO:scoring.aggregator:DEBUG: Verification score: raw=6.5, coverage_cap=10.0, dim_cap=10.0, final=6.5, confidence=high
+INFO:scoring.aggregator:DEBUG: Aggregating Transparency with 1 signals: ['trans_disclosures']
+INFO:scoring.aggregator:DEBUG: Coverage for Transparency: 0.50 -> cap=8.0
+INFO:scoring.aggregator:DEBUG: Missing core signals for Transparency: ['trans_ai_labeling']. Applying core cap.
+INFO:scoring.aggregator:DEBUG: Transparency score: raw=4.0, coverage_cap=8.0, dim_cap=6.0, final=4.0, confidence=medium
+INFO:scoring.aggregator:DEBUG: Aggregating Coherence with 1 signals: ['coh_voice_consistency']
+INFO:scoring.aggregator:DEBUG: Coverage for Coherence: 0.33 -> cap=6.0
+INFO:scoring.aggregator:DEBUG: Missing core signals for Coherence: ['coh_design_patterns', 'coh_cross_channel']. Applying core cap.
+INFO:scoring.aggregator:DEBUG: Coherence score: raw=8.8, coverage_cap=6.0, dim_cap=6.0, final=6.0, confidence=low
+INFO:scoring.aggregator:DEBUG: Aggregating Resonance with 1 signals: ['res_cultural_fit']
+INFO:scoring.aggregator:DEBUG: Coverage for Resonance: 0.50 -> cap=8.0
+INFO:scoring.aggregator:DEBUG: Missing core signals for Resonance: ['res_readability']. Applying core cap.
+INFO:scoring.aggregator:DEBUG: Resonance score: raw=4.3, coverage_cap=8.0, dim_cap=6.0, final=4.3, confidence=medium
+INFO:httpx:HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+INFO:scoring.scorer:DEBUG: Raw Provenance LLM score for valid_long: 0.2, Conf: 1.0
+INFO:scoring.scorer:Starting RAG verification for valid_long
+INFO:httpx:HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+INFO:scoring.verification_manager:No verifiable claims found for valid_long
+INFO:scoring.scorer:Verification scoring for valid_long...
+INFO:scoring.scorer:  Content type: other
+INFO:scoring.scorer:  Base RAG score: 0.500
+INFO:scoring.scorer:  Multiplier applied: 1.30x
+INFO:scoring.scorer:  Adjusted score: 0.650
+INFO:scoring.scorer:DEBUG: Raw Verification LLM score for valid_long: 0.65, Conf: 0.3
+INFO:httpx:HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+INFO:scoring.scorer:DEBUG: Raw Transparency LLM score for valid_long: 0.2, Conf: 1.0
+INFO:utils.document_processor:Local cache directory: /Users/andrewdeutsch/Documents/AR/authenticity-ratio/config/brand_guidelines
+INFO:utils.document_processor:S3 storage enabled: s3://ar-ingestion-normalized/brand_guidelines/
+INFO:scoring.scorer:No guidelines found for examplebrand, using generic coherence standards
+INFO:httpx:HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+INFO:scoring.scorer:Coherence scoring for valid_long...
+INFO:scoring.scorer:  Content type: other
+INFO:scoring.scorer:  Base LLM score: 0.100 (10.0%)
+INFO:scoring.scorer:  Multiplier applied: 1.25x
+INFO:scoring.scorer:  Adjusted score: 0.125 (12.5%)
+INFO:scoring.scorer:DEBUG: Raw Coherence LLM score for valid_long: 0.125, Conf: 0.6
+INFO:httpx:HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+INFO:scoring.scorer:DEBUG: Raw Resonance LLM score for valid_long: 0.29, Conf: 0.5
+INFO:scoring.scorer:DEBUG: Sending 6 signals to aggregator for valid_long: ['prov_source_clarity', 'prov_date_freshness', 'ver_fact_accuracy', 'trans_disclosures', 'coh_voice_consistency', 'res_cultural_fit']
+INFO:scoring.aggregator:DEBUG: Aggregating Provenance with 2 signals: ['prov_source_clarity', 'prov_date_freshness']
+INFO:scoring.aggregator:DEBUG: Coverage for Provenance: 0.33 -> cap=6.0
+INFO:scoring.aggregator:DEBUG: Knockout signal 'prov_source_clarity' below threshold (0.2 <= 0.3)
+INFO:scoring.aggregator:DEBUG: Core signal 'prov_source_clarity' deficit (0.2 <= 0.3)
+INFO:scoring.aggregator:DEBUG: Missing core signals for Provenance: ['prov_author_bylines', 'prov_domain_trust']. Applying core cap.
+INFO:scoring.aggregator:DEBUG: Provenance score: raw=3.5, coverage_cap=6.0, dim_cap=4.0, final=3.5, confidence=low
+INFO:scoring.aggregator:DEBUG: Aggregating Verification with 1 signals: ['ver_fact_accuracy']
+INFO:scoring.aggregator:DEBUG: Coverage for Verification: 1.00 -> cap=10.0
+INFO:scoring.aggregator:DEBUG: Verification score: raw=6.5, coverage_cap=10.0, dim_cap=10.0, final=6.5, confidence=high
+INFO:scoring.aggregator:DEBUG: Aggregating Transparency with 1 signals: ['trans_disclosures']
+INFO:scoring.aggregator:DEBUG: Coverage for Transparency: 0.50 -> cap=8.0
+INFO:scoring.aggregator:DEBUG: Core signal 'trans_disclosures' deficit (0.2 <= 0.3)
+INFO:scoring.aggregator:DEBUG: Missing core signals for Transparency: ['trans_ai_labeling']. Applying core cap.
+INFO:scoring.aggregator:DEBUG: Transparency score: raw=2.0, coverage_cap=8.0, dim_cap=6.0, final=2.0, confidence=medium
+INFO:scoring.aggregator:DEBUG: Aggregating Coherence with 1 signals: ['coh_voice_consistency']
+INFO:scoring.aggregator:DEBUG: Coverage for Coherence: 0.33 -> cap=6.0
+INFO:scoring.aggregator:DEBUG: Core signal 'coh_voice_consistency' deficit (0.125 <= 0.3)
+INFO:scoring.aggregator:DEBUG: Missing core signals for Coherence: ['coh_design_patterns', 'coh_cross_channel']. Applying core cap.
+INFO:scoring.aggregator:DEBUG: Coherence score: raw=1.2, coverage_cap=6.0, dim_cap=6.0, final=1.2, confidence=low
+INFO:scoring.aggregator:DEBUG: Aggregating Resonance with 1 signals: ['res_cultural_fit']
+INFO:scoring.aggregator:DEBUG: Coverage for Resonance: 0.50 -> cap=8.0
+INFO:scoring.aggregator:DEBUG: Core signal 'res_cultural_fit' deficit (0.29 <= 0.3)
+INFO:scoring.aggregator:DEBUG: Missing core signals for Resonance: ['res_readability']. Applying core cap.
+INFO:scoring.aggregator:DEBUG: Resonance score: raw=2.9, coverage_cap=8.0, dim_cap=6.0, final=2.9, confidence=medium
+
+Results (Triage=True):
+ID              | Status     | Duration (s) | Reason
+------------------------------------------------------------
+junk_1          | skipped    | 0.0001       | Content too short (< 100 chars)
+junk_2          | scored     | 7.6871       | 
+valid_short     | scored     | 6.2280       | 
+valid_long      | scored     | 6.5035       | 
+------------------------------------------------------------
+Total Time: 20.4188s
