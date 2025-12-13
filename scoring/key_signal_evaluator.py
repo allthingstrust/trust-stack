@@ -42,6 +42,9 @@ ATTRIBUTE_TO_KEY_SIGNAL = {
     'email_asset_consistency_check': 'Cross-Channel Alignment',
     'broken_link_rate': 'Technical Health',
     'schema_compliance': 'Technical Health',
+    'vis_design_quality': 'Visual/Design Coherence',
+    'vis_brand_coherence': 'Visual Brand Coherence',
+    'vis_clutter_score': 'Visual Clutter Score',
     
     # Transparency
     'privacy_policy_link_availability_clarity': 'Privacy Policy Clarity',
@@ -52,6 +55,8 @@ ATTRIBUTE_TO_KEY_SIGNAL = {
     'contact_info_availability': 'Contact/Business Info',
     'ad_sponsored_label_consistency': 'Clear Disclosures',
     'data_source_citations_for_claims': 'Data Source Citations',
+    'vis_dark_patterns': 'Visual Dark Patterns',
+    'vis_accessibility': 'Visual Accessibility',
     
     # Verification
     'claim_to_source_traceability': 'Claim Traceability',
@@ -59,6 +64,7 @@ ATTRIBUTE_TO_KEY_SIGNAL = {
     'third_party_certifications_present': 'Trust Badges & Certs',
     'verified_purchaser_review_rate': 'Review Authenticity',
     'review_authenticity_confidence': 'Review Authenticity',
+    'vis_trust_indicators': 'Visual Trust Indicators',
 }
 
 # Also map by LABEL string (what appears in the diagnostics table)
@@ -87,7 +93,10 @@ LABEL_TO_KEY_SIGNAL = {
     'Brand Voice Consistency Score': 'Voice Consistency',
     'Claim Consistency Across Pages': 'Claim Consistency',
     'Multimodal Consistency Score': 'Visual/Design Coherence',
+    'Multimodal Consistency Score': 'Visual/Design Coherence',
     'Broken Link Rate': 'Technical Health',
+    'Visual Brand Coherence': 'Visual Brand Coherence',
+    'Visual Clutter Score': 'Visual Clutter Score',
     
     # Transparency
     'Privacy Policy Link Availability & Clarity': 'Privacy Policy Clarity',
@@ -97,7 +106,10 @@ LABEL_TO_KEY_SIGNAL = {
     'AI vs Human Labeling Clarity': 'AI Usage Disclosure',
     'Contact/Business Info Availability': 'Contact/Business Info',
     'Ad/Sponsored Label Consistency': 'Clear Disclosures',
+    'Ad/Sponsored Label Consistency': 'Clear Disclosures',
     'Data Source Citations for Claims': 'Data Source Citations',
+    'Visual Dark Pattern Absence': 'Visual Dark Patterns',
+    'Visual Accessibility': 'Visual Accessibility',
     
     # Verification
     'Claim Traceability': 'Claim Traceability',
@@ -106,6 +118,7 @@ LABEL_TO_KEY_SIGNAL = {
     'Third Party Certifications Present': 'Trust Badges & Certs',
     'Verified Purchaser Review Rate': 'Review Authenticity',
     'Review Authenticity Confidence': 'Review Authenticity',
+    'Visual Trust Indicators': 'Visual Trust Indicators',
 }
 
 # Map signal IDs (from aggregator/dimension_details) to Key Signal labels
@@ -141,6 +154,13 @@ SIGNAL_ID_TO_KEY_SIGNAL = {
     "ver_social_proof": "External Social Proof",
     "ver_review_authenticity": "Review Authenticity",
     "ver_claim_traceability": "Claim Traceability",
+    # Visual
+    "vis_design_quality": "Visual/Design Coherence",
+    "vis_brand_coherence": "Visual Brand Coherence",
+    "vis_clutter_score": "Visual Clutter Score",
+    "vis_dark_patterns": "Visual Dark Patterns",
+    "vis_accessibility": "Visual Accessibility",
+    "vis_trust_indicators": "Visual Trust Indicators",
 }
 
 
@@ -170,21 +190,26 @@ class KeySignalEvaluator:
                 'Visual/Design Coherence',
                 'Cross-Channel Alignment',
                 'Technical Health',
-                'Claim Consistency'
+                'Claim Consistency',
+                'Visual Brand Coherence',
+                'Visual Clutter Score'
             ],
             'transparency': [
                 'Clear Disclosures',
                 'AI Usage Disclosure',
                 'Contact/Business Info',
                 'Privacy Policy Clarity',
-                'Data Source Citations'
+                'Data Source Citations',
+                'Visual Dark Patterns',
+                'Visual Accessibility'
             ],
             'verification': [
                 'Factual Accuracy',
                 'Trust Badges & Certs',
                 'External Social Proof',
                 'Review Authenticity',
-                'Claim Traceability'
+                'Claim Traceability',
+                'Visual Trust Indicators'
             ]
         }
     
