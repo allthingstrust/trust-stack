@@ -128,7 +128,7 @@ SETTINGS = {
     'excluded_brands': [b.strip().lower() for b in get_secret('EXCLUDED_BRANDS', '').split(',') if b.strip()],
     
     # Visual Analysis configuration
-    'visual_analysis_enabled': str(get_secret('VISUAL_ANALYSIS_ENABLED', 'false')).lower() == 'true',
+    'visual_analysis_enabled': str(get_secret('VISUAL_ANALYSIS_ENABLED', 'true')).lower() == 'true',
     'visual_analysis_model': get_secret('VISUAL_ANALYSIS_MODEL', 'gemini-2.0-flash'),
     'visual_scope': get_secret('VISUAL_SCOPE', 'brand_owned,landing_page'),
     'screenshot_s3_bucket': get_secret('SCREENSHOT_S3_BUCKET', ''),
