@@ -854,30 +854,70 @@ def _generate_visual_snapshot(items: List[Dict[str, Any]], run_id: str) -> str:
     content = ["\n\n🎨 **Visual Analysis Snapshot**\n"]
     content.append("AI-powered analysis of visual design, dark patterns, and brand coherence.\n")
     
-    # Sort by design quality score if available (descending)
+    # Calculate scores for sorting
+    scored_items = []
+    for item in visual_items:
+        analysis = item.get('visual_analysis')
+        if not analysis:
+             meta = item.get('meta', {})
+             if isinstance(meta, str):
+                 try: meta = json.loads(meta)
+                 except: meta = {}
+             if isinstance(meta, dict):
+                 analysis = meta.get('visual_analysis')
+        
+        score = 0.0
+        if analysis and isinstance(analysis, dict):
+            # Prefer design quality, fallback to overall, default 0
+            signals = analysis.get('signals', {})
+            design_score = signals.get('vis_design_quality', {}).get('score')
+            if design_score is not None:
+                score = float(design_score)
+            else:
+                score = float(analysis.get('overall_visual_score', 0.0))
+        
+        scored_items.append((score, item))
+
+    # Sort descending by score
+    scored_items.sort(key=lambda x: x[0], reverse=True)
     
-    # Limit to top 3 distinct items
-    display_items = visual_items[:3]
+    # Selection logic:
+    # 1 Successful example (Top 1)
+    # 2 Opportunities (Bottom 2)
     
-    for item in display_items:
+    success_example = None
+    opportunity_examples = []
+    
+    if scored_items:
+        # Top item is candidate for success
+        success_example = scored_items[0]
+        
+        # Bottom items are candidates for opportunities
+        # If we have enough items, take bottom 2
+        # Avoid duplicating the success example if there are few items
+        remaining_items = scored_items[1:]
+        if remaining_items:
+            opportunity_examples = remaining_items[-2:] # Take up to 2 from the bottom
+            # Reverse them to show lowest score first? Or just list them.
+            # Let's show lowest score first for impact
+            opportunity_examples.sort(key=lambda x: x[0]) 
+
+    def _render_item(item, section_title=None):
+        out = []
+        if section_title:
+             out.append(f"#### {section_title}")
+             
         title = item.get('title', 'Web Page')
         url = item.get('url', '')
-        # Get path (re-extract)
         path = item.get('screenshot_path') or item.get('meta', {}).get('screenshot_path')
         
-        # If path is s3://, we need a way to display it. 
-        # Archive it to report-images folder first for persistence
-        capture = get_screenshot_capture()
-        new_path = capture.archive_report_image(path, run_id)
-        if new_path:
-            path = new_path
-        
-        # Markdown reports can't show S3 auth images easily unless presigned or public.
-        # Impl plan says "Embed screenshots... linked from S3". 
-        # If output is PDF/HTML, we might need presigned URLs.
-        # For now, we display the link.
-        
-        # Extract visual analysis results
+        # Archive image
+        if path:
+            capture = get_screenshot_capture()
+            new_path = capture.archive_report_image(path, run_id)
+            if new_path: path = new_path
+
+        # Extract analysis
         analysis = item.get('visual_analysis')
         if not analysis:
             meta = item.get('meta', {})
@@ -886,8 +926,10 @@ def _generate_visual_snapshot(items: List[Dict[str, Any]], run_id: str) -> str:
                  except: meta = {}
             if isinstance(meta, dict):
                 analysis = meta.get('visual_analysis')
-        
+
         analysis_summary = ""
+        design_assessment = ""
+        
         if analysis and isinstance(analysis, dict):
             signals = analysis.get('signals', {})
             design = signals.get('vis_design_quality', {}).get('score')
@@ -900,26 +942,43 @@ def _generate_visual_snapshot(items: List[Dict[str, Any]], run_id: str) -> str:
             if dark is not None: summary_parts.append(f"Dark Patterns Risk: {float(dark)*10:.1f}/10")
             
             analysis_summary = " | ".join(summary_parts)
+            design_assessment = analysis.get('design_assessment', '')
             
-            # Fallback if specific scores are missing but we have general text
             if not analysis_summary:
                 analysis_summary = analysis.get('reasoning') or analysis.get('description') or "Analysis pending"
         else:
             analysis_summary = "Analysis not available"
             
-        content.append(f"### {title}")
-        content.append(f"URL: {url}")
-        content.append(f"**Visual Scores**: {analysis_summary}")
+        out.append(f"**{title}**")
+        out.append(f"URL: {url}")
+        out.append(f"**Visual Scores**: {analysis_summary}")
+        
+        if design_assessment:
+            out.append(f"\n{design_assessment}\n")
         
         if path:
-            # We can't easily embed private S3 images in standard markdown without presigned URLs.
-            # But the requirement is to integrate. 
-            # Ideally, the report viewer (webapp) handles S3 links, or we generate presigned URLs here.
-            # Generating presigned URLs here might be expiring.
-            # Let's format as image link assuming generic viewer support or just link.
-            # ![Screenshot]({path})
-            content.append(f"\n![Visual Analysis Screenshot]({path})\n")
+            out.append(f"\n![Visual Analysis Screenshot]({path})\n")
             
-        content.append("---\n")
+        return "\n".join(out)
+
+    # Render Groups
+    if opportunity_examples:
+        content.append("### ⚠️ Opportunities for Visual Improvement\n")
+        content.append("Visual elements that may be eroding trust or user experience.\n")
+        for score, item in opportunity_examples:
+            content.append(_render_item(item))
+            content.append("---\n")
+
+    if success_example:
+        # Only show success if score is decent? Or just show the best we have.
+        # User asked for "one successful example".
+        # Let's check if we have distinct items to avoid showing same item in both if filtered poorly (logic above handles overlap for >1 items)
+        # If only 1 item exists, it will be in success_example and opportunity_examples logic above puts it in remaining_items which is empty.
+        # So no overlap for 1 item.
         
+        content.append("### ✅ Successful Visual Execution\n")
+        content.append("Strong visual elements that reinforce brand trust.\n")
+        content.append(_render_item(success_example[1]))
+        content.append("---\n")
+            
     return "\n".join(content)
