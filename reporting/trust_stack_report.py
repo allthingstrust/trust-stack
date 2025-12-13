@@ -901,6 +901,12 @@ def _generate_visual_snapshot(items: List[Dict[str, Any]], run_id: str) -> str:
             
             analysis_summary = " | ".join(summary_parts)
             
+            # Fallback if specific scores are missing but we have general text
+            if not analysis_summary:
+                analysis_summary = analysis.get('reasoning') or analysis.get('description') or "Analysis pending"
+        else:
+            analysis_summary = "Analysis not available"
+            
         content.append(f"### {title}")
         content.append(f"URL: {url}")
         content.append(f"**Visual Scores**: {analysis_summary}")

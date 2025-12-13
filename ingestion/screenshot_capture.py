@@ -87,6 +87,52 @@ class ScreenshotCapture:
             self._s3_client = boto3.client('s3')
         return self._s3_client
 
+    def _dismiss_popups(self, page: "Page"):
+        """
+        Attempt to dismiss common popups (cookie banners, newsletters, etc.).
+        
+        Args:
+            page: Playwright Page object
+        """
+        if not page:
+            return
+            
+        logger.info("Attempting to dismiss popups...")
+        
+        # Common selectors for close buttons and "No thanks" links
+        # Covering: generic close, cookie accept/reject, newsletter dismissal
+        selectors = [
+            "button[aria-label='Close']",
+            "button[aria-label='close']",
+            ".close-button",
+            ".close-icon",
+            "svg[data-icon='close']",
+            "div[role='button'][aria-label='Close']",
+            # Common text patterns (case insensitive matching in Playwright)
+            "text=No Thanks",
+            "text=No, thanks",
+            "text=Not now",
+            "text=Skip",
+            "text=Accept All",
+            "text=Accept Cookies", 
+            "text=Reject All",
+            "text=I accept",
+            "button:has-text('Close')",
+            "button:has-text('Accept')",
+        ]
+        
+        for selector in selectors:
+            try:
+                # Check if visible and clickable
+                if page.is_visible(selector, timeout=200):
+                    logger.debug(f"Dismissing popup with selector: {selector}")
+                    page.click(selector, timeout=500)
+                    # Small wait to let animation finish
+                    page.wait_for_timeout(200)
+            except Exception:
+                # Ignore errors (element not found, not clickable, etc.)
+                continue
+
     def capture_screenshot(
         self,
         page: "Page",
@@ -128,6 +174,9 @@ class ScreenshotCapture:
             except Exception:
                 # Network idle timeout is acceptable - content may still be loading
                 pass
+
+            # Dismiss popups before capture
+            self._dismiss_popups(page)
 
             # Capture screenshot
             screenshot_args = {
