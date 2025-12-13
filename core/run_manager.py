@@ -29,6 +29,7 @@ class RunManager:
     # ------------------------------------------------------------------
     def run_analysis(self, brand_slug: str, scenario_slug: str, run_config: Optional[dict] = None) -> Run:
         run_config = run_config or {}
+        run_config["brand_slug"] = brand_slug  # Ensure slug is available for caching lookups
         external_id = run_config.get("external_id") or self._generate_external_id(brand_slug)
 
         with store.session_scope(self.engine) as session:
@@ -191,6 +192,74 @@ class RunManager:
             logger.info("No sources/keywords specified; proceeding with empty dataset")
             return collected
 
+        # Smart Data Reuse (Caching)
+        # Default to True unless explicitly disabled
+        reuse_data = run_config.get("reuse_data", True)
+        cached_assets = []
+        excluded_urls = set()
+        
+        if reuse_data:
+            brand_slug = run_config.get("brand_slug")
+            if brand_slug:
+                try:
+                    with store.session_scope(self.engine) as session:
+                        # Find assets from the last 24 hours (configurable via settings/env)
+                        # We use a detached session query so accessing attributes later is safe if we copy them
+                        # But session_scope auto-closes. We might need to clone the data.
+                        from data.store import find_recent_assets_by_brand
+                        
+                        max_age = int(self.settings.get("max_asset_age_hours", 24))
+                        recent = find_recent_assets_by_brand(session, brand_slug, max_age_hours=max_age)
+                        
+                        # Convert to dict format to match ingestion output and avoid DetachedInstanceError
+                        for asset in recent:
+                             cached_assets.append({
+                                "source_type": asset.source_type,
+                                "channel": asset.channel,
+                                "url": asset.url,
+                                "title": asset.title,
+                                "raw_content": asset.raw_content,
+                                "normalized_content": asset.normalized_content,
+                                "modality": asset.modality,
+                                "meta_info": asset.meta_info or {},
+                                "screenshot_path": asset.screenshot_path,
+                                "visual_analysis": asset.visual_analysis,
+                             })
+                             if asset.url:
+                                 excluded_urls.add(asset.url)
+                        
+                        logger.info(f"Smart Reuse: Found {len(cached_assets)} cached assets for brand '{brand_slug}'")
+                except Exception as e:
+                    logger.warning(f"Smart Reuse failed to fetch cached assets: {e}")
+        
+        # Add cached assets to collection
+        collected.extend(cached_assets)
+        
+        # Adjust limit based on what we matched
+        # Note: We can't perfectly map cached assets to specific keywords, so we subtract valid cached count from total limit?
+        # Or should we just exclude the URLs?
+        # A simple heuristic: if we have N valid cached assets, reduce the global limit for *each* keyword? 
+        # No, that's tricky. 
+        # Better: Pass existing URLs to collectors to skip, but still try to fulfill the limit.
+        # But if we have 100 cached assets, do we really want 10 more?
+        # "Smart Resume" implies we stop if we have enough.
+        # The limit is per-keyword usually or total?
+        # run_config['limit'] is passed to _collect_from_* methods which apply it *per keyword* usually?
+        # brave: collect_brave_pages(query=kw, target_count=limit)
+        # So if we have 5 cached assets that match "Nike", we should reduce that keyword's limit?
+        # Misfire risk: "Nike" cached vs "Nike" keyword.
+        # For now, let's just use excluded_urls to avoid duplicates and rely on the collectors to fill gaps.
+        # BUT: to save time, if we found a good number of assets (e.g. > limit * num_keywords), maybe we skip?
+        # Let's trust the user: if they say limit=10, they want 10 items per keyword.
+        # If we have them in cache (matching the query in meta_info), we should count them.
+        
+        # Count cached assets per keyword to adjust limits
+        cached_count_by_query = {}
+        for a in cached_assets:
+            q = (a.get("meta_info") or {}).get("query")
+            if q:
+                cached_count_by_query[q] = cached_count_by_query.get(q, 0) + 1
+        
         for source in sources:
             source = (source or "").lower()
             
@@ -202,7 +271,7 @@ class RunManager:
                 source = provider
             
             if source == "brave":
-                collected.extend(self._collect_from_brave(keywords, limit))
+                collected.extend(self._collect_from_brave(keywords, limit, excluded_urls, cached_count_by_query))
             elif source == "serper":
                 collected.extend(self._collect_from_serper(keywords, limit))
             elif source == "reddit":
@@ -217,16 +286,39 @@ class RunManager:
     # ------------------------------------------------------------------
     # Source collectors (lightweight wrappers around existing ingestion code)
     # ------------------------------------------------------------------
-    def _collect_from_brave(self, keywords: List[str], limit: int) -> List[dict]:
+    def _collect_from_brave(self, keywords: List[str], limit: int, excluded_urls: set = None, cached_counts: dict = None) -> List[dict]:
         try:
             from ingestion.brave_search import collect_brave_pages
         except Exception as exc:  # pragma: no cover - optional dependency
             logger.warning("Brave ingestion unavailable: %s", exc)
             return []
 
+        if excluded_urls is None:
+            excluded_urls = set()
+        if cached_counts is None:
+            cached_counts = {}
+
         assets: List[dict] = []
         for kw in keywords:
-            pages = collect_brave_pages(query=kw, target_count=limit)
+            # Adjust limit based on what we already have for this keyword
+            current_cached = cached_counts.get(kw, 0)
+            adjusted_limit = max(0, limit - current_cached)
+            
+            if adjusted_limit == 0:
+                logger.info(f"Skipping Brave search for '{kw}': have enough cached assets ({current_cached})")
+                continue
+                
+            logger.info(f"Collecting {adjusted_limit} new assets for '{kw}' (cached: {current_cached})")
+            
+            # We need to update collect_brave_pages to accept excluded_urls
+            # For now, if the signature doesn't match, we might break unless we update ingestion module too.
+            # Assuming we will update ingestion/brave_search.py next.
+            try:
+                pages = collect_brave_pages(query=kw, target_count=adjusted_limit, excluded_urls=excluded_urls)
+            except TypeError:
+                # Fallback API check if excluded_urls not supported yet
+                pages = collect_brave_pages(query=kw, target_count=adjusted_limit)
+
             for page in pages:
                 assets.append(
                     {

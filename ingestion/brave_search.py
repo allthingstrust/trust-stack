@@ -408,7 +408,8 @@ def collect_brave_pages(
     pool_size: int | None = None,
     min_body_length: int = 200,
     min_brand_body_length: int | None = None,
-    url_collection_config: 'URLCollectionConfig' | None = None
+    url_collection_config: 'URLCollectionConfig' | None = None,
+    excluded_urls: set | None = None
 ) -> List[Dict[str, str]]:
     """Collect up to `target_count` successfully fetched pages for a Brave search query.
 
@@ -445,7 +446,7 @@ def collect_brave_pages(
     url_queue = queue.Queue(maxsize=max_total_results if max_total_results < 100 else 50)
     results_lock = threading.Lock()
     stop_event = threading.Event()
-    seen_urls = set()
+    seen_urls = set(excluded_urls) if excluded_urls else set()
     
     # Collections
     brand_owned_collected: List[Dict[str, str]] = []

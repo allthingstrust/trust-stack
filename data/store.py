@@ -196,3 +196,59 @@ def create_truststack_summary(
     session.refresh(summary)
     return summary
 
+
+def find_recent_assets_by_brand(
+    session: Session, brand_id: str, max_age_hours: int = 24, min_length: int = 100
+) -> List[ContentAsset]:
+    """Find valid assets for a brand fetched within the last N hours."""
+    from datetime import datetime, timedelta
+
+    cutoff = datetime.utcnow() - timedelta(hours=max_age_hours)
+    
+    # We join on Run to filter by time, but we also ensure the asset itself has content
+    # Note: We filter by Run.created_at or asset creation time if available. 
+    # ContentAsset doesn't have created_at, but Run does.
+    return (
+        session.query(ContentAsset)
+        .join(Run)
+        .join(Brand)
+        .filter(
+            Brand.slug == brand_id,
+            Run.started_at >= cutoff,
+            Run.status != "failed"  # valid runs only? or maybe failed runs have some valid assets?
+            # Let's trust assets from any non-deleted run, as long as the asset has content
+        )
+        .filter(ContentAsset.raw_content != None)
+        .filter(ContentAsset.raw_content != "")
+        # Filter out "empty" or stub assets by checking length
+        # SQLite doesn't have LENGTH() easily in all versions in standard SQLAlchemy core without func
+        # so we'll do basic null/empty checks and filter length in python if needed, 
+        # or use func.length if we import it.
+        # For safety/portability, let's just ensure it's not null/empty string.
+        .all()
+    )
+
+
+def prune_old_runs(session: Session, days_to_keep: int = 30) -> int:
+    """Delete runs older than N days.
+    
+    Returns:
+        int: Number of runs deleted.
+    """
+    from datetime import datetime, timedelta
+    
+    cutoff = datetime.utcnow() - timedelta(days=days_to_keep)
+    
+    # Query runs to be deleted first to get count (and IDs if needed for logging)
+    runs_to_delete = session.query(Run).filter(Run.started_at < cutoff).all()
+    count = len(runs_to_delete)
+    
+    if count > 0:
+        # Delete using simple session.delete() for each to ensure ORM cascade works reliably
+        # SQLA bulk delete might skip cascades depending on configuration
+        for run in runs_to_delete:
+            session.delete(run)
+        
+        session.commit()
+        
+    return count

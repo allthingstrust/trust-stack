@@ -1147,6 +1147,26 @@ def show_analyze_page():
 
             st.info(f"💡 **Selection**: Search: {model_tiers.get(search_model, '')} {search_model} | Summary: {model_tiers.get(summary_model, '')} {summary_model} | Recommendations: {model_tiers.get(recommendations_model, '')} {recommendations_model}")
             st.caption("💡 **Tip**: Use premium models (Claude Sonnet 4, GPT-4o) for highest quality summaries with specific, actionable recommendations.")
+            
+            # Smart Cache Toggle
+            reuse_data = st.checkbox(
+                "Use existing brand data (Smart Cache)", 
+                value=True, 
+                help="Reuse compatible data from previous runs (last 24h) to speed up analysis and reduce costs."
+            )
+            
+            # Maintenance Section
+            with st.expander("🛠️ Maintenance", expanded=False):
+                st.caption("Manage local storage and data retention.")
+                days_to_keep = st.number_input("Keep history (days)", min_value=1, value=30, step=1, help="Delete analysis runs older than this.")
+                
+                if st.button("🗑️ Prune Old Data"):
+                    try:
+                        with store.session_scope(store.get_engine()) as session:
+                            deleted_count = store.prune_old_runs(session, days_to_keep=days_to_keep)
+                        st.success(f"Cleaned up {deleted_count} old analysis runs.")
+                    except Exception as e:
+                        st.error(f"Pruning failed: {e}")
 
         st.divider()
 
@@ -1404,6 +1424,7 @@ def show_analyze_page():
                 "keywords": keywords.split(),
                 "limit": max_items,
                 "assets": assets_config if assets_config else None,
+                "reuse_data": reuse_data,  # Pass UI toggle value
                 "brand_name": brand_id, # Use ID as name for now
                 "scenario_name": "Web Analysis",
 
