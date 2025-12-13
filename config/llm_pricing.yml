@@ -26,6 +26,15 @@ models:
   claude-3-5-sonnet-latest:
     input: 3.00
     output: 15.00
+  claude-sonnet-4-5-20250929:
+    input: 3.00
+    output: 15.00
+  claude-opus-4-5-latest:
+    input: 5.00
+    output: 25.00
+  claude-opus-4-5-20251124:
+    input: 5.00
+    output: 25.00
   claude-3-5-haiku-20241022:
     input: 1.00
     output: 5.00
@@ -58,6 +67,9 @@ models:
   gemini-1.5-flash-latest:
     input: 0.075
     output: 0.30
+  gemini-2.0-flash:
+    input: 0.10
+    output: 0.40
   gemini-1.0-pro:
     input: 0.50
     output: 1.50
