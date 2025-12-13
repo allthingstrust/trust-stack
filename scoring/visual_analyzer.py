@@ -100,7 +100,8 @@ VISUAL_ANALYSIS_PROMPT = """You are a UX/design expert analyzing a webpage scree
    - Color-blind friendly design choices
 
 5. **Visual Trust Indicators (vis_trust_indicators)**
-   - Presence of trust badges, security seals, certifications
+   - Social Media Verification Badges (Blue/Gold Checks) - Check profile header specifically
+   - Presence of trust badges, security seals, certifications - Check footer area specifically
    - Professional contact information visible
    - SSL/secure indicators if applicable
 

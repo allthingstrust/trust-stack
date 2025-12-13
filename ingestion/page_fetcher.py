@@ -8,6 +8,7 @@ from __future__ import annotations
 import logging
 import requests
 from typing import List, Dict, Optional
+from datetime import datetime
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin, urlparse
 import hashlib
@@ -1132,6 +1133,9 @@ def _fetch_with_playwright(url: str, user_agent: str, browser_manager=None) -> D
         except Exception:
             links = {"terms": "", "privacy": ""}
         
+        # Extract verification badges
+        try:
+            verification_badges = _extract_verification_badges(page_content, url)
         except Exception:
             verification_badges = {"verified": False, "platform": "unknown", "badge_type": "", "evidence": ""}
         
@@ -1139,9 +1143,9 @@ def _fetch_with_playwright(url: str, user_agent: str, browser_manager=None) -> D
         if capture_needed and page:
             try:
                 capture = get_screenshot_capture()
-                # Capture above fold for speed, unless full page needed
+                # Capture full page to ensure footer trust badges are included
                 # Note: valid capture requires active page object
-                png_bytes, meta = capture.capture_above_fold(page, url)
+                png_bytes, meta = capture.capture_screenshot(page, url, full_page=True)
                 
                 if meta.get('success'):
                     # Generate a run_id (using date if not available)

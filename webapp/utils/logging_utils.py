@@ -36,6 +36,33 @@ class StreamlitLogHandler(logging.Handler):
             return
 
         try:
+            # Check for Streamlit context before attempting to write to UI
+            # This prevents "Thread-1: missing ScriptRunContext!" warnings from background threads
+            # that shouldn't be writing to the UI anyway
+            try:
+                # Try new location (Streamlit 1.38+)
+                from streamlit.runtime.scriptrunner_utils.script_run_context import get_script_run_ctx
+                if not get_script_run_ctx(suppress_warning=True):
+                    return
+            except ImportError:
+                try:
+                    # Try old location (Streamlit < 1.38)
+                    from streamlit.runtime.scriptrunner.script_run_context import get_script_run_ctx
+                    # Old versions might not have suppress_warning, but it's worth a shot or check signature
+                    # If it fails with TypeError, we catch it? No, get_script_run_ctx takes no args in very old versions.
+                    # But 1.50 is what we have.
+                    pass 
+                    # Let's keep it simple for the old catch block, we know 1.50 has it.
+                    # For safety, I'll use try/except TypeError in the inner block just in case.
+                    try:
+                         if not get_script_run_ctx(suppress_warning=True):
+                             return
+                    except TypeError:
+                         if not get_script_run_ctx():
+                             return
+                except ImportError:
+                    pass
+
             # Format the log message
             msg = self.format(record)
             # Send to progress animator

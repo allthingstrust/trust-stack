@@ -50,7 +50,7 @@ class PlaywrightBrowserManager:
                 return True
                 
             try:
-                self._thread = threading.Thread(target=self._run_browser_loop, daemon=True)
+                self._thread = threading.Thread(target=self._run_browser_loop, daemon=True, name="PlaywrightBrowserThread")
                 self._thread.start()
                 self._is_started = True
                 logger.info('Playwright browser thread started')
