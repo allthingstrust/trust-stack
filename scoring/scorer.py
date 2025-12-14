@@ -290,7 +290,17 @@ class ContentScorer:
             image_bytes = capture.get_screenshot_bytes(content.screenshot_path)
             
             if not image_bytes:
-                logger.warning(f"Could not retrieve screenshot for {content.content_id} from {content.screenshot_path}")
+                error_msg = f"Could not retrieve screenshot from {content.screenshot_path}"
+                logger.warning(f"Visual analysis skipped: {error_msg}")
+                
+                # Record failure so report shows "Analysis Failed" instead of "Analysis not available"
+                if content.meta is None:
+                    content.meta = {}
+                content.meta['visual_analysis'] = {
+                    "success": False,
+                    "error": error_msg,
+                    "url": content.url
+                }
                 return
                 
             analyzer = get_visual_analyzer()
