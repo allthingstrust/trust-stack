@@ -1531,6 +1531,26 @@ def show_analyze_page():
             
             legacy_run_data["scoring_report"]["items"] = items
             
+            # Collect blocked URLs (access_denied by anti-bot protection)
+            blocked_urls = []
+            for item in items:
+                meta = item.get('meta', {})
+                if isinstance(meta, str):
+                    try:
+                        meta = json.loads(meta)
+                    except:
+                        meta = {}
+                if meta.get('access_denied'):
+                    blocked_urls.append({
+                        'url': meta.get('source_url') or meta.get('url') or 'Unknown URL',
+                        'title': item.get('title') or 'Access Denied',
+                        'reason': 'Anti-bot protection (Access Denied)'
+                    })
+            
+            if blocked_urls:
+                legacy_run_data["scoring_report"]["blocked_urls"] = blocked_urls
+                logger.info(f"Detected {len(blocked_urls)} blocked URLs due to anti-bot protection")
+            
             # Populate summary stats if available
             if run.summary:
                 legacy_run_data["scoring_report"]["dimension_breakdown"] = {
@@ -1891,6 +1911,32 @@ Summary of Analyzed Content:"""
         full_description = f"{brand_description} This report evaluates **{len(items)} content items** across five trust dimensions."
     
     st.markdown(full_description)
+    
+    # Display blocked URLs warning if any
+    blocked_urls = report.get('blocked_urls', [])
+    if blocked_urls:
+        with st.expander(f"⚠️ **{len(blocked_urls)} URL(s) Blocked by Anti-Bot Protection**", expanded=False):
+            st.markdown("""
+<div style="background-color: #fff3cd; border: 1px solid #ffc107; border-radius: 8px; padding: 12px; margin-bottom: 12px;">
+    <p style="margin: 0; color: #856404;">
+        <strong>What happened:</strong> Some websites use sophisticated anti-bot protection 
+        (like Akamai, Cloudflare, or PerimeterX) that blocked our automated analysis.
+        These sites could not provide content for scoring.
+    </p>
+</div>
+""", unsafe_allow_html=True)
+            
+            st.markdown("**Affected URLs:**")
+            for blocked in blocked_urls:
+                st.markdown(f"- 🚫 [{blocked.get('title', 'Unknown')}]({blocked.get('url', '#')}) — *{blocked.get('reason', 'Access Denied')}*")
+            
+            st.markdown("""
+---
+**What you can do:**
+- These sites' scores are based on limited data (fallback heuristics)
+- For accurate analysis, consider accessing these sites manually or using alternative data sources
+- Social media profiles and subdomain sites often have less restrictive access
+""")
     
     st.divider()
 

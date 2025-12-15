@@ -525,6 +525,11 @@ def generate_trust_stack_report(report_data: Dict[str, Any], model: str = 'gpt-4
     if visual_section:
         content.append(visual_section)
     
+    # 4. Blocked Content Section (if any URLs were blocked by anti-bot protection)
+    blocked_section = _generate_blocked_content_section(report_data)
+    if blocked_section:
+        content.append(blocked_section)
+    
     return "\n\n".join(content)
 
 def _generate_dimension_analysis(
@@ -827,6 +832,47 @@ INSTRUCTIONS:
     except Exception as e:
         logger.error(f"Failed to generate audit report: {e}")
         return f"Error generating audit report: {str(e)}"
+
+
+def _generate_blocked_content_section(report_data: Dict[str, Any]) -> str:
+    """Generate the Blocked Content section for URLs blocked by anti-bot protection.
+    
+    Args:
+        report_data: The full report data dictionary
+        
+    Returns:
+        Markdown string for the blocked content section, or empty string if no blocked URLs
+    """
+    blocked_urls = report_data.get('blocked_urls', [])
+    
+    if not blocked_urls:
+        return ""
+    
+    content = []
+    content.append("\n\n⚠️ **Content Access Limitations**\n")
+    content.append(f"**{len(blocked_urls)} URL(s)** could not be fully analyzed due to anti-bot protection.\n")
+    content.append("""
+These websites use sophisticated security measures (such as Akamai, Cloudflare, or PerimeterX) 
+that blocked automated content retrieval. Scores for these items are based on limited data.
+""")
+    
+    content.append("\n**Affected URLs:**\n")
+    for blocked in blocked_urls:
+        url = blocked.get('url', 'Unknown URL')
+        title = blocked.get('title', 'Unknown Page')
+        reason = blocked.get('reason', 'Access Denied')
+        content.append(f"- 🚫 **{title}**: [{url}]({url})")
+        content.append(f"  - Reason: *{reason}*\n")
+    
+    content.append("""
+---
+**Impact on Analysis:**
+- These sites' Trust Stack scores reflect fallback heuristics rather than full content analysis
+- Dimension scores may be less accurate for these items
+- Consider manual verification or alternative data sources for comprehensive analysis
+""")
+    
+    return "\n".join(content)
 
 def _generate_visual_snapshot(items: List[Dict[str, Any]], run_id: str) -> str:
     """Generate the Visual Analysis Snapshot section with screenshots."""

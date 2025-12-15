@@ -56,6 +56,7 @@ EMOJI_TO_TEXT = {
     '🟡': '[YELLOW]',
     '🟠': '[ORANGE]',
     '🔴': '[RED]',
+    '🚫': '[BLOCKED]',
     # Platform icons
     '🏢': '(OFFICE)',
     '👥': '(PEOPLE)',
