@@ -99,39 +99,78 @@ class ScreenshotCapture:
             
         logger.info("Attempting to dismiss popups...")
         
+        # 1. Try Escape key first (often closes modals)
+        try:
+            page.keyboard.press("Escape")
+            page.wait_for_timeout(300)
+        except Exception:
+            pass
+        
         # Common selectors for close buttons and "No thanks" links
         # Covering: generic close, cookie accept/reject, newsletter dismissal
         selectors = [
-            "button[aria-label='Close']",
-            "button[aria-label='close']",
+            # Specific Consent Managers
+            "#onetrust-accept-btn-handler",
+            "#onetrust-reject-all-handler",
+            "#uc-btn-accept-banner",
+            ".cc-btn.cc-allow",
+            ".cc-btn.cc-dismiss",
+            "button[data-testid='cookie-policy-dialog-accept-button']",
+            
+            # Generic Close Buttons
+            "button[aria-label*='close' i]",
+            "button[aria-label*='dismiss' i]",
             ".close-button",
             ".close-icon",
+            "div[role='button'][aria-label*='close' i]",
             "svg[data-icon='close']",
-            "div[role='button'][aria-label='Close']",
+            "button:has(svg[data-icon='close'])",
+            
             # Common text patterns (case insensitive matching in Playwright)
             "text=No Thanks",
             "text=No, thanks",
             "text=Not now",
             "text=Skip",
+            "text=Maybe later",
+            "text=Continue without accepting",
             "text=Accept All",
             "text=Accept Cookies", 
             "text=Reject All",
             "text=I accept",
+            "text=Agree",
             "button:has-text('Close')",
             "button:has-text('Accept')",
         ]
         
-        for selector in selectors:
-            try:
-                # Check if visible and clickable
-                if page.is_visible(selector, timeout=200):
-                    logger.debug(f"Dismissing popup with selector: {selector}")
-                    page.click(selector, timeout=500)
-                    # Small wait to let animation finish
-                    page.wait_for_timeout(200)
-            except Exception:
-                # Ignore errors (element not found, not clickable, etc.)
-                continue
+        # 3. Loop for multiple updates (some popups reveal others, or wait for animation)
+        max_attempts = 3
+        
+        for attempt in range(max_attempts):
+            clicked_something = False
+            for selector in selectors:
+                try:
+                    # Check if visible and clickable
+                    # Reduced timeout for faster iteration, but enough to detect
+                    if page.is_visible(selector, timeout=100):
+                        logger.debug(f"Dismissing popup with selector: {selector} (Attempt {attempt+1})")
+                        
+                        # Sometimes hover helps activate the element
+                        try:
+                            page.hover(selector, timeout=200)
+                        except: pass
+                        
+                        page.click(selector, timeout=500)
+                        
+                        # Small wait to let animation finish and reveal potentially next popup
+                        page.wait_for_timeout(300)
+                        clicked_something = True
+                except Exception:
+                    # Ignore errors (element not found, not clickable, etc.)
+                    continue
+            
+            # If we didn't click anything in this pass, we are likely done
+            if not clicked_something and attempt > 0:
+                break
 
     def capture_screenshot(
         self,
@@ -177,6 +216,9 @@ class ScreenshotCapture:
 
             # Dismiss popups before capture
             self._dismiss_popups(page)
+            
+            # Allow any final animations/transitions to settle
+            page.wait_for_timeout(500)
 
             # Capture screenshot
             screenshot_args = {
