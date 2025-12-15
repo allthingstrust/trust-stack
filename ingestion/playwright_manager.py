@@ -185,7 +185,9 @@ class PlaywrightBrowserManager:
             # Log shutdown only if not finalizing
             if not sys.is_finalizing():
                 try:
-                    logger.info('Playwright browser thread stopped')
+                    # Check if logger is still valid (not None) during interpreter shutdown
+                    if logger and hasattr(logger, 'info'):
+                        logger.info('Playwright browser thread stopped')
                 except Exception:
                     pass
             
@@ -405,7 +407,9 @@ def _cleanup_browser_manager():
     if _GLOBAL_MANAGER:
         try:
             # Use a short timeout to avoid hanging if the thread is stuck
-            _GLOBAL_MANAGER.close()
+            # Check if global manager is still valid
+            if _GLOBAL_MANAGER:
+                _GLOBAL_MANAGER.close()
         except Exception:
             pass
 
