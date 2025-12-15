@@ -1071,11 +1071,38 @@ def _fetch_with_playwright(url: str, user_agent: str, browser_manager=None) -> D
                 return {"title": "", "body": "", "url": url, "terms": "", "privacy": ""}
             pw_context = sync_playwright().start()
             # Use --disable-http2 to avoid ERR_HTTP2_PROTOCOL_ERROR from CDNs/WAFs
-            browser = pw_context.chromium.launch(headless=True, args=['--disable-http2'])
+            # Add --disable-blink-features=AutomationControlled to evade detection
+            args = [
+                '--disable-http2', 
+                '--disable-blink-features=AutomationControlled',
+                '--disable-infobars',
+                '--no-sandbox',
+                '--disable-setuid-sandbox',
+                '--ignore-certificate-errors',
+            ]
+            browser = pw_context.chromium.launch(headless=True, args=args)
             page = browser.new_page(user_agent=user_agent)
-        
+            
+            # Inject stealth scripts to mask automation (comprehensive)
+            page.add_init_script("""
+                Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+                Object.defineProperty(navigator, 'languages', { get: () => ['en-US', 'en'] });
+                Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3, 4, 5] });
+                window.chrome = { runtime: {} };
+                const originalQuery = window.navigator.permissions.query;
+                window.navigator.permissions.query = (parameters) => (
+                    parameters.name === 'notifications' ?
+                    Promise.resolve({ state: Notification.permission }) :
+                    originalQuery(parameters)
+                );
+            """)
+
         # Navigate to page - use domcontentloaded for faster/more reliable loading
-        response = page.goto(url, timeout=20000, wait_until='domcontentloaded')
+        try:
+            response = page.goto(url, timeout=20000, wait_until='domcontentloaded')
+        except Exception as e:
+            logger.warning(f"Navigation failed (will continue): {e}")
+            response = None
         
         # Check HTTP status from Playwright response
         try:
@@ -1258,7 +1285,11 @@ def fetch_page(url: str, timeout: int = 10, browser_manager=None) -> Dict[str, s
         except Exception:
             allowed = True
         if allowed:
-            return _fetch_with_playwright(url, ua, browser_manager)
+            result = _fetch_with_playwright(url, ua, browser_manager)
+            # If Playwright was blocked (Access Denied) or returned no content, fall back to requests
+            if not result.get('access_denied', False) and result.get('body'):
+                return result
+            logger.warning(f"Playwright fetch denied or failed for {url} (access_denied={result.get('access_denied')}), falling back to requests")
 
     resp = None
     last_status_code = None
