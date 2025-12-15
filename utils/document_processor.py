@@ -9,6 +9,7 @@ import logging
 from typing import Optional, Dict, List, Any
 from pathlib import Path
 from datetime import datetime
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -309,10 +310,25 @@ class BrandGuidelinesProcessor:
         if self.use_s3 and self.s3_client:
             try:
                 text_key = f"{S3_PREFIX}/{brand_id}/guidelines.txt"
-                response = self.s3_client.get_object(
-                    Bucket=S3_BUCKET,
-                    Key=text_key
-                )
+                
+                # Retry logic for connection issues
+                response = None
+                for attempt in range(3):
+                    try:
+                        response = self.s3_client.get_object(
+                            Bucket=S3_BUCKET,
+                            Key=text_key
+                        )
+                        break
+                    except self.s3_client.exceptions.NoSuchKey:
+                        raise # Propagate to outer handler
+                    except Exception as conn_err:
+                        if attempt < 2 and "Could not connect" in str(conn_err):
+                            logger.warning(f"S3 connection error loading guidelines for {brand_id}, retrying ({attempt+1}/3): {conn_err}")
+                            time.sleep(1)
+                        else:
+                            raise conn_err
+                            
                 text = response['Body'].read().decode('utf-8')
                 
                 # Save to local cache for next time
@@ -357,10 +373,25 @@ class BrandGuidelinesProcessor:
         if self.use_s3 and self.s3_client:
             try:
                 metadata_key = f"{S3_PREFIX}/{brand_id}/metadata.json"
-                response = self.s3_client.get_object(
-                    Bucket=S3_BUCKET,
-                    Key=metadata_key
-                )
+                
+                # Retry logic for connection issues
+                response = None
+                for attempt in range(3):
+                    try:
+                        response = self.s3_client.get_object(
+                            Bucket=S3_BUCKET,
+                            Key=metadata_key
+                        )
+                        break
+                    except self.s3_client.exceptions.NoSuchKey:
+                        raise # Propagate to outer handler
+                    except Exception as conn_err:
+                        if attempt < 2 and "Could not connect" in str(conn_err):
+                            logger.warning(f"S3 connection error loading metadata for {brand_id}, retrying ({attempt+1}/3): {conn_err}")
+                            time.sleep(1)
+                        else:
+                            raise conn_err
+                            
                 metadata = json.loads(response['Body'].read().decode('utf-8'))
                 
                 # Save to local cache

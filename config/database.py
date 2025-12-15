@@ -5,6 +5,10 @@ AWS Athena and S3 settings
 
 import os
 from typing import Dict, Any
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 # Database settings
 DATABASE_CONFIG = {
