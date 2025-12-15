@@ -1265,14 +1265,7 @@ def fetch_page(url: str, timeout: int = 10, browser_manager=None) -> Dict[str, s
     # But only if Playwright is available and enabled
     use_pw_config = should_use_playwright(url)
     
-    # Force Playwright if visual analysis is enabled and it's a likely candidate
-    visual_enabled = SETTINGS.get('visual_analysis_enabled', False)
-    if visual_enabled and _PLAYWRIGHT_AVAILABLE:
-        # Check if it's a root domain (landing page)
-        is_home = parsed.path in ['', '/', '/index.html']
-        if is_home:
-            use_pw_config = True
-            logger.info(f"Visual Analysis: Forcing Playwright for landing page {url}")
+    # Removed early Playwright forcing for visual analysis to prioritize requests-first strategy
 
     if _PLAYWRIGHT_AVAILABLE and (use_pw_config or _domain_config.requires_playwright(url)):
         logger.info('Smart Fallback: Skipping lxml fetch for %s (known to require Playwright)', url)
@@ -1433,7 +1426,7 @@ def fetch_page(url: str, timeout: int = 10, browser_manager=None) -> Dict[str, s
         except Exception:
             verification_badges = {"verified": False, "platform": "unknown", "badge_type": "", "evidence": ""}
         
-        return {
+        result = {
             "title": title, 
             "body": body, 
             "structured_body": structured_body,
@@ -1441,9 +1434,44 @@ def fetch_page(url: str, timeout: int = 10, browser_manager=None) -> Dict[str, s
             "terms": links.get("terms", ""), 
             "privacy": links.get("privacy", ""),
             "verification_badges": verification_badges,
-            "screenshot_path": None,  # No screenshot from LXML fetch
+            "screenshot_path": None,
             "access_denied": access_denied
         }
+
+        # NEW: Secondary Visual Analysis Step
+        # If visual analysis is enabled and we haven't captured a screenshot yet, try Playwright now.
+        visual_enabled = SETTINGS.get('visual_analysis_enabled', False)
+        if visual_enabled and _PLAYWRIGHT_AVAILABLE and not result.get('screenshot_path'):
+            # Only attempt if the main request wasn't blocked (if it was blocked, we already know we can't access)
+            if not result.get('access_denied'):
+                logger.info("Visual Analysis: Attempting secondary Playwright fetch for screenshot...")
+                try:
+                    # Use realistic headers for the secondary fetch
+                    pw_headers = get_realistic_headers(url)
+                    ua = pw_headers['User-Agent']
+                    pw_result = _fetch_with_playwright(url, ua, browser_manager)
+                    
+                    # Only merge if PW succeeds and isn't blocked
+                    if not pw_result.get('access_denied'):
+                        result['screenshot_path'] = pw_result.get('screenshot_path')
+                        if pw_result.get('screenshot_path'):
+                            logger.info(f"Visual Analysis: Successfully captured screenshot: {pw_result['screenshot_path']}")
+                        
+                        # Optionally upgrade body/badges if PW found more content
+                        # (Playwright renders JS, so it might find things requests missed)
+                        if len(pw_result.get('body', '')) > len(result.get('body', '')):
+                            result['body'] = pw_result['body']
+                            result['structured_body'] = _extract_elements_with_structure(BeautifulSoup(pw_result['body'], "lxml"))
+                        
+                        # Merge verification badges if PW found them
+                        if pw_result.get('verification_badges', {}).get('verified'):
+                            result['verification_badges'] = pw_result['verification_badges']
+                    else:
+                        logger.warning(f"Visual Analysis: Secondary Playwright fetch was blocked (Access Denied). Keeping standard content for {url}")
+                except Exception as e:
+                    logger.warning(f"Visual Analysis: Secondary Playwright fetch failed: {e}")
+
+        return result
 
     except Exception as e:
         logger.error("Error fetching page %s: %s", url, e)
