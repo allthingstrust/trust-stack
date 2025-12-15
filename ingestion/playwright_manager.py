@@ -86,6 +86,10 @@ class PlaywrightBrowserManager:
                 '--disable-http2',
                 # Stealth additions
                 '--disable-blink-features=AutomationControlled',
+                '--disable-infobars',
+                '--no-sandbox',
+                '--disable-setuid-sandbox',
+                '--ignore-certificate-errors',
             ]
             
             browser = playwright.chromium.launch(
@@ -299,12 +303,30 @@ class PlaywrightBrowserManager:
                 except Exception as e:
                     logger.warning(f"[PLAYWRIGHT] Screenshot capture failed for {url}: {e}")
 
+            # Check for Access Denied / Blocked content
+            access_denied = False
+            lower_title = page_title.lower()
+            lower_content = page_content.lower()[:5000] # Check first 5kb
+            
+            # Common WAF/Block pages
+            if "access denied" in lower_title or "access denied" in lower_content:
+                if "website" not in lower_title: # Avoid false positives like "Access Denied: The Movie"
+                    access_denied = True
+            elif "403 forbidden" in lower_title or "403 forbidden" in lower_content:
+                access_denied = True
+            elif "cloudflare" in lower_title and "security" in lower_title:
+                access_denied = True
+            
+            if access_denied:
+                logger.warning(f"[PLAYWRIGHT] Detected Access Denied content for {url}")
+
             return {
                 "title": page_title.strip(),
                 "body": page_body.strip(),
                 "url": url,
                 "raw_content": page_content, # Return raw content for footer link extraction
-                "screenshot_path": screenshot_key
+                "screenshot_path": screenshot_key,
+                "access_denied": access_denied
             }
         finally:
             if page:
