@@ -83,7 +83,9 @@ class PlaywrightBrowserManager:
                 '--disable-setuid-sandbox',
                 '--disable-accelerated-2d-canvas',
                 '--disable-gl-drawing-for-tests',
-                '--disable-http2'
+                '--disable-http2',
+                # Stealth additions
+                '--disable-blink-features=AutomationControlled',
             ]
             
             browser = playwright.chromium.launch(
@@ -196,6 +198,36 @@ class PlaywrightBrowserManager:
             logger.debug(f'[PLAYWRIGHT] Creating new page for: {url}')
             page = browser.new_page(user_agent=user_agent)
             logger.debug(f'[PLAYWRIGHT] Page created, navigating to: {url}')
+            # Stealth: Inject scripts to mask automation
+            page.add_init_script("""
+                Object.defineProperty(navigator, 'webdriver', {
+                    get: () => undefined
+                });
+                
+                // Pass Chrome test
+                window.chrome = {
+                    runtime: {}
+                };
+                
+                // Pass Permissions test
+                const originalQuery = window.navigator.permissions.query;
+                window.navigator.permissions.query = (parameters) => (
+                    parameters.name === 'notifications' ?
+                    Promise.resolve({ state: Notification.permission }) :
+                    originalQuery(parameters)
+                );
+                
+                // Pass Plugins length test
+                Object.defineProperty(navigator, 'plugins', {
+                    get: () => [1, 2, 3, 4, 5]
+                });
+                
+                // Pass Languages test
+                Object.defineProperty(navigator, 'languages', {
+                    get: () => ['en-US', 'en']
+                });
+            """)
+
             # Use domcontentloaded instead of 'load' - faster and more reliable for SPAs
             # 'load' waits for all resources which can timeout on heavy sites
             page.goto(url, timeout=20000, wait_until='domcontentloaded')

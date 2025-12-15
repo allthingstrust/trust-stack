@@ -1028,12 +1028,13 @@ def _fetch_with_playwright(url: str, user_agent: str, browser_manager=None) -> D
         browser_manager: Optional PlaywrightBrowserManager instance for persistent browser
         
     Returns:
-        Dict with title, body, url, terms, and privacy keys
+        Dict with title, body, url, terms, privacy, and access_denied keys
     """
     page = None
     browser = None
     pw_context = None
     screenshot_key = None
+    access_denied = False
     
     try:
         # Check if visual analysis is enabled
@@ -1074,7 +1075,15 @@ def _fetch_with_playwright(url: str, user_agent: str, browser_manager=None) -> D
             page = browser.new_page(user_agent=user_agent)
         
         # Navigate to page - use domcontentloaded for faster/more reliable loading
-        page.goto(url, timeout=20000, wait_until='domcontentloaded')
+        response = page.goto(url, timeout=20000, wait_until='domcontentloaded')
+        
+        # Check HTTP status from Playwright response
+        try:
+            if response and response.status in [403, 401]:
+                logger.warning(f"Playwright navigation returned status {response.status} for {url}")
+                access_denied = True
+        except Exception:
+            pass
         
         # Wait for body
         try:
@@ -1084,6 +1093,23 @@ def _fetch_with_playwright(url: str, user_agent: str, browser_manager=None) -> D
         
         page_content = page.content()
         page_title = page.title() or ''
+
+        # Check for textual indications of Access Denied if status wasn't enough
+        if not access_denied:
+            lower_title = page_title.lower()
+            lower_content = page_content.lower()[:5000] # Check first 5kb
+            
+            # Common WAF/Block pages
+            if "access denied" in lower_title or "access denied" in lower_content:
+                if "website" not in lower_title: # Avoid false positives like "Access Denied: The Movie"
+                    access_denied = True
+            elif "403 forbidden" in lower_title or "403 forbidden" in lower_content:
+                access_denied = True
+            elif "cloudflare" in lower_title and "security" in lower_title:
+                access_denied = True
+        
+        if access_denied:
+            logger.warning(f"Detected Access Denied content for {url}")
         
         # Try multiple extraction strategies for rendered content
         page_body = ""
@@ -1163,13 +1189,17 @@ def _fetch_with_playwright(url: str, user_agent: str, browser_manager=None) -> D
             "terms": links.get("terms", ""),
             "privacy": links.get("privacy", ""),
             "verification_badges": verification_badges,
-            "screenshot_path": screenshot_key
+            "verification_badges": verification_badges,
+            "screenshot_path": screenshot_key,
+            "access_denied": access_denied
         }
 
         
     except Exception as e:
         logger.warning('Playwright fetch failed for %s: %s', url, e)
-        return {"title": "", "body": "", "url": url, "terms": "", "privacy": ""}
+    except Exception as e:
+        logger.warning('Playwright fetch failed for %s: %s', url, e)
+        return {"title": "", "body": "", "url": url, "terms": "", "privacy": "", "access_denied": False}
     finally:
         # Clean up
         if page:
@@ -1255,7 +1285,7 @@ def fetch_page(url: str, timeout: int = 10, browser_manager=None) -> Dict[str, s
             if attempt == retries:
                 logger.error('Error fetching page %s after %s attempts: %s', url, retries, e)
                 # No resp to dump; just return empty
-                return {"title": "", "body": "", "url": url}
+                return {"title": "", "body": "", "url": url, "access_denied": False}
             # Get smarter backoff based on status code if available
             retry_config_updated = get_retry_config(url, last_status_code)
             backoff = retry_config_updated['base_backoff']
@@ -1303,7 +1333,10 @@ def fetch_page(url: str, timeout: int = 10, browser_manager=None) -> Dict[str, s
                 links = _extract_footer_links(getattr(resp, 'text', '') or '', url)
             except Exception:
                 links = {"terms": "", "privacy": ""}
-            return {"title": "", "body": "", "url": url, "terms": links.get("terms", ""), "privacy": links.get("privacy", "")}
+            return {"title": "", "body": "", "url": url, "terms": links.get("terms", ""), "privacy": links.get("privacy", ""), "access_denied": resp.status_code == 403}
+
+        # Check for 403 Forbidden specifically to mark as access denied
+        access_denied = resp.status_code == 403
 
         soup = BeautifulSoup(resp.text, "lxml")
         title = soup.title.string.strip() if soup.title and soup.title.string else ""
@@ -1377,7 +1410,8 @@ def fetch_page(url: str, timeout: int = 10, browser_manager=None) -> Dict[str, s
             "terms": links.get("terms", ""), 
             "privacy": links.get("privacy", ""),
             "verification_badges": verification_badges,
-            "screenshot_path": None  # No screenshot from LXML fetch
+            "screenshot_path": None,  # No screenshot from LXML fetch
+            "access_denied": access_denied
         }
 
     except Exception as e:
@@ -1391,7 +1425,7 @@ def fetch_page(url: str, timeout: int = 10, browser_manager=None) -> Dict[str, s
                 (dump_dir / f'{safe}_exception.html').write_text(getattr(resp, 'text', '') or '', encoding='utf-8')
         except Exception:
             pass
-        return {"title": "", "body": "", "url": url}
+        return {"title": "", "body": "", "url": url, "access_denied": False}
 
 
 def fetch_pages_parallel(
@@ -1472,7 +1506,7 @@ def fetch_pages_parallel(
             except Exception as e:
                 logger.warning('[PARALLEL] ✗ Failed to fetch %s [%d/%d]: %s', 
                              url, completed, len(urls), e)
-                results[url] = {"title": "", "body": "", "url": url}
+                results[url] = {"title": "", "body": "", "url": url, "access_denied": False}
     
     elapsed = time.time() - start_time
     logger.info('[PARALLEL] Completed fetching %d pages in %.2f seconds (avg: %.2f s/page)',

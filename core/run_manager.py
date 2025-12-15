@@ -172,6 +172,12 @@ class RunManager:
                             if not asset.get("meta_info"):
                                 asset["meta_info"] = {}
                             asset["meta_info"]["structured_body"] = result.get("structured_body")
+
+                        # Propagate access_denied flag
+                        if result.get("access_denied"):
+                            if not asset.get("meta_info"):
+                                asset["meta_info"] = {}
+                            asset["meta_info"]["access_denied"] = True
                         
                         fetched_assets.append(asset)
                         logger.debug(f"Fetched {len(body)} chars for {url}")
@@ -332,7 +338,8 @@ class RunManager:
                             "query": kw,
                             "source_url": page.get("url"),
                             "title": page.get("title"),
-                            "description": (page.get("body") or "")[:500]
+                            "description": (page.get("body") or "")[:500],
+                            "access_denied": page.get("access_denied", False)
                         },
                     }
                 )

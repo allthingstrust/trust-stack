@@ -281,6 +281,22 @@ class ContentScorer:
         Perform visual analysis and append signals.
         """
         try:
+            # Check for Access Denied first
+            if getattr(content, 'meta', {}) and content.meta.get('access_denied'):
+                error_msg = "Visual analysis skipped: Access Denied to website"
+                logger.warning(error_msg)
+                
+                if content.meta is None:
+                    content.meta = {}
+                    
+                content.meta['visual_analysis'] = {
+                    "success": False,
+                    "error": error_msg,
+                    "url": content.url,
+                    "access_denied": True
+                }
+                return
+
             from ingestion.screenshot_capture import get_screenshot_capture
             from scoring.visual_analyzer import get_visual_analyzer
             
