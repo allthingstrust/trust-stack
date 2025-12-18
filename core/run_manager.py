@@ -5,7 +5,8 @@ from __future__ import annotations
 import logging
 import uuid
 from datetime import datetime
-from typing import Dict, Iterable, List, Optional
+from typing import Dict, Iterable, List, Optional, Any
+import json
 
 from data import models
 from data import store
@@ -769,4 +770,132 @@ class RunManager:
         averages["overall_score"] = _avg("overall_score")
         averages["authenticity_ratio"] = averages["overall_score"]
         return averages
+
+    def build_report_data(self, run_id: str) -> Dict[str, Any]:
+        """Construct the report data dictionary for a given run ID.
+
+        Refactored from redundant logic in run_pipeline.py and webapp/app.py.
+        Includes visual_analysis data extraction.
+        """
+        with store.session_scope(self.engine) as session:
+            # Re-fetch run with all relationships loaded
+            run = (
+                session.query(models.Run)
+                .options(
+                    joinedload(models.Run.summary),
+                    joinedload(models.Run.brand),
+                    joinedload(models.Run.assets).joinedload(models.ContentAsset.scores)
+                )
+                .filter(models.Run.id == run_id)
+                .first()
+            )
+
+            if not run:
+                raise ValueError(f"Run {run_id} not found")
+
+            # Construct items list
+            items = []
+            for asset in run.assets:
+                # Ensure meta includes source_url for evidence tracking
+                meta = asset.meta_info.copy() if asset.meta_info else {}
+                if asset.url and not meta.get('source_url'):
+                    meta['source_url'] = asset.url
+                
+                # Basic item structure
+                item = {
+                    "id": asset.id,
+                    "url": asset.url,
+                    "title": asset.title,
+                    "body": asset.raw_content, # simplified
+                    "meta": meta,
+                    "dimension_scores": {},
+                    "visual_analysis": None, # Initialize
+                    "screenshot_path": asset.screenshot_path # Default from asset
+                }
+
+                # If no title in meta, populate it
+                if not item["meta"].get("title"):
+                    item["meta"]["title"] = asset.title
+                
+                # Extract scores if available
+                if asset.scores and len(asset.scores) > 0:
+                    score = asset.scores[0]
+                    item["final_score"] = (score.overall_score or 0) * 100
+                    item["dimension_scores"] = {
+                        "provenance": score.score_provenance,
+                        "verification": score.score_verification,
+                        "transparency": score.score_transparency,
+                        "coherence": score.score_coherence,
+                        "resonance": score.score_resonance,
+                        "ai_readiness": score.score_ai_readiness
+                    }
+
+                    # Merge detected_attributes from rationale
+                    rationale = score.rationale or {}
+                    
+                    # specific fix for json strings if they happen
+                    if isinstance(rationale, str):
+                        try:
+                            rationale = json.loads(rationale)
+                        except:
+                            rationale = {}
+
+                    if isinstance(rationale, dict):
+                        if rationale.get('detected_attributes'):
+                            item["meta"]["detected_attributes"] = rationale["detected_attributes"]
+                        
+                        if 'dimensions' in rationale:
+                            item["dimension_details"] = rationale['dimensions']
+                        
+                        # ALL-6 Fix: Extract visual_analysis
+                        if rationale.get('visual_analysis'):
+                             item["visual_analysis"] = rationale['visual_analysis']
+                             
+                        # ALL-6 Fix: Fallback for screenshot path if not on asset
+                        if not item["screenshot_path"] and rationale.get('screenshot_path'):
+                             item["screenshot_path"] = rationale['screenshot_path']
+
+                items.append(item)
+
+            dimension_breakdown = {}
+            if run.summary:
+                dimension_breakdown = {
+                    "provenance": {"average": run.summary.avg_provenance or 0},
+                    "verification": {"average": run.summary.avg_verification or 0},
+                    "transparency": {"average": run.summary.avg_transparency or 0},
+                    "coherence": {"average": run.summary.avg_coherence or 0},
+                    "resonance": {"average": run.summary.avg_resonance or 0},
+                    "ai_readiness": {"average": run.summary.avg_ai_readiness or 0}
+                }
+            
+            # Collect blocked URLs (access_denied)
+            blocked_urls = []
+            for item in items:
+                meta = item.get('meta', {})
+                if meta.get('access_denied'):
+                    blocked_urls.append({
+                        'url': meta.get('source_url') or meta.get('url') or 'Unknown URL',
+                        'title': item.get('title') or 'Access Denied',
+                        'reason': 'Anti-bot protection (Access Denied)'
+                    })
+            
+            # Detach data so it survives session close
+            session.expunge_all()
+
+            return {
+                "run_id": run.id,
+                "external_id": run.external_id,
+                "brand_id": run.brand.name if run.brand else "unknown",
+                "generated_at": run.started_at.strftime("%Y-%m-%d"),
+                "total_items_analyzed": len(items),
+                "dimension_breakdown": dimension_breakdown,
+                "items": items,
+                "blocked_urls": blocked_urls,
+                "sources": run.config.get("sources", []) if run.config else [],
+                "appendix": items,
+                "authenticity_ratio": {
+                     "authenticity_ratio_pct": (run.summary.authenticity_ratio or 0) * 100 if run.summary else 0
+                }
+            }
+
 

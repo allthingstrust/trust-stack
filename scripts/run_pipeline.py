@@ -102,85 +102,12 @@ def main():
     # Generate full human-readable report if requested
     if args.print_report:
         print("\nGethering report data...")
-        from data import models
-        from sqlalchemy.orm import joinedload
         from reporting.trust_stack_report import generate_trust_stack_report
 
-        with store.session_scope(engine) as session:
-            # Re-fetch run with all relationships loaded
-            run_data = session.query(models.Run).options(
-                joinedload(models.Run.summary),
-                joinedload(models.Run.brand),
-                joinedload(models.Run.assets).joinedload(models.ContentAsset.scores)
-            ).filter(models.Run.id == run.id).first()
+        try:
+            # Use centralized report data builder (includes visual analysis fix)
+            report_data_dict = manager.build_report_data(run.id)
 
-            if not run_data:
-                print("Error: Could not retrieve run data for reporting.")
-                return
-
-            # Construct report_data dictionary expected by the report generator
-            items = []
-            for asset in run_data.assets:
-                # Ensure meta includes source_url for evidence tracking
-                meta = asset.meta_info.copy() if asset.meta_info else {}
-                if asset.url and not meta.get('source_url'):
-                    meta['source_url'] = asset.url
-                
-                item = {
-                    "id": asset.id,
-                    "url": asset.url,
-                    "title": asset.title,
-                    "body": asset.raw_content, # simplified
-                    "meta": meta,
-                    "dimension_scores": {}
-                }
-                
-                # Extract scores if available
-                if asset.scores and len(asset.scores) > 0:
-                    score = asset.scores[0]
-                    item["final_score"] = (score.overall_score or 0) * 100
-                    item["dimension_scores"] = {
-                        "provenance": score.score_provenance,
-                        "verification": score.score_verification,
-                        "transparency": score.score_transparency,
-                        "coherence": score.score_coherence,
-                        "resonance": score.score_resonance,
-                        "ai_readiness": score.score_ai_readiness
-                    }
-
-                    # Merge detected_attributes from rationale
-                    rationale = score.rationale or {}
-                    
-                    # Extract dimension details (signals) if available
-                    if isinstance(rationale, dict):
-                        if rationale.get('detected_attributes'):
-                            item["meta"]["detected_attributes"] = rationale["detected_attributes"]
-                        
-                        # Store detailed dimension data (including signals) if available
-                        if 'dimensions' in rationale:
-                            item["dimension_details"] = rationale['dimensions']
-                
-                items.append(item)
-
-            dimension_breakdown = {}
-            if run_data.summary:
-                dimension_breakdown = {
-                    "provenance": {"average": run_data.summary.avg_provenance or 0},
-                    "verification": {"average": run_data.summary.avg_verification or 0},
-                    "transparency": {"average": run_data.summary.avg_transparency or 0},
-                    "coherence": {"average": run_data.summary.avg_coherence or 0},
-                    "resonance": {"average": run_data.summary.avg_resonance or 0},
-                    "ai_readiness": {"average": run_data.summary.avg_ai_readiness or 0}
-                }
-
-            report_data_dict = {
-                "brand_id": run_data.brand.name if run_data.brand else args.brand,
-                "generated_at": run_data.started_at.strftime("%Y-%m-%d"),
-                "total_items_analyzed": len(items),
-                "dimension_breakdown": dimension_breakdown,
-                "items": items,
-                "sources": run_config.get("sources", [])
-            }
 
             print("\n" + "="*80)
             print(f"TRUST STACK REPORT: {args.brand}")

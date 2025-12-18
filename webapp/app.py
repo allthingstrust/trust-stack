@@ -1461,109 +1461,26 @@ def show_analyze_page():
                 
             # Adapt Run object to legacy dict format for UI compatibility
             # This ensures show_results_page works without major rewrite
+            # Use centralized builder (includes visual analysis fix)
+            report_data = manager.build_report_data(run.id)
+            
+            # Inject UI-specific model metadata
+            report_data["llm_model"] = summary_model
+            report_data["recommendations_model"] = recommendations_model
+            
             legacy_run_data = {
                 "run_id": run.external_id,
                 "brand_id": run.brand.slug,
                 "timestamp": run.started_at.isoformat(),
                 "sources": sources,
-                "scoring_report": {
-                    "items": [],
-                    "dimension_breakdown": {},
-                    "llm_model": summary_model,
-                    "recommendations_model": recommendations_model,
-                    # Inject fields required by trust_stack_report.py
-                    "brand_id": run.brand.name,  # Use name for display
-                    "generated_at": run.started_at.strftime("%B %d, %Y"),
-                    "total_items_analyzed": len(run.assets) if run.assets else 0
-                }
+                "scoring_report": report_data,
+                "authenticity_ratio": report_data.get("authenticity_ratio")
             }
             
-            progress_animator.show("Processing scored assets...", "📝")
-            progress_bar.progress(80)
-            
-            # Convert assets and scores
-            items = []
-            if run.assets:
-                for asset in run.assets:
-                    item = {
-                        "title": asset.title or "Untitled",
-                        "final_score": 0, # Default
-                        "dimension_scores": {},
-                        "meta": asset.meta_info or {},
-                        "source": asset.source_type,
-                        # Critical: Pass content body for analysis context
-                        "body": asset.normalized_content or asset.raw_content or "",
-                        "screenshot_path": asset.screenshot_path,
-                        "visual_analysis": asset.visual_analysis
-                    }
-                    # Populate meta with essential fields if missing
-                    if not item["meta"].get("url"):
-                        item["meta"]["url"] = asset.url
-                    if not item["meta"].get("source_url"):
-                        item["meta"]["source_url"] = asset.url
-                    if not item["meta"].get("title"):
-                        item["meta"]["title"] = asset.title
-                        
-                    if asset.scores:
-                        # Assuming 1:1 relationship for now
-                        score = asset.scores[0]
-                        item["final_score"] = (score.overall_score or 0) * 100
-                        item["dimension_scores"] = {
-                            "provenance": score.score_provenance,
-                            "verification": score.score_verification,
-                            "transparency": score.score_transparency,
-                            "coherence": score.score_coherence,
-                            "resonance": score.score_resonance,
-                            "ai_readiness": score.score_ai_readiness
-                        }
-                        # Merge detected_attributes from score.rationale into meta
-                        # This enables the report generator to show actual attribute values
-                        rationale = score.rationale or {}
-                        if isinstance(rationale, dict):
-                            if rationale.get('detected_attributes'):
-                                item["meta"]["detected_attributes"] = rationale["detected_attributes"]
-                            # v5.1: Extract dimension signals for accurate diagnostics table
-                            # This fixes the math mismatch where diagnostics showed attribute scores
-                            # but dimension score was calculated from LLM signals
-                            if rationale.get('dimensions'):
-                                item["dimension_details"] = rationale["dimensions"]
-                    items.append(item)
-            
-            legacy_run_data["scoring_report"]["items"] = items
-            
-            # Collect blocked URLs (access_denied by anti-bot protection)
-            blocked_urls = []
-            for item in items:
-                meta = item.get('meta', {})
-                if isinstance(meta, str):
-                    try:
-                        meta = json.loads(meta)
-                    except:
-                        meta = {}
-                if meta.get('access_denied'):
-                    blocked_urls.append({
-                        'url': meta.get('source_url') or meta.get('url') or 'Unknown URL',
-                        'title': item.get('title') or 'Access Denied',
-                        'reason': 'Anti-bot protection (Access Denied)'
-                    })
-            
+            # Log blocked URLs if any
+            blocked_urls = report_data.get('blocked_urls', [])
             if blocked_urls:
-                legacy_run_data["scoring_report"]["blocked_urls"] = blocked_urls
                 logger.info(f"Detected {len(blocked_urls)} blocked URLs due to anti-bot protection")
-            
-            # Populate summary stats if available
-            if run.summary:
-                legacy_run_data["scoring_report"]["dimension_breakdown"] = {
-                    "provenance": {"average": run.summary.avg_provenance or 0},
-                    "verification": {"average": run.summary.avg_verification or 0},
-                    "transparency": {"average": run.summary.avg_transparency or 0},
-                    "coherence": {"average": run.summary.avg_coherence or 0},
-                    "resonance": {"average": run.summary.avg_resonance or 0},
-                    "ai_readiness": {"average": run.summary.avg_ai_readiness or 0}
-                }
-                legacy_run_data["authenticity_ratio"] = {
-                    "authenticity_ratio_pct": (run.summary.authenticity_ratio or 0) * 100
-                }
 
             # Generate PDF report
             progress_animator.show("Generating PDF report...", "📄")
