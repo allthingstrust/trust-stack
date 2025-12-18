@@ -543,63 +543,48 @@ class PDFReportGenerator:
         rating_summary = f"Rating Distribution: {excellent} Excellent | {good} Good | {fair} Fair | {poor} Poor"
         story.append(Paragraph(rating_summary, self.styles['Normal']))
 
-        # Executive one-liner
-        if avg_rating >= 80:
-            quality = "excellent"
-        elif avg_rating >= 60:
-            quality = "good"
-        elif avg_rating >= 40:
-            quality = "fair"
-        else:
-            quality = "requires immediate attention"
-
-        executive_one_liner = f"Executive Summary: Average content rating of {avg_rating:.1f}/100 indicates {quality} brand content quality across {total_items} analyzed items."
-        story.append(Spacer(1, 6))
-        story.append(Paragraph(executive_one_liner, self.styles['Normal']))
-
-        # Add concrete example from the data with actionable guidance
+        # Executive Summary
         story.append(Spacer(1, 12))
-        if items:
-            items_coerced = [_coerce_item_to_dict(it) for it in items]
+        story.append(Paragraph("Executive Summary", self.styles['SectionHeader']))
+        
+        # Generate comprehensive executive summary using shared logic
+        try:
+            from reporting.executive_summary import generate_executive_summary
+            
+            # Calculate average rating
+            avg_rating = 0
+            if items:
+                avg_rating = sum(item.get('final_score', 0) for item in items) / len(items) * 100
+                
+            # Get dimension breakdown
             dimension_breakdown = report_data.get('dimension_breakdown', {})
-
-            # Find a content item that needs improvement (score < 60)
-            items_needing_improvement = [it for it in items_coerced if it.get('final_score', 0) < 60]
-
-            if items_needing_improvement:
-                # Get the first item needing improvement
-                example_item = items_needing_improvement[0]
-                meta = example_item.get('meta', {})
-                title = meta.get('title') or meta.get('url') or 'content item'
-                if len(title) > 60:
-                    title = title[:57] + '...'
-
-                item_score = example_item.get('final_score', 0)
-                dim_scores = example_item.get('dimension_scores', {})
-
-                # Find the weakest dimension for this item
-                if dim_scores:
-                    weakest_dim = min(dim_scores.items(), key=lambda x: x[1] if x[1] is not None else 1.0)
-                    weakest_dim_name = weakest_dim[0].replace('_', ' ').title()
-                    weakest_dim_score = weakest_dim[1] * 100 if weakest_dim[1] is not None else 0
-
-                    # Map dimension to specific action
-                    dim_actions = {
-                        'provenance': 'add clear author attribution, publication date, and schema.org markup',
-                        'verification': 'add citations to authoritative sources and fact-check all claims',
-                        'transparency': 'add disclosure statements and clear attribution for all sourced information',
-                        'coherence': 'ensure messaging aligns with your brand voice across all channels',
-                        'resonance': 'reduce promotional language and increase culturally relevant messaging; add structured data markup and improve semantic HTML for better machine discoverability'
-                    }
-
-                    action = dim_actions.get(weakest_dim[0], 'improve trust signals')
-
-                    example_text = (
-                        f"<i>For example, your content \"{title}\" scored {item_score:.1f}/100, with particularly weak "
-                        f"{weakest_dim_name} ({weakest_dim_score:.1f}/100). To improve this, you should {action}. "
-                        f"Addressing these issues could move this content from its current rating to Good or Excellent.</i>"
-                    )
-                    story.append(Paragraph(example_text, self.styles['Normal']))
+            
+            # Get model configuration
+            summary_model = report_data.get('llm_model', 'gpt-4o-mini')
+            use_llm = report_data.get('use_llm_summary', True)
+            
+            sources = report_data.get('sources', [])
+            
+            # Generate summary
+            exec_summary_md = generate_executive_summary(
+                avg_rating=avg_rating,
+                dimension_breakdown=dimension_breakdown,
+                items=items,
+                sources=sources,
+                model=summary_model,
+                use_llm=use_llm
+            )
+            
+            # Render markdown to PDF
+            story.extend(self._markdown_to_pdf_elements(exec_summary_md))
+            
+        except ImportError:
+            # Fallback if module missing
+            logger.warning("Components for Executive Summary generation missing.")
+            story.append(Paragraph("Executive summary generation unavailable.", self.styles['Normal']))
+        except Exception as e:
+            logger.error(f"Failed to generate Executive Summary for PDF: {e}")
+            story.append(Paragraph(f"<i>Error generating executive summary: {str(e)}</i>", self.styles['Normal']))
 
         return story
 
