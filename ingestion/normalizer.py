@@ -84,7 +84,10 @@ class ContentNormalizer:
                 published_at=content.published_at,
                 modality=content.modality,
                 channel=content.channel,
-                platform_type=content.platform_type
+                platform_type=content.platform_type,
+                # Preserve visual analysis fields
+                screenshot_path=content.screenshot_path,
+                visual_analysis=content.visual_analysis
             ))
         
         return cleaned_content

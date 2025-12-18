@@ -1413,7 +1413,10 @@ def show_analyze_page():
                         "url": url_data.get('url'),
                         "title": url_data.get('title'),
                         "source_type": "web", # Default to web for now
-                        "metadata": url_data
+                        "metadata": url_data,
+                        # Pass visual analysis data at top level for RunManager
+                        "screenshot_path": url_data.get('screenshot_path'),
+                        "visual_analysis": url_data.get('visual_analysis')
                     })
 
             progress_animator.show(f"Configuring analysis for {brand_id}...", "⚙️")

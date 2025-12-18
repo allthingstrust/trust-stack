@@ -331,6 +331,10 @@ def fetch_and_process_selected_urls(selected_urls: List[Dict[str, Any]]):
                 original['status'] = 200 if result.get('body') else 0 # Simple status proxy
                 original['fetched'] = True
                 
+                # Capture visual analysis data
+                original['screenshot_path'] = result.get('screenshot_path')
+                original['verification_badges'] = result.get('verification_badges')
+                
                 # Check for thin content
                 if not original['body'] or len(original['body']) < 200:
                     original['warning'] = "Thin content"

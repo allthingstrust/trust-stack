@@ -533,6 +533,7 @@ class RunManager:
                         source_type=asset.source_type or "web",
                         source_tier=meta.get("source_tier", "unknown"),
                         screenshot_path=asset.screenshot_path,
+                        visual_analysis=asset.visual_analysis,
                     )
                     normalized_content_list.append(nc)
                 
