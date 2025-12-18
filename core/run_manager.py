@@ -335,6 +335,7 @@ class RunManager:
                         "title": page.get("title"),
                         "raw_content": page.get("body") or page.get("content") or page.get("snippet"),
                         "normalized_content": page.get("body") or page.get("content") or page.get("snippet"),
+                        "screenshot_path": page.get("screenshot_path"),
                         "meta_info": {
                             "query": kw,
                             "source_url": page.get("url"),
@@ -365,6 +366,7 @@ class RunManager:
                         "title": page.get("title"),
                         "raw_content": page.get("body") or page.get("content") or page.get("snippet"),
                         "normalized_content": page.get("body") or page.get("content") or page.get("snippet"),
+                        "screenshot_path": page.get("screenshot_path"),
                         "meta_info": {
                             "query": kw,
                             "source_url": page.get("url"),
