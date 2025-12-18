@@ -12,7 +12,10 @@ class TestAccessDeniedFlow(unittest.TestCase):
     def test_access_denied_flow(self):
         # 1. Simulate Fetch returning access_denied
         # We'll mock the internal _fetch_with_playwright to return access_denied
-        with patch('ingestion.page_fetcher._fetch_with_playwright') as mock_fetch:
+        with patch('ingestion.page_fetcher._fetch_with_playwright') as mock_fetch, \
+             patch('ingestion.page_fetcher.requests.Session.get') as mock_get:
+            
+            # Configure Playwright mock
             mock_fetch.return_value = {
                 "title": "Access Denied",
                 "body": "You don't have permission",
@@ -20,6 +23,13 @@ class TestAccessDeniedFlow(unittest.TestCase):
                 "access_denied": True,
                 "screenshot_path": "/tmp/dummy_screenshot.png"
             }
+            
+            # Configure Requests mock to also return 403 (Forbidden)
+            # This ensures that when fetch_page falls back to requests, it also sees access denied
+            mock_response = MagicMock()
+            mock_response.status_code = 403
+            mock_response.text = "Forbidden"
+            mock_get.return_value = mock_response
             
             # Test fetch_page propagation
             result = fetch_page("https://example.com")
