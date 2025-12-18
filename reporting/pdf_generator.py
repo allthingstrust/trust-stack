@@ -7,7 +7,7 @@ from reportlab.lib.pagesizes import letter, A4
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
 from reportlab.lib import colors
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak, HRFlowable
 from reportlab.platypus import Image
 from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
 from reportlab.pdfbase import pdfmetrics
@@ -394,7 +394,14 @@ class PDFReportGenerator:
         story.append(Spacer(1, 20))
         
         # Divider line
-        from reportlab.platypus import HRFlowable
+        story.append(HRFlowable(width="100%", thickness=1, color=colors.grey))
+        story.append(Spacer(1, 20))
+        
+        # =========================================================================
+        # EXECUTIVE SUMMARY
+        # =========================================================================
+        story.extend(self._create_executive_summary_section(report_data))
+        story.append(Spacer(1, 20))
         story.append(HRFlowable(width="100%", thickness=1, color=colors.grey))
         story.append(Spacer(1, 20))
         
@@ -586,6 +593,56 @@ class PDFReportGenerator:
             logger.error(f"Failed to generate Executive Summary for PDF: {e}")
             story.append(Paragraph(f"<i>Error generating executive summary: {str(e)}</i>", self.styles['Normal']))
 
+        return story
+
+    def _create_executive_summary_section(self, report_data: Dict[str, Any]) -> List:
+        """Create Executive Summary section elements"""
+        story = []
+        
+        story.append(Paragraph("Executive Summary", self.styles['SectionHeader']))
+        story.append(Spacer(1, 10))
+        
+        # Generate comprehensive executive summary using shared logic
+        try:
+            from reporting.executive_summary import generate_executive_summary
+            
+            items = report_data.get('items', [])
+            
+            # Calculate average rating
+            avg_rating = 0
+            if items:
+                avg_rating = sum(item.get('final_score', 0) for item in items) / len(items) * 100
+                
+            # Get dimension breakdown
+            dimension_breakdown = report_data.get('dimension_breakdown', {})
+            
+            # Get model configuration
+            summary_model = report_data.get('llm_model', 'gpt-4o-mini')
+            use_llm = report_data.get('use_llm_summary', True)
+            
+            sources = report_data.get('sources', [])
+            
+            # Generate summary
+            exec_summary_md = generate_executive_summary(
+                avg_rating=avg_rating,
+                dimension_breakdown=dimension_breakdown,
+                items=items,
+                sources=sources,
+                model=summary_model,
+                use_llm=use_llm
+            )
+            
+            # Render markdown to PDF
+            story.extend(self._markdown_to_pdf_elements(exec_summary_md))
+            
+        except ImportError:
+            # Fallback if module missing
+            logger.warning("Components for Executive Summary generation missing.")
+            story.append(Paragraph("Executive summary generation unavailable.", self.styles['Normal']))
+        except Exception as e:
+            logger.error(f"Failed to generate Executive Summary for PDF: {e}")
+            story.append(Paragraph(f"<i>Error generating executive summary: {str(e)}</i>", self.styles['Normal']))
+            
         return story
 
     def _create_trust_stack_section(self, report_data: Dict[str, Any]) -> List:
