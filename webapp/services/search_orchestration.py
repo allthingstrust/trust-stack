@@ -21,6 +21,29 @@ from ingestion.playwright_manager import get_browser_manager
 logger = logging.getLogger(__name__)
 
 
+def filter_results_by_strategy(results: List[Dict[str, Any]], strategy: str) -> List[Dict[str, Any]]:
+    """
+    Filter search results based on the collection strategy.
+    
+    Args:
+        results: List of URL result dictionaries containing 'is_brand_owned' key
+        strategy: 'brand_controlled', 'third_party', or 'both'
+        
+    Returns:
+        Filtered list of results
+    """
+    if not results:
+        return []
+        
+    if strategy == 'brand_controlled':
+        return [r for r in results if r.get('is_brand_owned', False)]
+    elif strategy == 'third_party':
+        return [r for r in results if not r.get('is_brand_owned', False)]
+    
+    # 'both' or unknown strategy returns everything
+    return results
+
+
 def perform_initial_search(brand_id: str, keywords: List[str], sources: List[str], web_pages: int, search_provider: str = 'serper',
                     brand_domains: List[str] = None, brand_subdomains: List[str] = None, brand_social_handles: List[str] = None,
                     collection_strategy: str = 'both', brand_owned_ratio: int = 60, search_model: str = 'gpt-4o-mini'):
@@ -222,6 +245,10 @@ def perform_initial_search(brand_id: str, keywords: List[str], sources: List[str
 
                     progress_percent = 60 + int((idx + 1) / total_results * 30)
                     progress_bar.progress(min(progress_percent, 90))
+
+                # Apply strict filtering based on collection strategy
+                # This ensures that if the user selected "Brand Owned Only", no 3rd party URLs slip through
+                found_urls = filter_results_by_strategy(found_urls, collection_strategy)
 
                 # Sort URLs
                 found_urls.sort(key=lambda x: (
