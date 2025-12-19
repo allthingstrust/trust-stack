@@ -916,7 +916,7 @@ def show_analyze_page():
             visual_analysis_available = bool(cfg.google_api_key)
             use_visual_analysis = st.checkbox(
                 "📸 Enable Visual Analysis",
-                value=False,
+                value=visual_analysis_available,
                 disabled=not visual_analysis_available,
                 help="Requires Gemini API Key. Captures screenshots and scores design/branding capability."
             )
