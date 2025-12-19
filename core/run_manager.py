@@ -885,6 +885,64 @@ class RunManager:
             # Detach data so it survives session close
             session.expunge_all()
 
+            # --- DEBUG LOGGING FOR VISUAL ANALYSIS ---
+            try:
+                logger.info("=" * 120)
+                logger.info("🎨 VISUAL ANALYSIS DEBUG TABLE")
+                logger.info(f"{'CATEGORY':<15} | {'URL':<50} | {'ANALYSIS'}")
+                logger.info("-" * 120)
+
+                for item in items:
+                    url = item.get('url', 'N/A')
+                    # Truncate URL for display
+                    display_url = (url[:47] + '...') if len(url) > 50 else url
+                    
+                    vis = item.get('visual_analysis')
+                    
+                    if not vis:
+                        logger.info(f"{'MISSING':<15} | {display_url:<50} | No visual analysis data found")
+                        continue
+
+                    # Parsing logic depends on structure. Assuming dict.
+                    if isinstance(vis, str):
+                        try:
+                            vis = json.loads(vis)
+                        except:
+                            logger.info(f"{'ERROR':<15} | {display_url:<50} | Could not parse visual_analysis string")
+                            continue
+
+                    signals = vis.get('signals', {})
+                    overall = vis.get('overall_visual_score', 0)
+                    
+                    # Log Opportunities (Issues)
+                    has_issues = False
+                    for sig_name, sig_data in signals.items():
+                        issues = sig_data.get('issues', [])
+                        if issues:
+                            has_issues = True
+                            for issue in issues:
+                                clean_issue = str(issue).replace('\n', ' ')
+                                logger.info(f"{'OPPORTUNITY':<15} | {display_url:<50} | {sig_name}: {clean_issue}")
+                    
+                    # Log Dark Patterns
+                    dark_patterns = vis.get('dark_patterns', [])
+                    if dark_patterns:
+                        has_issues = True
+                        for dp in dark_patterns:
+                            desc = dp.get('description', 'Unknown') if isinstance(dp, dict) else str(dp)
+                            logger.info(f"{'OPPORTUNITY':<15} | {display_url:<50} | Dark Pattern: {desc}")
+                            
+                    # Log Success/Neutral if no issues or high score
+                    if overall >= 0.7:
+                        logger.info(f"{'SUCCESS':<15} | {display_url:<50} | High overall score: {overall:.2f}")
+                    elif not has_issues:
+                         logger.info(f"{'NEUTRAL':<15} | {display_url:<50} | No major issues detected (Score: {overall:.2f})")
+                         
+                logger.info("=" * 120)
+            except Exception as e:
+                logger.error(f"Error in visual analysis debug logging: {e}")
+            # -----------------------------------------
+
             return {
                 "run_id": run.id,
                 "external_id": run.external_id,
