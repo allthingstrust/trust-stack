@@ -1224,8 +1224,6 @@ def _fetch_with_playwright(url: str, user_agent: str, browser_manager=None) -> D
         
     except Exception as e:
         logger.warning('Playwright fetch failed for %s: %s', url, e)
-    except Exception as e:
-        logger.warning('Playwright fetch failed for %s: %s', url, e)
         return {"title": "", "body": "", "url": url, "terms": "", "privacy": "", "access_denied": False}
     finally:
         # Clean up

@@ -355,12 +355,15 @@ class PlaywrightBrowserManager:
         })
         
         try:
-            result = result_queue.get(timeout=30)  # 30s timeout
+            # Wait indefinitely for the result
+            # The background thread guarantees a result (success or error) because of the try/finally block
+            result = result_queue.get()
             if isinstance(result, Exception):
                 raise result
             return result
-        except queue.Empty:
-            raise TimeoutError(f"Playwright fetch timed out for {url}")
+        # queue.Empty is no longer possible without a timeout, but keeping generic error handling is fine
+        except Exception as e:
+            raise e
 
     def close(self):
         """Stop the browser thread."""

@@ -1391,6 +1391,8 @@ class ContentScorer:
                             for attr in detected_attrs
                         ] if detected_attrs else [],
                         "attribute_count": len(detected_attrs),
+                        # Propagate visual analysis explicitly so RunManager can extract it
+                        "visual_analysis": cm.get('visual_analysis') if isinstance(cm, dict) else None,
                         # preserve any existing content.meta under orig_meta
                         "orig_meta": cm if isinstance(cm, dict) else None,
                         # propagate explicit footer links if present so downstream reporting can use them

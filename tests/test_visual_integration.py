@@ -121,5 +121,48 @@ class TestVisualIntegration:
                  assert 'visual_analysis' in content.meta
                  assert content.meta['visual_analysis']['success'] is True
 
+    @patch('ingestion.screenshot_capture.get_screenshot_capture')
+    def test_batch_score_content_preserves_visual_meta(self, mock_get_capture, mock_analyzer):
+        """Test batch_score_content propagates visual_analysis to ContentScores meta."""
+        
+        with patch.dict('config.settings.SETTINGS', {'visual_analysis_enabled': True}):
+            mock_capture = Mock()
+            mock_capture.get_screenshot_bytes.return_value = b"bytes"
+            mock_get_capture.return_value = mock_capture
+            
+            content = NormalizedContent(
+                content_id="test_id_batch",
+                url="https://example.com/batch",
+                title="Test Batch",
+                body="Test body. " * 50, # Sufficient length
+                src="web",
+                platform_id="web",
+                author="unknown",
+                screenshot_path="s3://bucket/test.png"
+            )
+            
+            scorer = ContentScorer()
+            
+            # Mock internal scoring methods to be fast
+            with patch.object(scorer, '_score_provenance', return_value=(0.5, 1.0)), \
+                 patch.object(scorer, '_score_verification', return_value=(0.5, 1.0)), \
+                 patch.object(scorer, '_score_transparency', return_value=(0.5, 1.0)), \
+                 patch.object(scorer, '_score_coherence', return_value=(0.5, 1.0)), \
+                 patch.object(scorer, '_score_resonance', return_value=(0.5, 1.0)):
+
+                 scores_list = scorer.batch_score_content([content], {"keywords": []})
+                 
+                 assert len(scores_list) == 1
+                 score_obj = scores_list[0]
+                 
+                 # PARSE the meta JSON string
+                 import json
+                 meta_dict = json.loads(score_obj.meta)
+                 
+                 # ASSERT visual_analysis is present
+                 assert 'visual_analysis' in meta_dict, "visual_analysis missing from stored meta"
+                 assert meta_dict['visual_analysis']['success'] is True
+                 assert meta_dict['visual_analysis']['overall_visual_score'] == 0.9
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

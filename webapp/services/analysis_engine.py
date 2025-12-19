@@ -190,6 +190,8 @@ def run_analysis(brand_id: str, keywords: List[str], sources: List[str], max_ite
                     meta['terms'] = c.get('terms')
                 if c.get('privacy'):
                     meta['privacy'] = c.get('privacy')
+                if c.get('verification_badges'):
+                    meta['verification_badges'] = c.get('verification_badges')
 
                 nc = NormalizedContent(
                     content_id=content_id,
@@ -207,7 +209,8 @@ def run_analysis(brand_id: str, keywords: List[str], sources: List[str], max_ite
                     platform_type='web',
                     source_type=c.get('source_type', 'unknown'),
                     source_tier=c.get('source_tier', 'unknown'),
-                    structured_body=c.get('structured_body')  # Include HTML structure metadata
+                    structured_body=c.get('structured_body'),  # Include HTML structure metadata
+                    screenshot_path=c.get('screenshot_path')   # Include screenshot path for visual analysis
                 )
                 all_content.append(nc)
 
