@@ -34,5 +34,6 @@ This workflow automates the process of handling a coding task while keeping Line
     *   Get Commit Hash: `git rev-parse HEAD`.
 2.  **Update Linear**:
     *   Post a comment on the Linear issue with the Commit Link.
+    *   **CRITICAL**: Do NOT include local file links to artifacts (e.g. `[walkthrough](file:///...)`). Instead, summarize the key points of the walkthrough directly in the comment.
     *   Update the Issue Status to "In Review".
 3.  **Notify User**: Confirm completion with a link to the execution.
