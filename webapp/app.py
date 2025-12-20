@@ -2351,9 +2351,18 @@ def show_history_page():
                         )
 
             with download_col3:
-                 if st.button("🗑️", key=f"delete_{idx}", help="Delete run"):
-                     # TODO: Implement deletion
-                     st.toast("Deleting runs is not yet implemented in UI")
+                # Markdown download
+                md_path = run.get('md_path')
+                if md_path and os.path.exists(md_path):
+                    with open(md_path, 'r') as f:
+                        st.download_button(
+                            label="📋 MD",
+                            data=f.read(),
+                            file_name=os.path.basename(md_path),
+                            mime="text/markdown",
+                            key=f"md_{idx}",
+                            width='stretch'
+                        )
 
             st.divider()
 
@@ -2436,20 +2445,6 @@ def upload_social_modal():
     st.divider()
     if st.button("Done", type="primary", use_container_width=True):
         st.rerun()
-                # Markdown download
-                md_path = run.get('md_path')
-                if md_path and os.path.exists(md_path):
-                    with open(md_path, 'r') as f:
-                        st.download_button(
-                            label="📋 MD",
-                            data=f.read(),
-                            file_name=os.path.basename(md_path),
-                            mime="text/markdown",
-                            key=f"md_{idx}",
-                            width='stretch'
-                        )
-
-            st.divider()
 
 
 def main():
