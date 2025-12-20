@@ -48,6 +48,8 @@ class VisualAnalysisResult:
     error: Optional[str] = None
     model: str = ""
     screenshot_s3_key: Optional[str] = None
+    social_verification: Optional[Dict[str, Any]] = None
+    social_activity: Optional[Dict[str, Any]] = None
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for serialization."""
@@ -71,6 +73,8 @@ class VisualAnalysisResult:
             "error": self.error,
             "model": self.model,
             "screenshot_s3_key": self.screenshot_s3_key,
+            "social_verification": getattr(self, "social_verification", None),
+            "social_activity": getattr(self, "social_activity", None),
         }
 
 
@@ -100,7 +104,10 @@ VISUAL_ANALYSIS_PROMPT = """You are a UX/design expert analyzing a webpage scree
    - Color-blind friendly design choices
 
 5. **Visual Trust Indicators (vis_trust_indicators)**
-   - Social Media Verification Badges (Blue/Gold Checks) - Check profile header specifically
+   - **Social Media Verification (CRITICAL)**: specific checks for social platforms:
+     - **Instagram**: Look for a blue checkmark badge next to the profile name.
+     - **X (Twitter)**: Look for a gold or blue checkmark badge next to the profile name.
+     - **LinkedIn**: Look for a "Verified" shield or badge near the profile name.
    - Presence of trust badges, security seals, certifications - Check footer area specifically
    - Professional contact information visible
    - SSL/secure indicators if applicable
@@ -110,9 +117,16 @@ VISUAL_ANALYSIS_PROMPT = """You are a UX/design expert analyzing a webpage scree
    - Score LOW (0.0-0.3) if cluttered with ads, popups, distractions
    - Evaluate ad density and distraction level
 
+7. **Social Media Specifics** (Only if this is a social media profile page)
+   - **Verification**: Explicitly state if the account is verified.
+   - **X (Twitter) Activity**: If this is an X profile, find the date of the most recent post (tweet) visible in the timeline. 
+     - If the date is relative (e.g., "2h", "3d"), estimate the date based on today.
+     - If absolute date is shown (e.g. "Dec 20"), use that.
+
 ## Page Context
 - URL: {url}
 - Brand: {brand_name}
+- Today's Date: {current_date}
 
 ## Output Format
 
@@ -164,6 +178,17 @@ Respond with valid JSON only, no markdown formatting:
       "description": "What was detected"
     }}
   ],
+  "social_verification": {{
+      "platform": "instagram|twitter|linkedin|other|none",
+      "is_verified": true|false,
+      "badge_type": "blue_check|gold_check|none|other",
+      "evidence": "Found blue checkmark next to username 'winndixie'"
+  }},
+  "social_activity": {{
+      "platform": "twitter|other|none",
+      "last_post_date": "YYYY-MM-DD" or null,
+      "evidence": "Latest tweet text '...' posted 2h ago"
+  }},
   "design_assessment": "2-3 sentence overall design assessment",
   "overall_visual_score": 0.0-1.0
 }}
@@ -259,9 +284,11 @@ class VisualAnalyzer:
             brand_name = brand_context.get("brand_name", brand_context.get("brand_id", "Unknown Brand"))
 
         # Build the prompt
+        from datetime import datetime
         prompt = VISUAL_ANALYSIS_PROMPT.format(
             url=url,
             brand_name=brand_name,
+            current_date=datetime.now().strftime("%Y-%m-%d")
         )
 
         try:
@@ -363,6 +390,8 @@ class VisualAnalyzer:
                 design_assessment=data.get("design_assessment", ""),
                 overall_visual_score=float(data.get("overall_visual_score", 0.5)),
                 model=self.model,
+                social_verification=data.get("social_verification"),
+                social_activity=data.get("social_activity"),
             )
 
         except json.JSONDecodeError as e:
