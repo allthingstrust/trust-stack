@@ -162,6 +162,79 @@ def infer_brand_domains(brand_id: str) -> Dict[str, List[str]]:
     }
 
 
+def _embed_local_images_as_base64(markdown_text: str) -> str:
+    """
+    Finds local image paths in markdown (e.g. ![alt](/path/to/image.png))
+    and replaces them with base64 encoded data URIs.
+    Resizes images to max 800px width and compresses as JPEG to reduce page weight.
+    """
+    import base64
+    from PIL import Image
+    import io
+
+    # Regex for markdown images: ![alt](path "title") or ![alt](path)
+    pattern = r'!\[(.*?)\]\((.*?)\)'
+    
+    def replace_match(match):
+        alt_text = match.group(1)
+        path = match.group(2)
+        
+        # Clean path (handle optional title)
+        title = ""
+        if ' "' in path:
+            parts = path.split(' "')
+            path = parts[0]
+            title = ' "' + parts[1]
+        elif " '" in path:
+            parts = path.split(" '")
+            path = parts[0]
+            title = " '" + parts[1]
+            
+        # Check if local file
+        # Assume all paths are local if they don't start with http/data
+        if not path.startswith(('http://', 'https://', 'data:')):
+            # Handle file:// prefix
+            local_path = path.replace('file://', '')
+            
+            if os.path.exists(local_path):
+                try:
+                    # Optimize: Resize and Compress
+                    with Image.open(local_path) as img:
+                        # Convert to RGB if RGBA (jpeg doesn't support transparency)
+                        if img.mode in ('RGBA', 'P'):
+                            img = img.convert('RGB')
+                            
+                        # Resize if too large (max width 800px)
+                        max_width = 800
+                        if img.width > max_width:
+                            ratio = max_width / img.width
+                            new_height = int(img.height * ratio)
+                            img = img.resize((max_width, new_height), Image.Resampling.LANCZOS)
+                        
+                        # Save to buffer as JPEG with compression
+                        buffer = io.BytesIO()
+                        img.save(buffer, format="JPEG", quality=80, optimize=True)
+                        encoded_string = base64.b64encode(buffer.getvalue()).decode()
+                        
+                        return f'![{alt_text}](data:image/jpeg;base64,{encoded_string}{title})'
+                        
+                except Exception as e:
+                    logger.warning(f"Error encoding/optimizing image {local_path}: {e}")
+                    # Fallback to original match if encoding fails
+                    return match.group(0)
+            else:
+                 # File not found
+                 pass
+        
+        return match.group(0)
+
+    try:
+        return re.sub(pattern, replace_match, markdown_text)
+    except Exception as e:
+        logger.error(f"Error in regex substitution for images: {e}")
+        return markdown_text
+
+
 
 
 
@@ -1969,7 +2042,9 @@ Summary of Analyzed Content:"""
                 trust_stack_text = "Error generating report."
 
     # Render the Markdown Report
-    st.markdown(trust_stack_text, unsafe_allow_html=True)
+    # Pre-process to embed local images
+    trust_stack_text_processed = _embed_local_images_as_base64(trust_stack_text)
+    st.markdown(trust_stack_text_processed, unsafe_allow_html=True)
 
     st.divider()
 
