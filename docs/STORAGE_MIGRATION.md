@@ -649,7 +649,7 @@ with download_col2:
                 file_name=os.path.basename(pdf_path),
                 mime="application/pdf",
                 key=f"pdf_{idx}",
-                use_container_width=True
+                width="stretch"
             )
 
 with download_col3:
@@ -663,7 +663,7 @@ with download_col3:
                 file_name=os.path.basename(md_path),
                 mime="text/markdown",
                 key=f"md_{idx}",
-                use_container_width=True
+                width="stretch"
             )
 ```
 
@@ -678,7 +678,7 @@ with download_col2:
         if isinstance(storage, S3Storage):
             url = storage.get_download_url(pdf_path, os.path.basename(pdf_path))
             if url:
-                st.link_button("📄 PDF", url, use_container_width=True)
+                st.link_button("📄 PDF", url, width="stretch")
         else:
             with open(pdf_path, 'rb') as f:
                 st.download_button(
@@ -687,7 +687,7 @@ with download_col2:
                     file_name=os.path.basename(pdf_path),
                     mime="application/pdf",
                     key=f"pdf_{idx}",
-                    use_container_width=True
+                    width="stretch"
                 )
 
 with download_col3:
@@ -697,7 +697,7 @@ with download_col3:
         if isinstance(storage, S3Storage):
             url = storage.get_download_url(md_path, os.path.basename(md_path))
             if url:
-                st.link_button("📋 MD", url, use_container_width=True)
+                st.link_button("📋 MD", url, width="stretch")
         else:
             with open(md_path, 'r') as f:
                 st.download_button(
@@ -706,7 +706,7 @@ with download_col3:
                     file_name=os.path.basename(md_path),
                     mime="text/markdown",
                     key=f"md_{idx}",
-                    use_container_width=True
+                    width="stretch"
                 )
 ```
 

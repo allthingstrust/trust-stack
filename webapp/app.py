@@ -2087,9 +2087,9 @@ Summary of Analyzed Content:"""
                         if screenshot_path.startswith('file://'):
                             local_path = screenshot_path.replace('file://', '')
                             if os.path.exists(local_path):
-                                st.image(local_path, caption="Page Screenshot", use_container_width=True)
+                                st.image(local_path, caption="Page Screenshot", width="stretch")
                         else:
-                            st.image(screenshot_path, caption="Page Screenshot", use_container_width=True)
+                            st.image(screenshot_path, caption="Page Screenshot", width="stretch")
                     except Exception as e:
                         st.caption(f"Screenshot not available: {e}")
 
@@ -2459,7 +2459,7 @@ def upload_social_modal():
                      st.rerun()
 
     st.divider()
-    if st.button("Done", type="primary", use_container_width=True):
+    if st.button("Done", type="primary", width="stretch"):
         st.rerun()
 
 

@@ -111,7 +111,7 @@ class DashboardGenerator:
                 color_discrete_map={'Authentic': '#2ecc71', 'Suspect': '#f39c12', 'Inauthentic': '#e74c3c'}
             )
             fig_pie.update_traces(textposition='inside', textinfo='percent+label')
-            st.plotly_chart(fig_pie, use_container_width=True)
+            st.plotly_chart(fig_pie, width="stretch")
         
         with col2:
             # Bar chart for AR comparison
@@ -124,7 +124,7 @@ class DashboardGenerator:
                 yaxis_title="Percentage (%)",
                 barmode='group'
             )
-            st.plotly_chart(fig_bar, use_container_width=True)
+            st.plotly_chart(fig_bar, width="stretch")
         
         # AR interpretation
         ar_pct = ar_data['authenticity_ratio_pct']
@@ -173,7 +173,7 @@ class DashboardGenerator:
             title="5D Trust Dimensions - Radar Chart"
         )
         
-        st.plotly_chart(fig_radar, use_container_width=True)
+        st.plotly_chart(fig_radar, width="stretch")
         
         # Dimension scores table
         st.subheader("Dimension Scores")
@@ -190,7 +190,7 @@ class DashboardGenerator:
             for dim in dimensions
         ])
         
-        st.dataframe(dimension_df, use_container_width=True)
+        st.dataframe(dimension_df, width="stretch")
     
     def _create_content_classification_section(self, brand_id: str, time_range: str):
         """Create content classification analysis section"""
@@ -276,7 +276,7 @@ class DashboardGenerator:
         fig_trend.update_yaxes(title_text="AR (%)", row=1, col=1)
         fig_trend.update_yaxes(title_text="Volume", row=2, col=1)
         
-        st.plotly_chart(fig_trend, use_container_width=True)
+        st.plotly_chart(fig_trend, width="stretch")
         
         # Trend insights
         st.subheader("Trend Insights")
