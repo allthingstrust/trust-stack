@@ -940,6 +940,32 @@ def show_analyze_page():
             )
             include_comments = st.checkbox("Include YouTube comments", value=False) if use_youtube else False
 
+            st.divider()
+
+            # Manual Social Media Uploads (for Login-Walled Sites)
+            with st.expander("📸 Upload Social Media Screenshots", expanded=False):
+                st.caption("Upload screenshots for sites that require login (LinkedIn, Instagram, X).")
+                
+                uploaded_social_files = {}
+
+                # LinkedIn
+                linkedin_file = st.file_uploader("LinkedIn Profile Screenshot", type=['png', 'jpg', 'jpeg'], key="upload_linkedin")
+                if linkedin_file:
+                    uploaded_social_files['linkedin'] = linkedin_file
+                
+                # Instagram
+                instagram_file = st.file_uploader("Instagram Profile Screenshot", type=['png', 'jpg', 'jpeg'], key="upload_instagram")
+                if instagram_file:
+                    uploaded_social_files['instagram'] = instagram_file
+
+                # X (Twitter)
+                x_file = st.file_uploader("X (Twitter) Profile Screenshot", type=['png', 'jpg', 'jpeg'], key="upload_x")
+                if x_file:
+                    uploaded_social_files['x'] = x_file
+
+                if uploaded_social_files:
+                    st.success(f"✅ {len(uploaded_social_files)} screenshots ready for analysis")
+
         st.divider()
 
         # URL Collection Strategy - Simplified Interface
@@ -1418,6 +1444,58 @@ def show_analyze_page():
                         "screenshot_path": url_data.get('screenshot_path'),
                         "visual_analysis": url_data.get('visual_analysis')
                     })
+            
+            # Process uploaded social screenshots
+            if 'uploaded_social_files' in locals() and uploaded_social_files:
+                import tempfile
+                import shutil
+                
+                temp_dir = os.path.join(PROJECT_ROOT, 'data', 'temp_uploads')
+                os.makedirs(temp_dir, exist_ok=True)
+                
+                for platform, file_obj in uploaded_social_files.items():
+                    try:
+                        # Create unique filename
+                        timestamp = int(time.time())
+                        filename = f"{brand_id}_{platform}_{timestamp}_{file_obj.name}"
+                        file_path = os.path.join(temp_dir, filename)
+                        
+                        # Save file
+                        with open(file_path, "wb") as f:
+                            f.write(file_obj.getbuffer())
+                            
+                        # Add to assets config
+                        platform_names = {
+                            'linkedin': 'LinkedIn', 
+                            'instagram': 'Instagram', 
+                            'x': 'X (Twitter)'
+                        }
+                        
+                        platform_urls = {
+                            'linkedin': f'https://www.linkedin.com/company/{brand_id}',
+                            'instagram': f'https://www.instagram.com/{brand_id}',
+                            'x': f'https://x.com/{brand_id}'
+                        }
+                        
+                        assets_config.append({
+                            "url": platform_urls.get(platform, f'https://{platform}.com/{brand_id}'),
+                            "title": f"{brand_id} on {platform_names.get(platform, platform)} (Manual Upload)",
+                            "source_type": "social",
+                            "channel": "social",
+                            "raw_content": f"Manual upload of {platform_names.get(platform, platform)} profile for {brand_id}.",
+                            "normalized_content": f"Manual upload of {platform_names.get(platform, platform)} profile for {brand_id}.",
+                            "screenshot_path": f"file://{file_path}", # Use file:// protocol for local files
+                            "visual_analysis": True, # Force visual analysis for uploaded screenshots
+                            "meta_info": {
+                                "manual_upload": True,
+                                "platform": platform_names.get(platform, platform)
+                            }
+                        })
+                        logger.info(f"Added manual upload for {platform}: {file_path}")
+                        
+                    except Exception as e:
+                        logger.error(f"Failed to process upload for {platform}: {e}")
+                        st.warning(f"⚠️ Failed to process {platform} upload: {e}")
 
             progress_animator.show(f"Configuring analysis for {brand_id}...", "⚙️")
             progress_bar.progress(20)
