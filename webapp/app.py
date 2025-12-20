@@ -2419,7 +2419,7 @@ def upload_social_modal():
             # Paste Button
             paste_result = pbutton(
                 label="📋 Paste",
-                background_color="#f0f2f6",
+                background_color="#1a2d42",
                 hover_background_color="#e0e2e6",
                 key=f"paste_btn_{key}"
             )
