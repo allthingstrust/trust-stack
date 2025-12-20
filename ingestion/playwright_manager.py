@@ -88,8 +88,6 @@ class PlaywrightBrowserManager:
                 # Stealth additions
                 '--disable-blink-features=AutomationControlled',
                 '--disable-infobars',
-                '--no-sandbox',
-                '--disable-setuid-sandbox',
                 '--ignore-certificate-errors',
             ]
             
@@ -98,6 +96,7 @@ class PlaywrightBrowserManager:
             browser = playwright.chromium.launch(
                 headless=headless_mode,
                 args=launch_args,
+                ignore_default_args=['--enable-automation'],
                 handle_sigint=False,
                 handle_sigterm=False,
                 handle_sighup=False
