@@ -942,29 +942,25 @@ def show_analyze_page():
 
             st.divider()
 
-            # Manual Social Media Uploads (for Login-Walled Sites)
-            with st.expander("📸 Upload Social Media Screenshots", expanded=False):
-                st.caption("Upload screenshots for sites that require login (LinkedIn, Instagram, X).")
-                
-                uploaded_social_files = {}
+            # Manual Social Media Uploads (Modal with Paste Support)
+            if 'uploaded_social_files' not in st.session_state:
+                st.session_state['uploaded_social_files'] = {}
+            
+            # Button to open the upload modal
+            if st.button("📸 Upload Social Media Screenshots", help="Upload or paste screenshots for LinkedIn, Instagram, X"):
+                upload_social_modal()
 
-                # LinkedIn
-                linkedin_file = st.file_uploader("LinkedIn Profile Screenshot", type=['png', 'jpg', 'jpeg'], key="upload_linkedin")
-                if linkedin_file:
-                    uploaded_social_files['linkedin'] = linkedin_file
-                
-                # Instagram
-                instagram_file = st.file_uploader("Instagram Profile Screenshot", type=['png', 'jpg', 'jpeg'], key="upload_instagram")
-                if instagram_file:
-                    uploaded_social_files['instagram'] = instagram_file
-
-                # X (Twitter)
-                x_file = st.file_uploader("X (Twitter) Profile Screenshot", type=['png', 'jpg', 'jpeg'], key="upload_x")
-                if x_file:
-                    uploaded_social_files['x'] = x_file
-
-                if uploaded_social_files:
-                    st.success(f"✅ {len(uploaded_social_files)} screenshots ready for analysis")
+            # Display count of uploaded files
+            if st.session_state.get('uploaded_social_files'):
+                st.success(f"✅ {len(st.session_state['uploaded_social_files'])} screenshots ready for analysis")
+                # Show list of uploaded files with clear button
+                with st.expander("View Uploaded Screenshots"):
+                    for platform, file_data in st.session_state['uploaded_social_files'].items():
+                        st.text(f"{platform.title()}: {file_data['name']}")
+                    
+                    if st.button("Clear All Screenshots"):
+                        st.session_state['uploaded_social_files'] = {}
+                        st.rerun()
 
         st.divider()
 
@@ -1446,23 +1442,25 @@ def show_analyze_page():
                     })
             
             # Process uploaded social screenshots
-            if 'uploaded_social_files' in locals() and uploaded_social_files:
+            uploaded_social_files = st.session_state.get('uploaded_social_files', {})
+            
+            if uploaded_social_files:
                 import tempfile
                 import shutil
                 
                 temp_dir = os.path.join(PROJECT_ROOT, 'data', 'temp_uploads')
                 os.makedirs(temp_dir, exist_ok=True)
                 
-                for platform, file_obj in uploaded_social_files.items():
+                for platform, file_data in uploaded_social_files.items():
                     try:
                         # Create unique filename
                         timestamp = int(time.time())
-                        filename = f"{brand_id}_{platform}_{timestamp}_{file_obj.name}"
+                        filename = f"{brand_id}_{platform}_{timestamp}_{file_data['name']}"
                         file_path = os.path.join(temp_dir, filename)
                         
                         # Save file
                         with open(file_path, "wb") as f:
-                            f.write(file_obj.getbuffer())
+                            f.write(file_data['buffer'])
                             
                         # Add to assets config
                         platform_names = {
@@ -2367,6 +2365,86 @@ def show_history_page():
                         )
 
             st.divider()
+
+@st.dialog("Upload Social Media Screenshots")
+def upload_social_modal():
+    st.write("Upload or paste screenshots for login-walled sites.")
+    
+    from streamlit_paste_button import paste_image_button as pbutton
+    import io
+    from PIL import Image
+
+    # Initialize container for uploaded files if not exists
+    if 'uploaded_social_files' not in st.session_state:
+        st.session_state['uploaded_social_files'] = {}
+
+    # Define platforms
+    platforms = [
+        {'key': 'linkedin', 'label': 'LinkedIn', 'icon': '💼'},
+        {'key': 'instagram', 'label': 'Instagram', 'icon': '📸'},
+        {'key': 'x', 'label': 'X (Twitter)', 'icon': '✖️'}
+    ]
+
+    # Create columns for each platform
+    cols = st.columns(3)
+
+    for idx, platform in enumerate(platforms):
+        key = platform['key']
+        with cols[idx]:
+            st.markdown(f"### {platform['icon']} {platform['label']}")
+            
+            # Show current status
+            current_file = st.session_state['uploaded_social_files'].get(key)
+            if current_file:
+                st.success(f"File ready")
+                st.caption(f"{current_file['name'][:15]}...")
+                if st.button("🗑️ Remove", key=f"remove_{key}"):
+                    del st.session_state['uploaded_social_files'][key]
+                    st.rerun()
+            else:
+                st.info("No file")
+
+            # Upload Tab
+            uploaded_file = st.file_uploader("Upload", type=['png', 'jpg', 'jpeg'], key=f"modal_upload_{key}", label_visibility="collapsed")
+            if uploaded_file:
+                # Update if new
+                if not current_file or current_file['name'] != uploaded_file.name:
+                    st.session_state['uploaded_social_files'][key] = {
+                        'name': uploaded_file.name,
+                        'type': uploaded_file.type,
+                        'buffer': uploaded_file.getvalue()
+                    }
+                    st.rerun()
+
+            # Paste Button
+            paste_result = pbutton(
+                label="📋 Paste",
+                background_color="#1a2d42",
+                hover_background_color="#e0e2e6",
+                key=f"paste_btn_{key}"
+            )
+            
+            if paste_result.image_data is not None:
+                 img = paste_result.image_data
+                 buf = io.BytesIO()
+                 img.save(buf, format='PNG')
+                 byte_im = buf.getvalue()
+                 
+                 timestamp = int(time.time())
+                 fname = f"pasted_{key}.png"
+                 
+                 # Only update if different content/name
+                 if not current_file or current_file['buffer'] != byte_im:
+                     st.session_state['uploaded_social_files'][key] = {
+                        'name': fname,
+                        'type': "image/png",
+                        'buffer': byte_im
+                    }
+                     st.rerun()
+
+    st.divider()
+    if st.button("Done", type="primary", use_container_width=True):
+        st.rerun()
 
 
 def main():
