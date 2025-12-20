@@ -544,7 +544,8 @@ class RunManager:
                     "keywords": run_config.get("keywords", []),
                     "sources": run_config.get("sources", []),
                     # Pass user-selected model for scoring (e.g. "claude-3-5-sonnet")
-                    "llm_model": run_config.get("scenario_config", {}).get("summary_model")
+                    "llm_model": run_config.get("scenario_config", {}).get("summary_model"),
+                    "visual_analysis_enabled": run_config.get("visual_analysis_enabled", False),
                 }
                 
                 # Call the actual Trust Stack scorer

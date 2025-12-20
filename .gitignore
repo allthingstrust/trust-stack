@@ -70,4 +70,4 @@ tmp_smoke_multi/
 
 # Migration backup directories
 .migration_backup_*/
-data/
+data/temp_uploads/

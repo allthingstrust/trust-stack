@@ -229,7 +229,14 @@ class ContentScorer:
             ))
 
             # 6. Visual Analysis (if enabled)
-            if SETTINGS.get('visual_analysis_enabled', False) and getattr(content, 'screenshot_path', None):
+            # Check global settings, run context, OR per-content force flag (e.g. manual uploads)
+            visual_enabled = (
+                SETTINGS.get('visual_analysis_enabled', False) or 
+                brand_context.get('visual_analysis_enabled', False) or
+                getattr(content, 'meta', {}).get('force_visual_analysis', False)
+            )
+            
+            if visual_enabled and getattr(content, 'screenshot_path', None):
                 self._score_visual_signals(content, signals)
 
             # Detect attributes if enabled and map to signals

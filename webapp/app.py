@@ -1483,9 +1483,10 @@ def show_analyze_page():
                             "raw_content": f"Manual upload of {platform_names.get(platform, platform)} profile for {brand_id}.",
                             "normalized_content": f"Manual upload of {platform_names.get(platform, platform)} profile for {brand_id}.",
                             "screenshot_path": f"file://{file_path}", # Use file:// protocol for local files
-                            "visual_analysis": True, # Force visual analysis for uploaded screenshots
+                            # "visual_analysis": True, # Removed: Avoid conflating request with result field
                             "meta_info": {
                                 "manual_upload": True,
+                                "force_visual_analysis": True, # Explicit flag for scorer
                                 "platform": platform_names.get(platform, platform)
                             }
                         })
@@ -1517,7 +1518,8 @@ def show_analyze_page():
                     "summary_model": summary_model,
                     "recommendations_model": recommendations_model,
                     "search_model": search_model # Added search_model here
-                }
+                },
+                "visual_analysis_enabled": use_visual_analysis,
             }
 
             progress_animator.show("Scoring content across 5 trust dimensions...", "🔍")
@@ -2076,6 +2078,20 @@ Summary of Analyzed Content:"""
                         if score is not None:
                             with dim_cols[idx2 % 3]:
                                 st.metric(dim_name.title(), f"{score*100:.1f}/100")
+                
+                # Show screenshot if available
+                screenshot_path = meta.get('screenshot_path') or item_detail.get('screenshot_path')
+                if screenshot_path:
+                    try:
+                        # Handle file:// paths for local display
+                        if screenshot_path.startswith('file://'):
+                            local_path = screenshot_path.replace('file://', '')
+                            if os.path.exists(local_path):
+                                st.image(local_path, caption="Page Screenshot", use_container_width=True)
+                        else:
+                            st.image(screenshot_path, caption="Page Screenshot", use_container_width=True)
+                    except Exception as e:
+                        st.caption(f"Screenshot not available: {e}")
 
                 st.divider()
 
