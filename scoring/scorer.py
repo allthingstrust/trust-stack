@@ -1290,6 +1290,23 @@ class ContentScorer:
                 url=getattr(content, 'url', '')
             )
             
+            # Special case: If content is insufficient but we have a screenshot and visual analysis is enabled,
+            # we should ALLOW it to proceed so visual signals can be extracted.
+            if skip_reason == "insufficient_content":
+                # Check effectively enabled visual analysis (global setting OR content-specific override)
+                visual_enabled = (
+                    SETTINGS.get('visual_analysis_enabled', False) or 
+                    brand_context.get('visual_analysis_enabled', False) or
+                    getattr(content, 'meta', {}).get('force_visual_analysis', False)
+                )
+                
+                # Check if we have a screenshot
+                has_screenshot = bool(getattr(content, 'screenshot_path', None))
+                
+                if visual_enabled and has_screenshot:
+                    logger.info(f"Bypassing insufficient_content filter for '{content.title}' because Visual Analysis is enabled and screenshot exists")
+                    skip_reason = None
+            
             if skip_reason:
                 logger.warning(f"Skipping content '{content.title}' ({content.content_id}): {skip_reason}")
                 # Don't add to scores_list - effectively filters it out
