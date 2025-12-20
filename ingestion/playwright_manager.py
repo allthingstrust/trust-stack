@@ -93,7 +93,8 @@ class PlaywrightBrowserManager:
                 '--ignore-certificate-errors',
             ]
             
-            headless_mode = os.environ.get('HEADLESS_MODE', 'true').lower() == 'true'
+            # Default to Headed mode (false) to bypass bot detection on sites like Costco
+            headless_mode = os.environ.get('HEADLESS_MODE', 'false').lower() == 'true'
             browser = playwright.chromium.launch(
                 headless=headless_mode,
                 args=launch_args,
@@ -101,7 +102,7 @@ class PlaywrightBrowserManager:
                 handle_sigterm=False,
                 handle_sighup=False
             )
-            logger.info('Playwright browser initialized successfully')
+            logger.info(f'Playwright browser initialized successfully (Headless: {headless_mode})')
             
             while True:
                 task = self._request_queue.get()
@@ -112,6 +113,11 @@ class PlaywrightBrowserManager:
                 if task_type == "fetch":
                     url = task.get("url")
                     user_agent = task.get("user_agent")
+                    
+                    # Update to modern Chrome 131 User Agent if generic/older one provided
+                    if "HeadlessChrome" in user_agent or "Playwright" in user_agent:
+                        user_agent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+                        
                     capture_screenshot = task.get("capture_screenshot", False)
                     result_queue = task.get("result_queue")
                     logger.debug(f'Browser thread processing fetch request for: {url}')
@@ -204,7 +210,20 @@ class PlaywrightBrowserManager:
         screenshot_key = None
         try:
             logger.debug(f'[PLAYWRIGHT] Creating new page for: {url}')
-            page = browser.new_page(user_agent=user_agent)
+            
+            # Add extra HTTP headers for realism
+            extra_headers = {
+                "Accept-Language": "en-US,en;q=0.9",
+                "Upgrade-Insecure-Requests": "1",
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8"
+            }
+            
+            context = browser.new_context(
+                user_agent=user_agent,
+                extra_http_headers=extra_headers
+            )
+            page = context.new_page()
+            
             logger.debug(f'[PLAYWRIGHT] Page created, navigating to: {url}')
             # Stealth: Inject scripts to mask automation
             page.add_init_script("""
