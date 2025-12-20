@@ -7,7 +7,7 @@ Prompts are imported from the centralized prompts module.
 
 import logging
 import json
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from ingestion.serper_search import search_serper

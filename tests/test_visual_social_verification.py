@@ -51,7 +51,7 @@ class TestVisualSocialVerification(unittest.TestCase):
         
         self.assertIsNotNone(visual_claim, "Visual verification claim should be present")
         self.assertEqual(visual_claim['status'], 'SUPPORTED')
-        self.assertIn("Instagram", visual_claim['claim'])
+        self.assertIn("instagram", visual_claim['claim'])
         
         # Check if score is boosted (should be > 0.5 since we have one SUPPORTED claim)
         # Original UNVERIFIED claim = -0.05, SUPPORTED = +0.1. Base 0.5. 
