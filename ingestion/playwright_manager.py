@@ -1,4 +1,5 @@
 import logging
+import os
 import threading
 import queue
 import time
@@ -92,8 +93,9 @@ class PlaywrightBrowserManager:
                 '--ignore-certificate-errors',
             ]
             
+            headless_mode = os.environ.get('HEADLESS_MODE', 'true').lower() == 'true'
             browser = playwright.chromium.launch(
-                headless=True,
+                headless=headless_mode,
                 args=launch_args,
                 handle_sigint=False,
                 handle_sigterm=False,
@@ -236,12 +238,19 @@ class PlaywrightBrowserManager:
 
             # Use domcontentloaded instead of 'load' - faster and more reliable for SPAs
             # 'load' waits for all resources which can timeout on heavy sites
-            page.goto(url, timeout=20000, wait_until='domcontentloaded')
-            logger.debug(f'[PLAYWRIGHT] Navigation complete for: {url}')
+            # Log failed requests for debugging
+            page.on("requestfailed", lambda request: logger.debug(f"[PLAYWRIGHT] Request failed: {request.url} - {request.failure}"))
+
+            # Use 'commit' to avoid hanging on heavy sites (like Winn-Dixie)
+            # Then rely on wait_for_selector to ensure body is present
+            page.goto(url, timeout=60000, wait_until='commit')
+            logger.debug(f'[PLAYWRIGHT] Navigation "commit" complete for: {url}')
             
             try:
-                page.wait_for_selector('body', timeout=8000)
-            except Exception:
+                # Increased timeout for body selector to allow content to load after commit
+                page.wait_for_selector('body', timeout=15000)
+            except Exception as wait_e:
+                logger.warning(f"[PLAYWRIGHT] Timeout waiting for body selector: {wait_e}")
                 pass
             
             logger.debug(f'[PLAYWRIGHT] Extracting content from: {url}')
