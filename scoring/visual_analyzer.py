@@ -87,8 +87,12 @@ VISUAL_ANALYSIS_PROMPT = """You are a UX/design expert analyzing a webpage scree
    - Professional typography, spacing, color harmony
    - Clear visual hierarchy and information architecture
    - Modern, polished aesthetic vs. dated/amateur appearance
-   - **EXCEPTION**: For social media profiles (Instagram, X, LinkedIn, YouTube, etc.), DO NOT penalize for standard platform layout. Rate based on the quality of the uploaded content/header/bio if applicable, or default to a high score if the profile looks standard and populated.
-   
+   - **CRITICAL EXCEPTION**: For social media profiles (LinkedIn, Facebook, X/Twitter, Instagram, YouTube, etc.), **ignore the platform's user interface** (navigation bars, standard layout structures).
+     - **DO NOT** praise the platform's professional design (e.g., "LinkedIn features a professional design").
+     - **DO NOT** penalize for standard platform constraints.
+     - **ONLY** evaluate the quality of the **brand's uploaded content**: the profile picture, cover photo/banner, and the visual quality of their recent posts.
+     - If the profile looks active and populated with brand assets, rate High (0.8-1.0).
+
 2. **Dark Pattern Detection (vis_dark_patterns)**
    - Score HIGH (0.8-1.0) if NO dark patterns present
    - Score LOW (0.0-0.3) if dark patterns detected
@@ -98,7 +102,7 @@ VISUAL_ANALYSIS_PROMPT = """You are a UX/design expert analyzing a webpage scree
    - Consistent logo placement, color palette, visual identity
    - Professional brand presentation
    - Coherent design language across visible elements
-   - **EXCEPTION**: For social media profiles, accept standard platform branding. Look for brand coherence in the *uploaded* elements (avatar, banner, posts).
+   - **EXCEPTION**: For social media profiles, accept standard platform branding. Look for brand coherence in the *uploaded* elements (avatar matches banner, posts match brand style).
 
 4. **Visual Accessibility (vis_accessibility)**
    - Good contrast ratios for text/background
@@ -107,9 +111,10 @@ VISUAL_ANALYSIS_PROMPT = """You are a UX/design expert analyzing a webpage scree
 
 5. **Visual Trust Indicators (vis_trust_indicators)**
    - **Social Media Verification (CRITICAL)**: specific checks for social platforms:
-     - **Instagram**: Look for a blue checkmark badge next to the profile name.
-     - **X (Twitter)**: Look for a gold or blue checkmark badge next to the profile name.
-     - **LinkedIn**: Look for a "Verified" shield or badge near the profile name.
+     - **VERIFICATION BADGES**: Look specifically for a **verification badge** (blue check, gold check, gray shield) displayed **directly beside the brand's name**.
+     - **Instagram**: Blue checkmark badge next to profile name.
+     - **X (Twitter)**: Gold or blue checkmark badge next to profile name.
+     - **LinkedIn**: "Verified" shield or badge near the profile name.
    - Presence of trust badges, security seals, certifications - Check footer area specifically
    - Professional contact information visible
    - SSL/secure indicators if applicable
@@ -120,7 +125,7 @@ VISUAL_ANALYSIS_PROMPT = """You are a UX/design expert analyzing a webpage scree
    - Evaluate ad density and distraction level
 
 7. **Social Media Specifics** (Only if this is a social media profile page)
-   - **Verification**: Explicitly state if the account is verified.
+   - **Verification**: Explicitly state if the account is verified based on the presence of a badge next to the name.
    - **X (Twitter) Activity**: If this is an X profile, find the date of the most recent post (tweet) visible in the timeline. 
      - If the date is relative (e.g., "2h", "3d"), estimate the date based on today.
      - If absolute date is shown (e.g. "Dec 20"), use that.
@@ -139,7 +144,7 @@ Respond with valid JSON only, no markdown formatting:
     "vis_design_quality": {{
       "score": 0.0-1.0,
       "confidence": 0.0-1.0,
-      "evidence": "Brief explanation",
+      "evidence": "Brief explanation. For social media, refer ONLY to uploaded content.",
       "issues": ["issue1", "issue2"]
     }},
     "vis_dark_patterns": {{
@@ -191,7 +196,7 @@ Respond with valid JSON only, no markdown formatting:
       "last_post_date": "YYYY-MM-DD" or null,
       "evidence": "Latest tweet text '...' posted 2h ago"
   }},
-  "design_assessment": "2-3 sentence overall design assessment",
+  "design_assessment": "2-3 sentence overall design assessment. For social media, focus on verification and brand activity.",
   "overall_visual_score": 0.0-1.0
 }}
 """
