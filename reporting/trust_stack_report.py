@@ -428,7 +428,7 @@ SIGNAL_ID_TO_KEY_SIGNAL = {
     "ver_social_proof": "External Social Proof",
     # Visual Analysis Signals
     "vis_design_quality": "Visual/Design Coherence", # Overlap with existing? Let's treat as Visual/Design Coherence
-    "vis_dark_patterns": "Visual Dark Patterns",
+    "vis_dark_patterns": "Dark Pattern Prevention",
     "vis_brand_coherence": "Visual Brand Coherence",
     "vis_accessibility": "Visual Accessibility",
     "vis_trust_indicators": "Visual Trust Indicators",
@@ -990,7 +990,7 @@ def _generate_visual_snapshot(items: List[Dict[str, Any]], run_id: str) -> str:
                 summary_parts = []
                 if design is not None: summary_parts.append(f"Design Quality: {float(design)*10:.1f}/10")
                 if brand is not None: summary_parts.append(f"Brand Coherence: {float(brand)*10:.1f}/10")
-                if dark is not None: summary_parts.append(f"Dark Patterns Risk: {float(dark)*10:.1f}/10")
+                if dark is not None: summary_parts.append(f"Dark Pattern Prevention: {float(dark)*10:.1f}/10")
                 
                 analysis_summary = " | ".join(summary_parts)
                 design_assessment = analysis.get('design_assessment', '')

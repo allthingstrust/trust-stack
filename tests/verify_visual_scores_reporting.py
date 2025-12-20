@@ -46,7 +46,7 @@ class TestVisualScoreReporting(unittest.TestCase):
         # 0.95 -> 9.5
         self.assertIn("Design Quality: 8.5/10", output)
         self.assertIn("Brand Coherence: 9.2/10", output)
-        self.assertIn("Dark Patterns Risk: 9.5/10", output)
+        self.assertIn("Dark Pattern Prevention: 9.5/10", output)
         
         # Verify design assessment
         self.assertIn("Excellent design with high brand coherence.", output)
