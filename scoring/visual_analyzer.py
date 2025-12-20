@@ -87,6 +87,7 @@ VISUAL_ANALYSIS_PROMPT = """You are a UX/design expert analyzing a webpage scree
    - Professional typography, spacing, color harmony
    - Clear visual hierarchy and information architecture
    - Modern, polished aesthetic vs. dated/amateur appearance
+   - **EXCEPTION**: For social media profiles (Instagram, X, LinkedIn, YouTube, etc.), DO NOT penalize for standard platform layout. Rate based on the quality of the uploaded content/header/bio if applicable, or default to a high score if the profile looks standard and populated.
    
 2. **Dark Pattern Detection (vis_dark_patterns)**
    - Score HIGH (0.8-1.0) if NO dark patterns present
@@ -97,6 +98,7 @@ VISUAL_ANALYSIS_PROMPT = """You are a UX/design expert analyzing a webpage scree
    - Consistent logo placement, color palette, visual identity
    - Professional brand presentation
    - Coherent design language across visible elements
+   - **EXCEPTION**: For social media profiles, accept standard platform branding. Look for brand coherence in the *uploaded* elements (avatar, banner, posts).
 
 4. **Visual Accessibility (vis_accessibility)**
    - Good contrast ratios for text/background
