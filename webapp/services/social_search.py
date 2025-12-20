@@ -28,24 +28,24 @@ def search_social_media_channels(brand_id: str, search_provider: str, progress_a
 
     # Social media platforms to search
     social_platforms = [
-        {
-            'name': 'Instagram',
-            'site': 'instagram.com',
-            'emoji': '📸',
-            'tier': 'brand_social'
-        },
-        {
-            'name': 'LinkedIn',
-            'site': 'linkedin.com',
-            'emoji': '💼',
-            'tier': 'brand_social'
-        },
-        {
-            'name': 'X (Twitter)',
-            'site': 'x.com',
-            'emoji': '✖️',
-            'tier': 'brand_social'
-        }
+        # {
+        #     'name': 'Instagram',
+        #     'site': 'instagram.com',
+        #     'emoji': '📸',
+        #     'tier': 'brand_social'
+        # },
+        # {
+        #     'name': 'LinkedIn',
+        #     'site': 'linkedin.com',
+        #     'emoji': '💼',
+        #     'tier': 'brand_social'
+        # },
+        # {
+        #     'name': 'X (Twitter)',
+        #     'site': 'x.com',
+        #     'emoji': '✖️',
+        #     'tier': 'brand_social'
+        # }
     ]
 
     for platform in social_platforms:
