@@ -386,6 +386,34 @@ class PlaywrightBrowserManager:
                 except Exception:
                     pass
 
+    def _dismiss_modals(self, page: Page):
+        """Attempt to dismiss common modals and popups."""
+        try:
+            # Common selectors for close buttons
+            close_selectors = [
+                'button[aria-label="Close"]',
+                'button[class*="close"]',
+                '.close-button',
+                '[data-testid="close-button"]',
+                'button.close',
+                'div[class*="modal"] button',
+                'svg[data-icon="close"]'
+            ]
+            
+            for selector in close_selectors:
+                try:
+                    # Quick check and click without waiting
+                    if page.is_visible(selector, timeout=500):
+                        page.click(selector, timeout=500)
+                        logger.debug(f"[PLAYWRIGHT] Dismissed modal using selector: {selector}")
+                except Exception:
+                    pass
+                    
+            # Handle specific known interstitials if needed here
+        except Exception as e:
+            logger.warning(f"[PLAYWRIGHT] Error dismissing modals: {e}")
+
+
     def fetch_page(self, url: str, user_agent: str, capture_screenshot: bool = False) -> Dict[str, Any]:
         """
         Fetch a page using the background browser.
