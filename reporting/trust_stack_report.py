@@ -892,8 +892,36 @@ def _generate_visual_snapshot(items: List[Dict[str, Any]], run_id: str) -> str:
                  path = meta.get('screenshot_path')
         
         if path:
-            visual_items.append(item)
+            # Check for access denied or failed analysis explicitly
+            # (We only want valid, successful analyses for the main visual section)
+            # Access Denied items are handled in blocked_section
             
+            # Check analysis success
+            analysis = item.get('visual_analysis')
+            if not analysis:
+                 # Check meta
+                 if isinstance(item.get('meta'), dict):
+                     analysis = item.get('meta', {}).get('visual_analysis')
+            
+            is_success = True
+            is_access_denied = False
+            
+            if analysis and isinstance(analysis, dict):
+                is_success = analysis.get('success', True)
+                # Check for access denied in analysis (if passed through) or meta
+                if analysis.get('access_denied'):
+                    is_access_denied = True
+            
+            # Check meta for access_denied flag
+            meta = item.get('meta', {})
+            if isinstance(meta, dict):
+                if meta.get('access_denied') or meta.get('blocked'):
+                    is_access_denied = True
+            
+            # Filter condition: Must be successful analysis and NOT access denied
+            if is_success and not is_access_denied:
+                visual_items.append(item)
+
     if not visual_items:
         return ""
         

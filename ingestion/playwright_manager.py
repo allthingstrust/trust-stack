@@ -261,8 +261,16 @@ class PlaywrightBrowserManager:
 
             # Use 'commit' to avoid hanging on heavy sites (like Winn-Dixie)
             # Then rely on wait_for_selector to ensure body is present
-            page.goto(url, timeout=60000, wait_until='commit')
+            # Use 'commit' to avoid hanging on heavy sites (like Winn-Dixie)
+            # Then rely on wait_for_selector to ensure body is present
+            response = page.goto(url, timeout=60000, wait_until='commit')
             logger.debug(f'[PLAYWRIGHT] Navigation "commit" complete for: {url}')
+            
+            # Check for HTTP errors status
+            http_status = response.status if response else 0
+            if http_status in [403, 401, 429]:
+                 logger.warning(f"[PLAYWRIGHT] HTTP Error {http_status} for {url}")
+
             
             try:
                 # Increased timeout for body selector to allow content to load after commit
@@ -317,6 +325,9 @@ class PlaywrightBrowserManager:
             except Exception:
                 page_body = page_content
 
+            # Try to dismiss modals/popups before scraping/screenshot
+            self._dismiss_modals(page)
+
             # Capture screenshot if requested
             if capture_screenshot:
                 try:
@@ -344,6 +355,9 @@ class PlaywrightBrowserManager:
             elif "403 forbidden" in lower_title or "403 forbidden" in lower_content:
                 access_denied = True
             elif "cloudflare" in lower_title and "security" in lower_title:
+                access_denied = True
+            
+            if access_denied or http_status in [403, 401]:
                 access_denied = True
             
             if access_denied:
