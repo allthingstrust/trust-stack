@@ -20,6 +20,7 @@ This workflow automates the process of handling a coding task while keeping Line
     *   Assign to "Me" (or the appropriate user).
     *   Use a descriptive title based on the task.
     *   **IMPORTANT**: Save the `issueId` and `issueIdentifier` (e.g., ALL-12) for later.
+    *   **IMMEDIATELY**: Output the URL of the newly created issue to the chat so the user can see it.
 
 ## 3. Planning & Implementation
 1.  **Create Plan**: Create an `implementation_plan.md` artifact.
