@@ -93,8 +93,16 @@ class PlaywrightBrowserManager:
             
             # Default to Headed mode (false) to bypass bot detection on sites like Costco
             headless_mode = os.environ.get('HEADLESS_MODE', 'false').lower() == 'true'
+            
+            # Use 'new' headless mode if headless is requested
+            # This is more stealthy than the old headless mode
+            if headless_mode:
+                launch_args.append('--headless=new')
+            
             browser = playwright.chromium.launch(
-                headless=headless_mode,
+                # We must set headless=False here because we are passing --headless=new in args
+                # If we set headless=True, Playwright adds the old --headless flag which overrides ours
+                headless=False,
                 args=launch_args,
                 ignore_default_args=['--enable-automation'],
                 handle_sigint=False,
@@ -129,8 +137,8 @@ class PlaywrightBrowserManager:
                                 browser.close()
                             except: pass
                             browser = playwright.chromium.launch(
-                                headless=True,
-                                args=launch_args,
+                                headless=False,
+                                args=launch_args, # launch_args now includes --headless=new if needed
                                 handle_sigint=False,
                                 handle_sigterm=False,
                                 handle_sighup=False
@@ -148,8 +156,8 @@ class PlaywrightBrowserManager:
                                     browser.close()
                                 except: pass
                                 browser = playwright.chromium.launch(
-                                    headless=True,
-                                    args=launch_args,
+                                    headless=False,
+                                    args=launch_args, # launch_args now includes --headless=new if needed
                                     handle_sigint=False,
                                     handle_sigterm=False,
                                     handle_sighup=False
