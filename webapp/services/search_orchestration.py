@@ -272,7 +272,11 @@ def perform_initial_search(brand_id: str, keywords: List[str], sources: List[str
                         manual_candidates.append(f"https://{d}")
                 if brand_subdomains:
                     for d in brand_subdomains:
-                        manual_candidates.append(f"https://{d}")
+                        d = d.strip()
+                        if d.startswith(('http://', 'https://')):
+                            manual_candidates.append(d)
+                        else:
+                            manual_candidates.append(f"https://{d}")
                 
                 # Deduplicate candidates
                 manual_candidates = list(set(manual_candidates))
