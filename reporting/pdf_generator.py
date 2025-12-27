@@ -556,12 +556,15 @@ class PDFReportGenerator:
         
         # Generate comprehensive executive summary using shared logic
         try:
-            from reporting.executive_summary import generate_executive_summary
+            from reporting.executive_summary import generate_executive_summary, _normalize_score
             
             # Calculate average rating
             avg_rating = 0
             if items:
-                avg_rating = sum(item.get('final_score', 0) for item in items) / len(items) * 100
+                raw_scores = [item.get('final_score', 0) for item in items]
+                if raw_scores:
+                    avg_raw = sum(raw_scores) / len(raw_scores)
+                    avg_rating = _normalize_score(avg_raw)
                 
             # Get dimension breakdown
             dimension_breakdown = report_data.get('dimension_breakdown', {})
@@ -581,7 +584,7 @@ class PDFReportGenerator:
                 model=summary_model,
                 use_llm=use_llm
             )
-            
+        
             # Render markdown to PDF
             story.extend(self._markdown_to_pdf_elements(exec_summary_md))
             
@@ -603,15 +606,19 @@ class PDFReportGenerator:
         story.append(Spacer(1, 10))
         
         # Generate comprehensive executive summary using shared logic
+        # Generate comprehensive executive summary using shared logic
         try:
-            from reporting.executive_summary import generate_executive_summary
+            from reporting.executive_summary import generate_executive_summary, _normalize_score
             
             items = report_data.get('items', [])
             
             # Calculate average rating
             avg_rating = 0
             if items:
-                avg_rating = sum(item.get('final_score', 0) for item in items) / len(items) * 100
+                raw_scores = [item.get('final_score', 0) for item in items]
+                if raw_scores:
+                    avg_raw = sum(raw_scores) / len(raw_scores)
+                    avg_rating = _normalize_score(avg_raw)
                 
             # Get dimension breakdown
             dimension_breakdown = report_data.get('dimension_breakdown', {})

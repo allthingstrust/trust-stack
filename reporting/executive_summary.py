@@ -15,6 +15,22 @@ from typing import Dict, Any, List, Optional
 logger = logging.getLogger(__name__)
 
 
+def _normalize_score(score: float) -> float:
+    """
+    Normalize score to 0-100 scale.
+    
+    Heuristic:
+    - If score > 1.0, assume it's already 0-100.
+    - If score <= 1.0, assume it's 0-1 and multiply by 100.
+    """
+    if score is None:
+        return 0.0
+    if score > 1.0:
+        return score
+    return score * 100.0
+
+
+
 def generate_executive_summary(
     avg_rating: float,
     dimension_breakdown: Dict[str, Any],
@@ -40,7 +56,7 @@ def generate_executive_summary(
     if use_llm:
         try:
             return _generate_llm_summary(
-                avg_rating=avg_rating,
+                avg_rating=_normalize_score(avg_rating),
                 dimension_breakdown=dimension_breakdown,
                 items=items,
                 sources=sources,
@@ -55,7 +71,7 @@ def generate_executive_summary(
             )
     else:
         return _generate_template_summary(
-            avg_rating=avg_rating,
+            avg_rating=_normalize_score(avg_rating),
             dimension_breakdown=dimension_breakdown,
             items=items
         )
@@ -82,7 +98,7 @@ def _generate_llm_summary(
     # Prepare dimension scores (0-100 scale)
     dimension_keys = ['provenance', 'verification', 'transparency', 'coherence', 'resonance']
     dimension_scores = {
-        key: dimension_breakdown.get(key, {}).get('average', 0.5) * 100
+        key: _normalize_score(dimension_breakdown.get(key, {}).get('average', 0.5))
         for key in dimension_keys
     }
 
@@ -106,9 +122,11 @@ def _generate_llm_summary(
         band_name = "Poor"
 
     # Extract low-scoring items for examples
+    # Check if items are 0-1 or 0-100 to determine threshold
+    # We use _normalize_score on each item to be safe
     low_scoring_items = sorted(
-        [item for item in items if item.get('final_score', 1.0) < 0.60],
-        key=lambda x: x.get('final_score', 0)
+        [item for item in items if _normalize_score(item.get('final_score', 1.0)) < 60.0],
+        key=lambda x: _normalize_score(x.get('final_score', 0))
     )[:5]
 
     # Build comprehensive prompt
@@ -166,7 +184,8 @@ PROBLEMATIC CONTENT EXAMPLES (Low Trust items requiring attention):
 """
         for i, item in enumerate(low_scoring_items, 1):
             title = item.get('title', 'Untitled')[:80]
-            score = item.get('final_score', 0) * 100
+            title = item.get('title', 'Untitled')[:80]
+            score = _normalize_score(item.get('final_score', 0))
             source = item.get('source', 'unknown')
 
             # Get URL safely
@@ -186,7 +205,7 @@ PROBLEMATIC CONTENT EXAMPLES (Low Trust items requiring attention):
                     [(k, float(v) if v else 0) for k, v in dim_scores.items()],
                     key=lambda x: x[1]
                 )[:2]
-                weak_dims_str = ', '.join([f"{d[0].title()}({d[1]*100:.0f})" for d in weak_dims if d[1] is not None])
+                weak_dims_str = ', '.join([f"{d[0].title()}({_normalize_score(d[1]):.0f})" for d in weak_dims if d[1] is not None])
             else:
                 weak_dims_str = "Unknown"
 
@@ -299,7 +318,7 @@ def _generate_template_summary(
     # Calculate dimension scores
     dimension_keys = ['provenance', 'verification', 'transparency', 'coherence', 'resonance']
     dimension_scores = {
-        key: dimension_breakdown.get(key, {}).get('average', 0.5) * 100
+        key: _normalize_score(dimension_breakdown.get(key, {}).get('average', 0.5))
         for key in dimension_keys
     }
 
@@ -313,7 +332,7 @@ def _generate_template_summary(
 
     # Find an example issue
     example_text = ""
-    low_items = [item for item in items if item.get('final_score', 1.0) < 0.60]
+    low_items = [item for item in items if _normalize_score(item.get('final_score', 1.0)) < 60.0]
     if low_items:
         example = low_items[0]
         title = example.get('title', 'Untitled')[:60]
@@ -379,7 +398,7 @@ def generate_success_highlights(
     # Prepare dimension scores
     dimension_keys = ['provenance', 'verification', 'transparency', 'coherence', 'resonance']
     dimension_scores = {
-        key: dimension_breakdown.get(key, {}).get('average', 0.5) * 100
+        key: _normalize_score(dimension_breakdown.get(key, {}).get('average', 0.5))
         for key in dimension_keys
     }
 
@@ -390,7 +409,9 @@ def generate_success_highlights(
     items_context = ""
     for i, item in enumerate(high_trust_items[:5], 1):
         title = item.get('title', 'Untitled')[:80]
-        score = item.get('final_score', 0) * 100
+    for i, item in enumerate(high_trust_items[:5], 1):
+        title = item.get('title', 'Untitled')[:80]
+        score = _normalize_score(item.get('final_score', 0))
         source = item.get('source', 'unknown')
 
         # Get URL safely
@@ -411,7 +432,7 @@ def generate_success_highlights(
                 key=lambda x: x[1],
                 reverse=True
             )[:2]
-            strong_dims_str = ', '.join([f"{d[0].title()}({d[1]*100:.0f})" for d in strong_dims if d[1] is not None])
+            strong_dims_str = ', '.join([f"{d[0].title()}({_normalize_score(d[1]):.0f})" for d in strong_dims if d[1] is not None])
         else:
             strong_dims_str = "Unknown"
 
