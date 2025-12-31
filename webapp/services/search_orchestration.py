@@ -195,10 +195,11 @@ def perform_initial_search(brand_id: str, keywords: List[str], sources: List[str
                     os.environ.pop('BRAVE_API_TIMEOUT', None)
 
                 if not search_results:
-                    st.warning(f"⚠️ No search results found. Try different keywords or check your {search_provider.upper()} API configuration.")
-                    progress_bar.empty()
-                    progress_animator.clear()
-                    return
+                    logger.warning(f"Search returned 0 results. Query: '{query}', Provider: {search_provider}")
+                    st.warning(f"⚠️ Search returned 0 results for query: '{query}'. Checking for manually configured domains...")
+                    # Do not return here; continue to process manual domains
+                else:
+                    progress_bar.progress(60)
 
                 # Classify URLs
                 total_results = len(search_results)
