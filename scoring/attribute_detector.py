@@ -425,26 +425,22 @@ class TrustStackAttributeDetector:
                 import json
                 schema_data = json.loads(schema_org) if isinstance(schema_org, str) else schema_org
                 
-                # Handle potentially nested json_ld structure
-                if isinstance(schema_data, dict) and 'json_ld' in schema_data and isinstance(schema_data['json_ld'], list):
-                    schema_list = schema_data['json_ld']
-                else:
-                    schema_list = schema_data if isinstance(schema_data, list) else [schema_data]
-
-                for schema_item in schema_list:
-                    if isinstance(schema_item, dict):
-                        schema_type = schema_item.get('@type', '')
-                        if isinstance(schema_type, str):
-                            if 'Article' in schema_type or 'BlogPosting' in schema_type:
-                                return 'blog' if 'Blog' in schema_type else 'article'
-                            elif 'NewsArticle' in schema_type:
-                                return 'news'
-                            elif 'WebPage' in schema_type or 'Organization' in schema_type:
-                                # Don't return immediately for WebPage/Organization as they are generic
-                                # but can be used as a weak signal if nothing else matches
-                                pass
-            except:
-                pass
+                # Use flattened list to finding type across all nodes
+                flat_schema = self._flatten_json_ld(schema_data)
+                
+                for schema_item in flat_schema:
+                    schema_type = schema_item.get('@type', '')
+                    if isinstance(schema_type, str):
+                        if 'Article' in schema_type or 'BlogPosting' in schema_type:
+                            return 'blog' if 'Blog' in schema_type else 'article'
+                        elif 'NewsArticle' in schema_type:
+                            return 'news'
+                        elif 'WebPage' in schema_type or 'Organization' in schema_type:
+                            # Don't return immediately for WebPage/Organization as they are generic
+                            # but can be used as a weak signal if nothing else matches
+                            pass
+            except Exception as e:
+                logger.debug(f"Error checking schema type: {e}")
 
         # Default based on channel
         if content.channel in ['reddit', 'twitter', 'facebook', 'instagram']:
@@ -453,6 +449,35 @@ class TrustStackAttributeDetector:
             return 'video'
 
         return 'other'
+
+    def _flatten_json_ld(self, data: any) -> List[Dict]:
+        """
+        Recursively flatten JSON-LD data to handle @graph and nested structures.
+        Returns a flat list of all objects found.
+        """
+        items = []
+        
+        if isinstance(data, list):
+            for item in data:
+                items.extend(self._flatten_json_ld(item))
+        elif isinstance(data, dict):
+            # Check for specific JSON-LD structures to unwrap
+            if '@graph' in data:
+                items.extend(self._flatten_json_ld(data['@graph']))
+            elif 'json_ld' in data: # Handle our internal wrapper
+                 items.extend(self._flatten_json_ld(data['json_ld']))
+            else:
+                # Expecting a single item object
+                items.append(data)
+                
+                # Also check common nested properties that might contain entity objects
+                # but careful not to duplicate if they are just references
+                # For now, we trust that @graph usually brings everything to top level
+                # But for deeply nested non-graph structures, we could recurse on specific keys
+                # like 'mainEntity', 'contains', etc. if needed.
+                pass
+                
+        return items
 
     def _check_alternative_attribution(self, content: NormalizedContent, meta: Dict) -> Dict[str, any]:
         """
@@ -476,12 +501,8 @@ class TrustStackAttributeDetector:
                 import json
                 schema_data = json.loads(schema_org) if isinstance(schema_org, str) else schema_org
 
-                # Handle potentially nested json_ld structure from metadata extractor
-                if isinstance(schema_data, dict) and 'json_ld' in schema_data and isinstance(schema_data['json_ld'], list):
-                    schema_list = schema_data['json_ld']
-                else:
-                    # Handle both single object and list of objects
-                    schema_list = schema_data if isinstance(schema_data, list) else [schema_data]
+                # Robustly flatten any nested structure (like @graph)
+                schema_list = self._flatten_json_ld(schema_data)
 
                 for schema_item in schema_list:
                     if not isinstance(schema_item, dict):
@@ -490,33 +511,45 @@ class TrustStackAttributeDetector:
                     # Check for author
                     if 'author' in schema_item:
                         author = schema_item['author']
-                        if isinstance(author, dict):
-                            author_name = author.get('name', '')
-                        else:
-                            author_name = str(author)
-                        if author_name:
-                            attribution_methods.append(f"Schema.org author: {author_name}")
+                        # author can be list, dict, or string
+                        authors = author if isinstance(author, list) else [author]
+                        
+                        for auth in authors:
+                            if isinstance(auth, dict):
+                                author_name = auth.get('name', '')
+                            else:
+                                author_name = str(auth)
+                                
+                            if author_name and author_name.lower() not in ['unknown', 'anonymous']:
+                                attribution_methods.append(f"Schema.org author: {author_name}")
 
                     # Check for contributor
                     if 'contributor' in schema_item:
                         contributor = schema_item['contributor']
-                        if isinstance(contributor, dict):
-                            contrib_name = contributor.get('name', '')
-                        else:
-                            contrib_name = str(contributor)
-                        if contrib_name:
-                            attribution_methods.append(f"Schema.org contributor: {contrib_name}")
+                        contributors = contributor if isinstance(contributor, list) else [contributor]
+                        
+                        for contrib in contributors:
+                            if isinstance(contrib, dict):
+                                contrib_name = contrib.get('name', '')
+                            else:
+                                contrib_name = str(contrib)
+                            if contrib_name:
+                                attribution_methods.append(f"Schema.org contributor: {contrib_name}")
 
                     # Check for publisher
                     if 'publisher' in schema_item:
                         publisher = schema_item['publisher']
                         if isinstance(publisher, dict):
+                             # Often publisher is an Organization with a name
                             pub_name = publisher.get('name', '')
+                             # Sometimes publisher is just a reference ID, verify if we can find it?
+                             # For now, just taking name if present
                         else:
                             pub_name = str(publisher)
                         if pub_name:
                             attribution_methods.append(f"Schema.org publisher: {pub_name}")
-            except:
+            except Exception as e:
+                logger.debug(f"Error checking alternative attribution: {e}")
                 pass
 
         # Check meta author tag
