@@ -1433,6 +1433,7 @@ def fetch_page(url: str, timeout: int = 10, browser_manager=None) -> Dict[str, s
             "privacy": links.get("privacy", ""),
             "verification_badges": verification_badges,
             "screenshot_path": None,
+            "html": resp.text, # Include raw HTML for metadata extraction
             "access_denied": access_denied
         }
 

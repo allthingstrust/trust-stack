@@ -377,6 +377,7 @@ class PlaywrightBrowserManager:
                 "body": page_body.strip(),
                 "url": url,
                 "raw_content": page_content, # Return raw content for footer link extraction
+                "html": page_content, # Standardized key for metadata extraction
                 "screenshot_path": screenshot_key,
                 "access_denied": access_denied
             }
