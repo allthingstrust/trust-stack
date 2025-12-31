@@ -193,9 +193,12 @@ class TrustStackAttributeDetector:
             should_flag = True
             reason = "Content appears AI-generated but lacks disclosure"
         elif content_type in ['blog', 'article', 'news'] and not content.author:
-            # Blog/article content without author attribution might benefit from AI/human labeling
-            should_flag = True
-            reason = "Blog/article content lacks author attribution or AI disclosure"
+            # Check if we can find author via alternative methods (e.g. JSON-LD)
+            attribution = self._check_alternative_attribution(content, meta)
+            if not attribution['found']:
+                # Blog/article content without author attribution might benefit from AI/human labeling
+                should_flag = True
+                reason = "Blog/article content lacks author attribution or AI disclosure"
         elif discusses_ai and text.count("ai") > 5:
             # Content heavily discusses AI - ambiguous whether it's AI-generated
             should_flag = True
@@ -421,15 +424,25 @@ class TrustStackAttributeDetector:
             try:
                 import json
                 schema_data = json.loads(schema_org) if isinstance(schema_org, str) else schema_org
-                if isinstance(schema_data, dict):
-                    schema_type = schema_data.get('@type', '')
-                    if isinstance(schema_type, str):
-                        if 'Article' in schema_type or 'BlogPosting' in schema_type:
-                            return 'blog' if 'Blog' in schema_type else 'article'
-                        elif 'NewsArticle' in schema_type:
-                            return 'news'
-                        elif 'WebPage' in schema_type or 'Organization' in schema_type:
-                            return 'landing_page'
+                
+                # Handle potentially nested json_ld structure
+                if isinstance(schema_data, dict) and 'json_ld' in schema_data and isinstance(schema_data['json_ld'], list):
+                    schema_list = schema_data['json_ld']
+                else:
+                    schema_list = schema_data if isinstance(schema_data, list) else [schema_data]
+
+                for schema_item in schema_list:
+                    if isinstance(schema_item, dict):
+                        schema_type = schema_item.get('@type', '')
+                        if isinstance(schema_type, str):
+                            if 'Article' in schema_type or 'BlogPosting' in schema_type:
+                                return 'blog' if 'Blog' in schema_type else 'article'
+                            elif 'NewsArticle' in schema_type:
+                                return 'news'
+                            elif 'WebPage' in schema_type or 'Organization' in schema_type:
+                                # Don't return immediately for WebPage/Organization as they are generic
+                                # but can be used as a weak signal if nothing else matches
+                                pass
             except:
                 pass
 
@@ -463,8 +476,12 @@ class TrustStackAttributeDetector:
                 import json
                 schema_data = json.loads(schema_org) if isinstance(schema_org, str) else schema_org
 
-                # Handle both single object and list of objects
-                schema_list = schema_data if isinstance(schema_data, list) else [schema_data]
+                # Handle potentially nested json_ld structure from metadata extractor
+                if isinstance(schema_data, dict) and 'json_ld' in schema_data and isinstance(schema_data['json_ld'], list):
+                    schema_list = schema_data['json_ld']
+                else:
+                    # Handle both single object and list of objects
+                    schema_list = schema_data if isinstance(schema_data, list) else [schema_data]
 
                 for schema_item in schema_list:
                     if not isinstance(schema_item, dict):
