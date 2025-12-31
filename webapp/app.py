@@ -797,6 +797,25 @@ def show_analyze_page():
                 help="Space-separated keywords to search for (e.g., 'nike swoosh'). Required to build the search query."
             )
 
+            # Headless Mode Toggle
+            current_headless = SETTINGS.get('headless_mode', True)
+            new_headless = st.toggle(
+                "Run in Headless Mode (Background)",
+                value=current_headless,
+                help="If enabled, the browser runs in the background. Disable to see the browser window for debugging.",
+            )
+            
+            # If toggle changed, update settings and restart browser
+            if new_headless != current_headless:
+                SETTINGS['headless_mode'] = new_headless
+                # Restart browser to apply change
+                manager = get_browser_manager()
+                if manager.is_started:
+                    st.toast(f"Restarting browser in {'headless' if new_headless else 'headed'} mode...", icon="🔄")
+                    manager.close()
+                    # It will auto-restart on next fetch
+
+
             max_items = st.number_input(
                 "Max Items to Analyze",
                 min_value=5,

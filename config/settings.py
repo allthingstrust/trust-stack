@@ -75,6 +75,7 @@ SETTINGS = {
     'app_name': 'Trust Stack Rating Tool',
     'version': '2.0.0-trust-stack',
     'debug': get_secret('DEBUG', 'False').lower() == 'true',
+    'headless_mode': str(get_secret('HEADLESS_MODE', 'true')).lower() == 'true',
 
     # Trust Stack Rating configuration
     'scoring_weights': ScoringWeights(),

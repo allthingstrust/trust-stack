@@ -92,7 +92,8 @@ class PlaywrightBrowserManager:
             ]
             
             # Default to Headed mode (false) to bypass bot detection on sites like Costco
-            headless_mode = os.environ.get('HEADLESS_MODE', 'false').lower() == 'true'
+            # Use SETTINGS for the source of truth, creating a toggle-able experience
+            headless_mode = SETTINGS.get('headless_mode', True)
             
             # Use 'new' headless mode if headless is requested
             # This is more stealthy than the old headless mode
