@@ -14,6 +14,9 @@ from data import export_s3
 from data.models import ContentAsset, DimensionScores, Run
 from sqlalchemy.orm import joinedload
 
+from ingestion.metadata_extractor import MetadataExtractor
+from data.models import NormalizedContent
+
 logger = logging.getLogger(__name__)
 
 
@@ -152,6 +155,9 @@ class RunManager:
                     browser_manager = get_browser_manager()
                     browser_manager.start()
                     
+                    # Initialize extractor
+                    extractor = MetadataExtractor()
+                    
                     urls = [a.get("url") for a in assets_needing_fetch if a.get("url")]
                     fetch_results = fetch_pages_parallel(urls, browser_manager=browser_manager)
                     
@@ -167,6 +173,43 @@ class RunManager:
                         asset["normalized_content"] = body
                         asset["title"] = asset.get("title") or result.get("title") or ""
                         asset["screenshot_path"] = asset.get("screenshot_path") or result.get("screenshot_path")
+                        html = result.get("html") or ""
+
+                        # Extract metadata if HTML is available
+                        if html:
+                            try:
+                                # Create temp content for extraction
+                                temp_meta = asset.get("meta_info") or {}
+                                temp_content = NormalizedContent(
+                                    content_id="temp",
+                                    url=url,
+                                    body=body,
+                                    src=asset.get("source_type", "web"),
+                                    platform_id=asset.get("external_id") or "unknown",
+                                    author="unknown",
+                                    title=asset.get("title") or "",
+                                    meta=temp_meta
+                                )
+                                
+                                # Run extraction
+                                extractor.enrich_content_metadata(temp_content, html=html)
+                                
+                                # Update asset with enriched fields
+                                if not asset.get("meta_info"):
+                                    asset["meta_info"] = {}
+                                asset["meta_info"].update(temp_content.meta)
+                                
+                                if temp_content.channel and temp_content.channel != "unknown":
+                                    asset["channel"] = temp_content.channel
+                                    
+                                if hasattr(temp_content, 'platform_type') and temp_content.platform_type:
+                                    asset["meta_info"]["platform_type"] = temp_content.platform_type
+                                    
+                                if getattr(temp_content, 'modality', None):
+                                    asset["modality"] = temp_content.modality
+                                    
+                            except Exception as e:
+                                logger.warning(f"Metadata extraction failed for {url}: {e}")
                         
                         # Preserve structured body if available
                         if result.get("structured_body"):
