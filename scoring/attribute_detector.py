@@ -143,8 +143,6 @@ class TrustStackAttributeDetector:
         - Content appears to be AI-generated
         - Content type is blog/article/news (where authorship disclosure matters)
         - Content explicitly discusses AI topics
-        
-        Does NOT flag standard corporate pages, landing pages, product pages, etc.
         """
         text = (content.body + " " + content.title).lower()
         meta = content.meta or {}
@@ -165,7 +163,9 @@ class TrustStackAttributeDetector:
                 label="AI vs Human Labeling Clarity",
                 value=10.0,
                 evidence="Clear labeling found in content or metadata",
-                confidence=1.0
+                confidence=1.0,
+                status="present",
+                reason="Explicit label found"
             )
 
         # Determine if AI labeling is relevant for this content
@@ -192,12 +192,16 @@ class TrustStackAttributeDetector:
         # 3. Content discusses AI extensively (ambiguous whether it's AI-generated)
         
         should_flag = False
-        reason = ""
+        reason = None
+        status = "unknown"
+        confidence = 1.0
         
         if has_ai_indicators:
             # Content appears to be AI-generated but lacks labeling
             should_flag = True
             reason = "Content appears AI-generated but lacks disclosure"
+            status = "absent"
+            confidence = 0.9
         elif content_type in ['blog', 'article', 'news'] and not content.author:
             # Check if we can find author via alternative methods (e.g. JSON-LD)
             attribution = self._check_alternative_attribution(content, meta)
@@ -205,10 +209,14 @@ class TrustStackAttributeDetector:
                 # Blog/article content without author attribution might benefit from AI/human labeling
                 should_flag = True
                 reason = "Blog/article content lacks author attribution or AI disclosure"
+                status = "absent"
+                confidence = attribution.get('confidence', 0.8)
         elif discusses_ai and text.count("ai") > 5:
             # Content heavily discusses AI - ambiguous whether it's AI-generated
             should_flag = True
             reason = "Content discusses AI extensively without clarifying if AI-generated"
+            status = "unknown"
+            confidence = 0.6
         
         # Only return an issue if we determined labeling is relevant
         if should_flag:
@@ -218,7 +226,9 @@ class TrustStackAttributeDetector:
                 label="AI vs Human Labeling Clarity",
                 value=3.0,  # Moderate issue, not critical
                 evidence=reason,
-                confidence=0.7  # Lower confidence since we're inferring
+                confidence=confidence,
+                status=status,
+                reason=reason
             )
         
         # For corporate pages, landing pages, product pages, etc. - don't flag at all
@@ -250,7 +260,9 @@ class TrustStackAttributeDetector:
                 label="Author/Brand Identity Verified",
                 value=10.0,
                 evidence=f"Explicit author byline found: {author}",
-                confidence=0.9
+                confidence=0.9,
+                status="present",
+                reason="Explicit author byline"
             )
             
         # Check extracted schema/meta data (from page_fetcher)
@@ -263,7 +275,9 @@ class TrustStackAttributeDetector:
                 label="Author/Brand Identity Verified",
                 value=alt_attribution['score'],
                 evidence=alt_attribution['evidence'],
-                confidence=alt_attribution['confidence']
+                confidence=alt_attribution['confidence'],
+                status="present",
+                reason=alt_attribution['evidence']
             )
             
         # Check global/site-level signals (inheritance)
@@ -277,7 +291,9 @@ class TrustStackAttributeDetector:
                 label="Author/Brand Identity Verified",
                 value=8.0, # Good score for site-wide transparency
                 evidence=f"Site-wide authorship verified: {evidence_str}",
-                confidence=0.85
+                confidence=0.85,
+                status="present",
+                reason="Inherited site-wide authorship"
             )
 
         # Fallback: Check for 'About' link in body (weak signal)
@@ -288,16 +304,30 @@ class TrustStackAttributeDetector:
                 label="Author/Brand Identity Verified",
                 value=5.0,
                 evidence="Possible 'About' link found in header/menu",
-                confidence=0.5
+                confidence=0.5,
+                status="partial",
+                reason="Ambiguous 'About' link"
             )
+            
+        # Not found - Distinguish absent vs unknown based on content quality
+        status = "absent"
+        reason = "No clear author identity found in metadata or content"
+        confidence = 0.8
+        
+        if len(content.body or "") < 200:
+             status = "unknown"
+             reason = "Content too short to reliably detect author"
+             confidence = 0.5
             
         return DetectedAttribute(
             attribute_id="author_brand_identity_verified",
             dimension="provenance",
             label="Author/Brand Identity Verified",
             value=1.0,
-            evidence="No clear author or brand identity found",
-            confidence=0.6
+            evidence=reason,
+            confidence=confidence,
+            status=status,
+            reason=reason
         )
 
 
@@ -495,7 +525,8 @@ class TrustStackAttributeDetector:
                 'found': False,
                 'score': 3.0,
                 'evidence': '',
-                'confidence': 0.8
+                'confidence': 0.8,
+                'status': 'absent'
             }
 
         # Score based on type and quantity of attribution
@@ -524,7 +555,8 @@ class TrustStackAttributeDetector:
             'found': True,
             'score': score,
             'evidence': evidence,
-            'confidence': confidence
+            'confidence': confidence,
+            'status': 'present'
         }
 
     def _detect_c2pa_manifest(self, content: NormalizedContent) -> Optional[DetectedAttribute]:

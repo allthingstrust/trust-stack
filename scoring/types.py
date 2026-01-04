@@ -14,6 +14,8 @@ class SignalScore:
     rationale: str       # Short explanation (LLM or heuristic)
     confidence: float    # 0.0-1.0 confidence in this specific signal
     source: str = "heuristic" # "heuristic", "llm", "external_api"
+    status: str = "present"  # present, absent, partial, unknown
+    reason: Optional[str] = None  # not_in_dom, unreadable, blocked, client_rendered
 
 @dataclass
 class DimensionScore:
