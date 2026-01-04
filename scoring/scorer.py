@@ -242,7 +242,8 @@ class ContentScorer:
             # Detect attributes if enabled and map to signals
             if self.attribute_detector:
                 try:
-                    detected_attrs = self.attribute_detector.detect_attributes(content)
+                    site_signals = brand_context.get('site_level_signals', {})
+                    detected_attrs = self.attribute_detector.detect_attributes(content, site_level_signals=site_signals)
                     mapped_signals = self.signal_mapper.map_attributes_to_signals(detected_attrs)
                     
                     # Override heuristic voice consistency if guidelines were used
@@ -1325,7 +1326,8 @@ class ContentScorer:
             detected_attrs = []
             if self.use_attribute_detection and self.attribute_detector:
                 try:
-                    detected_attrs = self.attribute_detector.detect_attributes(content)
+                    site_signals = brand_context.get('site_level_signals', {})
+                    detected_attrs = self.attribute_detector.detect_attributes(content, site_level_signals=site_signals)
                     logger.debug(f"Detected {len(detected_attrs)} attributes for {content.content_id}")
 
                     # Step 2.5: Merge LLM issues with detector attributes
