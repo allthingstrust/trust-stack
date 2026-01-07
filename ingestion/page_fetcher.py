@@ -1424,6 +1424,19 @@ def fetch_page(url: str, timeout: int = 10, browser_manager=None) -> Dict[str, s
         except Exception:
             verification_badges = {"verified": False, "platform": "unknown", "badge_type": "", "evidence": ""}
         
+
+        # NEW: Check SSL Certificate
+        # We do this after main content fetch to avoid blocking if the fetch failed anyway,
+        # but before constructing the result.
+        # Only check for https URLs.
+        ssl_data = {"ssl_valid": "false"}
+        if url.startswith('https'):
+            try:
+                from ingestion.ssl_utils import get_ssl_data
+                ssl_data = get_ssl_data(url)
+            except Exception as e:
+                logger.debug(f"Failed to load ssl_utils: {e}")
+
         result = {
             "title": title, 
             "body": body, 
@@ -1434,7 +1447,8 @@ def fetch_page(url: str, timeout: int = 10, browser_manager=None) -> Dict[str, s
             "verification_badges": verification_badges,
             "screenshot_path": None,
             "html": resp.text, # Include raw HTML for metadata extraction
-            "access_denied": access_denied
+            "access_denied": access_denied,
+            **ssl_data # Merge SSL data (ssl_valid, ssl_issuer, etc.)
         }
 
         # NEW: Secondary Visual Analysis Step

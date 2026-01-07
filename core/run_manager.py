@@ -217,11 +217,17 @@ class RunManager:
                                 asset["meta_info"] = {}
                             asset["meta_info"]["structured_body"] = result.get("structured_body")
 
-                        # Propagate access_denied flag
+                        # Propagate access_denied and SSL flags
+                        if not asset.get("meta_info"):
+                            asset["meta_info"] = {}
+                        
                         if result.get("access_denied"):
-                            if not asset.get("meta_info"):
-                                asset["meta_info"] = {}
                             asset["meta_info"]["access_denied"] = True
+                            
+                        # Copy SSL metadata
+                        for ssl_key in ["ssl_valid", "ssl_issuer", "ssl_expiry_days", "ssl_error"]:
+                            if ssl_key in result:
+                                asset["meta_info"][ssl_key] = result[ssl_key]
                         
                         fetched_assets.append(asset)
                         logger.debug(f"Fetched {len(body)} chars for {url}")
@@ -384,7 +390,12 @@ class RunManager:
                             "source_url": page.get("url"),
                             "title": page.get("title"),
                             "description": (page.get("body") or "")[:500],
-                            "access_denied": page.get("access_denied", False)
+                            "access_denied": page.get("access_denied", False),
+                            # Propagate SSL metadata
+                            "ssl_valid": page.get("ssl_valid"),
+                            "ssl_issuer": page.get("ssl_issuer"),
+                            "ssl_expiry_days": page.get("ssl_expiry_days"),
+                            "ssl_error": page.get("ssl_error")
                         },
                     }
                 )
@@ -414,7 +425,12 @@ class RunManager:
                             "query": kw,
                             "source_url": page.get("url"),
                             "title": page.get("title"),
-                            "description": (page.get("body") or "")[:500]
+                            "description": (page.get("body") or "")[:500],
+                            # Propagate SSL metadata
+                            "ssl_valid": page.get("ssl_valid"),
+                            "ssl_issuer": page.get("ssl_issuer"),
+                            "ssl_expiry_days": page.get("ssl_expiry_days"),
+                            "ssl_error": page.get("ssl_error")
                         },
                     }
                 )
