@@ -768,41 +768,69 @@ class TrustStackAttributeDetector:
                 confidence=0.9
             )
 
-        # Report only trusted sources/domains positively
-        # Don't report neutral cases - they're not issues
+        # Report only trusted sources/domains positively (Overrides everything else)
         if source in trusted_sources:
-            value = trusted_sources[source]
-            evidence = f"Trusted platform: {source}"
             return DetectedAttribute(
                 attribute_id="source_domain_trust_baseline",
                 dimension="provenance",
                 label="Source Domain Trust Baseline",
-                value=value,
-                evidence=evidence,
+                value=trusted_sources[source],
+                evidence=f"Trusted platform: {source}",
                 confidence=0.8
             )
         elif any(domain.endswith(td) for td in trusted_domains):
-            value = 9.0
-            evidence = f"High-trust domain: {domain}"
             return DetectedAttribute(
                 attribute_id="source_domain_trust_baseline",
                 dimension="provenance",
                 label="Source Domain Trust Baseline",
-                value=value,
-                evidence=evidence,
+                value=9.0,
+                evidence=f"High-trust domain: {domain}",
                 confidence=0.8
             )
-        else:
-            # Neutral case - report as baseline trust (5.0)
-            # This ensures the prov_domain_trust signal is present and doesn't trigger "missing core signal" penalties
-            return DetectedAttribute(
-                attribute_id="source_domain_trust_baseline",
-                dimension="provenance",
-                label="Source Domain Trust Baseline",
-                value=5.0,
-                evidence=f"No specific trust indicators or red flags found for {domain}",
-                confidence=0.5
-            )
+
+        # Graduated Trust Model for non-institutional domains
+        # Base score for "Neutral" (no red flags)
+        score = 5.0
+        positive_signals = []
+
+        # 1. SSL Check
+        if meta.get("ssl_valid") == "true":
+            score += 1.0
+            positive_signals.append("Valid SSL")
+
+        # 2. Privacy Policy Check (URL presence)
+        if meta.get("privacy"):
+            score += 1.0
+            positive_signals.append("Privacy Policy found")
+
+        # 3. Domain Age Bonus
+        try:
+            age_days = int(meta.get("domain_age_days", 0))
+            if age_days > 365:
+                score += 1.0
+                positive_signals.append("Established domain (>1y)")
+            elif age_days > 90:
+                score += 0.5
+                positive_signals.append("Established domain (>90d)")
+        except (ValueError, TypeError):
+            pass
+
+        # Cap at 8.0 for hygiene-only trust
+        # (Scores 9.0-10.0 are reserved for Institutional Authority)
+        final_score = min(score, 8.0)
+        
+        evidence = "Domain hygiene analysis"
+        if positive_signals:
+            evidence += f": {', '.join(positive_signals)}"
+
+        return DetectedAttribute(
+            attribute_id="source_domain_trust_baseline",
+            dimension="provenance",
+            label="Source Domain Trust Baseline",
+            value=final_score,
+            evidence=evidence,
+            confidence=0.7
+        )
 
     def _detect_domain_age(self, content: NormalizedContent) -> Optional[DetectedAttribute]:
         """
