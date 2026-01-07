@@ -741,7 +741,14 @@ class TrustStackAttributeDetector:
         red_flags = []
         if meta.get("ssl_valid") == "false":
             red_flags.append("No valid SSL certificate")
-        if meta.get("has_privacy_policy") == "false":
+        
+        # Check for privacy policy URL (propagated from page fetcher)
+        # If the key exists but is empty, it means we looked but didn't find one.
+        privacy_url = meta.get("privacy")
+        if privacy_url is not None and not privacy_url:
+            red_flags.append("No privacy policy found")
+        elif meta.get("has_privacy_policy") == "false":
+             # Fallback to legacy flag if present
             red_flags.append("No privacy policy found")
         if meta.get("domain_age_days") and int(meta.get("domain_age_days", 999)) < 30:
             red_flags.append("Very new domain (less than 30 days old)")

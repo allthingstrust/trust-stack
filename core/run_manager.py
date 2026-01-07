@@ -224,10 +224,10 @@ class RunManager:
                         if result.get("access_denied"):
                             asset["meta_info"]["access_denied"] = True
                             
-                        # Copy SSL metadata
-                        for ssl_key in ["ssl_valid", "ssl_issuer", "ssl_expiry_days", "ssl_error"]:
-                            if ssl_key in result:
-                                asset["meta_info"][ssl_key] = result[ssl_key]
+                        # Copy SSL metadata and legal links
+                        for key in ["ssl_valid", "ssl_issuer", "ssl_expiry_days", "ssl_error", "privacy", "terms"]:
+                            if key in result:
+                                asset["meta_info"][key] = result[key]
                         
                         fetched_assets.append(asset)
                         logger.debug(f"Fetched {len(body)} chars for {url}")
@@ -395,7 +395,10 @@ class RunManager:
                             "ssl_valid": page.get("ssl_valid"),
                             "ssl_issuer": page.get("ssl_issuer"),
                             "ssl_expiry_days": page.get("ssl_expiry_days"),
-                            "ssl_error": page.get("ssl_error")
+                            "ssl_error": page.get("ssl_error"),
+                            # Propagate legal links
+                            "privacy": page.get("privacy"),
+                            "terms": page.get("terms")
                         },
                     }
                 )
@@ -430,7 +433,10 @@ class RunManager:
                             "ssl_valid": page.get("ssl_valid"),
                             "ssl_issuer": page.get("ssl_issuer"),
                             "ssl_expiry_days": page.get("ssl_expiry_days"),
-                            "ssl_error": page.get("ssl_error")
+                            "ssl_error": page.get("ssl_error"),
+                            # Propagate legal links
+                            "privacy": page.get("privacy"),
+                            "terms": page.get("terms")
                         },
                     }
                 )
