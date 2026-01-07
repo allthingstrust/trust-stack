@@ -287,6 +287,65 @@ class MetadataExtractor:
 
         return og_data
 
+    def extract_provenance_data(self, html: str) -> Dict[str, str]:
+        """
+        Extract C2PA/CAI provenance data from HTML
+        
+        Args:
+            html: HTML content
+            
+        Returns:
+            Dictionary of provenance metadata
+        """
+        provenance = {}
+        
+        if not html:
+            return provenance
+            
+        try:
+            soup = BeautifulSoup(html, 'html.parser')
+            
+            # Check for standard C2PA manifest link
+            # <link rel="c2pa-manifest" href="...">
+            c2pa_link = soup.find('link', rel='c2pa-manifest')
+            if c2pa_link and c2pa_link.get('href'):
+                provenance['c2pa_manifest'] = c2pa_link['href']
+                provenance['has_c2pa_manifest'] = "true"
+                
+            # Check for legacy CAI manifest link
+            # <link rel="cai-manifest" href="...">
+            if 'c2pa_manifest' not in provenance:
+                cai_link = soup.find('link', rel='cai-manifest')
+                if cai_link and cai_link.get('href'):
+                    provenance['c2pa_manifest'] = cai_link['href'] # Map to same key for scorer
+                    provenance['cai_manifest'] = cai_link['href']
+                    provenance['has_c2pa_manifest'] = "true"
+
+            # Check for meta tags
+            # <meta name="c2pa-manifest" content="...">
+            if 'c2pa_manifest' not in provenance:
+                meta_manifest = soup.find('meta', attrs={'name': 'c2pa-manifest'})
+                if meta_manifest and meta_manifest.get('content'):
+                    provenance['c2pa_manifest'] = meta_manifest['content']
+                    provenance['has_c2pa_manifest'] = "true"
+
+            # Check for script tag
+            # <script type="application/c2pa-manifest+json">
+            if 'c2pa_manifest' not in provenance:
+                script_manifest = soup.find('script', type='application/c2pa-manifest+json')
+                if script_manifest and script_manifest.get('src'):
+                    provenance['c2pa_manifest'] = script_manifest['src']
+                    provenance['has_c2pa_manifest'] = "true"
+                elif script_manifest and script_manifest.string:
+                    # Inline manifest content - store indication it exists
+                    provenance['c2pa_manifest'] = "inline_blob"
+                    provenance['has_c2pa_manifest'] = "true"
+
+        except Exception as e:
+            logger.debug(f"Error extracting provenance data: {e}")
+            
+        return provenance
+
     def extract_meta_tags(self, html: str) -> Dict[str, str]:
         """
         Extract standard meta tags from HTML
@@ -377,5 +436,10 @@ class MetadataExtractor:
         if html:
             meta_tags = self.extract_meta_tags(html)
             content.meta.update(meta_tags)
+            
+        # Extract provenance/C2PA data
+        if html:
+            provenance_data = self.extract_provenance_data(html)
+            content.meta.update(provenance_data)
 
         return content
