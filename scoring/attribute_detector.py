@@ -591,24 +591,73 @@ class TrustStackAttributeDetector:
         """Detect canonical URL match"""
         meta = content.meta or {}
         canonical_url = meta.get("canonical_url", "")
+        # Fallback to content.url if meta['url'] is missing (common with some scrapers)
+        source_url = meta.get("url") or content.url or ""
 
         if not canonical_url:
             return None  # Can't determine without canonical URL
+            
+        if not source_url:
+            # If we still don't have a source URL, we can't compare.
+            # Returning None avoids a false positive partial match.
+            return None
 
         # Parse both URLs
         try:
+            # Normalize URLs by removing trailing slashes for cleaner comparison
+            canonical_norm = canonical_url.rstrip('/')
+            source_norm = source_url.rstrip('/')
+            
+            if canonical_norm == source_norm:
+                 return DetectedAttribute(
+                    attribute_id="canonical_url_matches_declared_source",
+                    dimension="provenance",
+                    label="Canonical URL Matches Declared Source",
+                    value=10.0,
+                    evidence="Canonical URL exact match",
+                    confidence=1.0,
+                    status="present",
+                    reason="Exact match"
+                )
+
             canonical_domain = urlparse(canonical_url).netloc
-            source_domain = urlparse(meta.get("url", "")).netloc
+            source_domain = urlparse(source_url).netloc
 
             if canonical_domain == source_domain:
-                value = 10.0
-                evidence = "Canonical URL matches source domain"
-            elif canonical_domain in source_domain or source_domain in canonical_domain:
+                # Same domain but different path/params -> Partial match
+                # Check if it is just http vs https
+                if canonical_domain == source_domain and urlparse(canonical_url).path == urlparse(source_url).path:
+                     return DetectedAttribute(
+                        attribute_id="canonical_url_matches_declared_source",
+                        dimension="provenance",
+                        label="Canonical URL Matches Declared Source",
+                        value=10.0,
+                        evidence="Canonical URL matches (protocol difference only)",
+                        confidence=1.0,
+                        status="present",
+                        reason="Protocol difference only"
+                    )
+
                 value = 5.0
-                evidence = "Partial canonical URL match"
+                evidence = "Canonical URL points to same domain but different path"
+            elif canonical_domain.replace('www.', '') == source_domain.replace('www.', ''):
+                 # Handle www vs non-www
+                 if urlparse(canonical_url).path == urlparse(source_url).path:
+                      return DetectedAttribute(
+                        attribute_id="canonical_url_matches_declared_source",
+                        dimension="provenance",
+                        label="Canonical URL Matches Declared Source",
+                        value=10.0,
+                        evidence="Canonical URL matches (subdomain/www difference only)",
+                        confidence=1.0,
+                        status="present",
+                        reason="Subdomain difference only"
+                    )
+                 value = 5.0
+                 evidence = "Canonical URL points to same base domain"
             else:
                 value = 1.0
-                evidence = "Canonical URL mismatch"
+                evidence = f"Canonical URL mismatch: declared {canonical_domain} vs source {source_domain}"
 
             return DetectedAttribute(
                 attribute_id="canonical_url_matches_declared_source",
@@ -616,7 +665,9 @@ class TrustStackAttributeDetector:
                 label="Canonical URL Matches Declared Source",
                 value=value,
                 evidence=evidence,
-                confidence=1.0
+                confidence=1.0,
+                status="present" if value > 1.0 else "absent",
+                reason=evidence
             )
         except Exception:
             return None
