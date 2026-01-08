@@ -287,6 +287,122 @@ class MetadataExtractor:
 
         return og_data
 
+    def extract_meta_tags(self, html: str) -> Dict[str, str]:
+        """
+        Extract standard meta tags from HTML
+
+        Args:
+            html: HTML content
+
+        Returns:
+            Dictionary of meta tags
+        """
+        meta_data = {}
+
+        if not html:
+            return meta_data
+
+        try:
+            soup = BeautifulSoup(html, 'html.parser')
+
+            # Standard meta tags to extract
+            target_tags = [
+                'description', 'keywords', 'author', 'viewport', 'robots',
+                'generator', 'application-name', 'theme-color',
+                # Date related
+                'date', 'pubdate', 'publish-date', 'published-date',
+                'article:published_time', 'article:modified_time',
+                'og:updated_time', 'last-modified'
+            ]
+
+            for name in target_tags:
+                tag = soup.find('meta', attrs={'name': name})
+                if tag and tag.get('content'):
+                    meta_data[name] = tag['content']
+
+                # Also try property (common for OG/article tags)
+                if name.startswith('article:') or name.startswith('og:'):
+                    tag = soup.find('meta', property=name)
+                    if tag and tag.get('content'):
+                        meta_data[name] = tag['content']
+
+        except Exception as e:
+            logger.debug(f"Error extracting meta tags: {e}")
+
+        return meta_data
+
+    def _extract_publication_date(self, html: str, schema_json: str = None) -> Optional[str]:
+        """
+        Extract publication date from various sources in priority order.
+        
+        Priority:
+        1. OpenGraph article:published_time
+        2. Schema.org datePublished
+        3. Standard meta tags (pubdate, date, etc.)
+        
+        Returns:
+            ISO format date string or None
+        """
+        if not html:
+            return None
+            
+        try:
+            soup = BeautifulSoup(html, 'html.parser')
+            
+            # 1. OpenGraph article:published_time
+            og_pub = soup.find('meta', property='article:published_time')
+            if og_pub and og_pub.get('content'):
+                return og_pub['content']
+                
+            # 2. Schema.org datePublished (if already extracted)
+            if schema_json:
+                try:
+                    data = json.loads(schema_json)
+                    candidates = []
+                    
+                    # Handle MetadataExtractor structure which wraps json_ld
+                    if isinstance(data, dict):
+                        if 'json_ld' in data and isinstance(data['json_ld'], list):
+                            candidates.extend(data['json_ld'])
+                        else:
+                            candidates.append(data)
+                    elif isinstance(data, list):
+                        candidates.extend(data)
+
+                    for item in candidates:
+                        # Look for common types that have dates
+                        if any(t in item.get('@type', '') for t in ['Article', 'NewsArticle', 'BlogPosting', 'WebPage']):
+                            if item.get('datePublished'):
+                                return item['datePublished']
+                            if item.get('dateCreated'):
+                                return item['dateCreated']
+                except:
+                    pass
+            
+            # 2b. Schema.org via itemprop (microdata)
+            date_pub = soup.find(attrs={"itemprop": "datePublished"})
+            if date_pub:
+                return date_pub.get('content') or date_pub.get_text()
+                
+            # 3. Meta tags
+            meta_dates = [
+                ('name', 'pubdate'),
+                ('name', 'publish-date'),
+                ('name', 'date'),
+                ('name', 'original-publish-date'),
+                ('property', 'og:updated_time') # Fallback to updated time
+            ]
+            
+            for attr, val in meta_dates:
+                tag = soup.find('meta', attrs={attr: val})
+                if tag and tag.get('content'):
+                    return tag['content']
+                    
+        except Exception as e:
+            logger.debug(f"Error extracting publication date: {e}")
+            
+        return None
+
     def extract_provenance_data(self, html: str) -> Dict[str, str]:
         """
         Extract C2PA/CAI provenance data from HTML
@@ -421,11 +537,24 @@ class MetadataExtractor:
             if schema_data:
                 content.meta['schema_org'] = json.dumps(schema_data)
 
-        # Extract canonical URL
-        if html and 'canonical_url' not in content.meta:
-            canonical = self.extract_canonical_url(html)
-            if canonical:
-                content.meta['canonical_url'] = canonical
+        # Enrich URL and canonical URL
+        # If content.url is not set, try to use src or canonical
+        if not content.url:
+            content.url = content.src or ""
+        
+        canonical = self.extract_canonical_url(html)
+        if canonical:
+            if not content.url: # If content.url is still empty, use canonical
+                content.url = canonical
+            # Also store as meta for scoring
+            content.meta['canonical'] = canonical
+
+        # Extract publication date
+        if html:
+            published_at = self._extract_publication_date(html, content.meta.get('schema_org'))
+            if published_at:
+                content.published_at = published_at
+                content.meta['published_at'] = published_at
 
         # Extract OG metadata
         if html:
