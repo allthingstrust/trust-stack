@@ -442,4 +442,86 @@ class MetadataExtractor:
             provenance_data = self.extract_provenance_data(html)
             content.meta.update(provenance_data)
 
+        # Extract significant visuals flag
+        if html:
+            has_significant_visuals = self.extract_significant_visuals(html)
+            content.meta['has_significant_visuals'] = str(has_significant_visuals).lower()
+
         return content
+
+    def extract_significant_visuals(self, html: str) -> bool:
+        """
+        Detect if the page contains significant visuals (hero images, large media)
+        that would typically require C2PA credentials.
+        
+        Criteria for "significant":
+        - Image dimensions > 250px (if width/height attributes present)
+        - Class/ID containing 'hero', 'banner', 'featured', 'main-image'
+        - Explicitly excludes known decorative elements (logo, icon, footer, nav)
+        
+        Args:
+            html: HTML content
+            
+        Returns:
+            True if significant visuals detected, False otherwise
+        """
+        if not html:
+            return False
+            
+        try:
+            soup = BeautifulSoup(html, 'html.parser')
+            
+            # 1. Check for Hero/Banner naming conventions in images or their containers
+            # Look for images with specific classes or parents with specific classes
+            hero_keywords = re.compile(r'(hero|banner|featured|cover|main-image|post-image)', re.I)
+            decorative_keywords = re.compile(r'(logo|icon|avatar|user|brand|footer|nav|social)', re.I)
+            
+            images = soup.find_all('img')
+            for img in images:
+                # Get image attributes
+                src = img.get('src', '')
+                classes = ' '.join(img.get('class', []))
+                img_id = img.get('id', '')
+                alt = img.get('alt', '')
+                
+                # specific check: skip tracking pixels or tiny icons
+                if 'tracking' in classes.lower() or 'pixel' in classes.lower():
+                    continue
+
+                # Check dimensions if available (attributes often missing, but good signal if present)
+                width = img.get('width')
+                height = img.get('height')
+                
+                try:
+                    # Convert to int, handling 'px' suffix or distinct types
+                    w = int(str(width).replace('px', '')) if width and str(width).replace('px', '').isdigit() else 0
+                    h = int(str(height).replace('px', '')) if height and str(height).replace('px', '').isdigit() else 0
+                    
+                    # SIGNIFICANT SIZE SIGNAL
+                    # If image is explicitly large (>250px in either dim), it's likely content
+                    if w > 250 or h > 250:
+                        # Double check it's not a logo (some logos are hi-res)
+                        if not decorative_keywords.search(classes + img_id + src + alt):
+                            return True
+                except Exception:
+                    pass
+
+                # SEMANTIC NAMING SIGNAL
+                # Check for hero/banner keywords
+                if hero_keywords.search(classes + img_id):
+                    # Ensure it's not also marked as logo/icon which overrides 'hero' (e.g. "hero-logo")
+                    if not decorative_keywords.search(classes + img_id):
+                        return True
+            
+            # 2. Check for Video elements (always considered significant)
+            if soup.find('video') or soup.find('iframe', src=re.compile(r'(youtube|vimeo)', re.I)):
+                return True
+
+            # 3. Check for specific meta tags indicating a lead image (og:image is common but weak, explicit "hero" is better)
+            # We already use modality detection which checks og:image, but here we want IN-BODY content.
+            # So we stick to DOM elements.
+                
+        except Exception as e:
+            logger.debug(f"Error detecting significant visuals: {e}")
+            
+        return False

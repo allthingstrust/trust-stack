@@ -578,6 +578,15 @@ class TrustStackAttributeDetector:
                 confidence=1.0
             )
         else:
+            # CONDITIONAL PENALTY LOGIC
+            # Only penalize if content is naturally visual OR contains significant visuals
+            modality = getattr(content, 'modality', 'text')
+            has_visuals = meta.get('has_significant_visuals') == 'true'
+
+            if modality == 'text' and not has_visuals:
+                 # Text-only content with no hero images -> No penalty (return None)
+                 return None
+
             return DetectedAttribute(
                 attribute_id="c2pa_cai_manifest_present",
                 dimension="provenance",
