@@ -1405,6 +1405,7 @@ def show_analyze_page():
                         "title": url_data.get('title'),
                         "source_type": "web", # Default to web for now
                         "metadata": url_data,
+                        "html": url_data.get('html'), # Pass HTML for metadata extraction
                         # Pass visual analysis data at top level for RunManager
                         "screenshot_path": url_data.get('screenshot_path'),
                         "visual_analysis": url_data.get('visual_analysis')

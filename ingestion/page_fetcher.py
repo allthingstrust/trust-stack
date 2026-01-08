@@ -1218,6 +1218,7 @@ def _fetch_with_playwright(url: str, user_agent: str, browser_manager=None) -> D
             "verification_badges": verification_badges,
             "verification_badges": verification_badges,
             "screenshot_path": screenshot_key,
+            "html": page_content, # Include raw HTML for metadata extraction
             "access_denied": access_denied
         }
 

@@ -428,6 +428,7 @@ def fetch_and_process_selected_urls(selected_urls: List[Dict[str, Any]]):
                 # Update with fetched content
                 original['title'] = result.get('title') or original.get('title', 'No title')
                 original['body'] = result.get('body', '')
+                original['html'] = result.get('html', '') # Preserve raw HTML for metadata extraction
                 original['status'] = 200 if result.get('body') else 0 # Simple status proxy
                 original['fetched'] = True
                 

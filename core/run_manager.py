@@ -138,8 +138,51 @@ class RunManager:
             fetched_assets = []
             assets_needing_fetch = []
             
+            # Initialize extractor for pre-provided content
+            extractor = MetadataExtractor()
+
             for asset in assets:
                 raw_content = asset.get("raw_content") or asset.get("normalized_content") or ""
+                html = asset.get("html") or ""
+
+                # If we have HTML, enrich metadata immediately
+                # This ensures assets fetched by the UI (search_orchestration) get processed for keys/C2PA
+                if html:
+                    try:
+                        # Create temporary NormalizedContent wrapper for extraction
+                        temp_meta = asset.get("meta_info") or {}
+                        
+                        # Use dict-safe access for creating the wrapper
+                        temp_content = NormalizedContent(
+                            content_id="temp",
+                            url=asset.get("url") or "",
+                            body=raw_content,
+                            src=asset.get("source_type", "web"),
+                            platform_id=asset.get("external_id") or "unknown",
+                            author="unknown",
+                            title=asset.get("title") or "",
+                            meta=temp_meta
+                        )
+                        
+                        # Run extraction
+                        extractor.enrich_content_metadata(temp_content, html=html)
+                        
+                        # Update asset with extracted signals
+                        if not asset.get("meta_info"):
+                            asset["meta_info"] = {}
+                        asset["meta_info"].update(temp_content.meta)
+                        
+                        # Copy derived fields
+                        if temp_content.channel and temp_content.channel != "unknown":
+                            asset["channel"] = temp_content.channel
+                        if hasattr(temp_content, 'platform_type') and temp_content.platform_type:
+                            asset["meta_info"]["platform_type"] = temp_content.platform_type
+                        if getattr(temp_content, 'modality', None):
+                            asset["modality"] = temp_content.modality
+                            
+                    except Exception as e:
+                        logger.warning(f"Metadata extraction failed for pre-provided asset {asset.get('url')}: {e}")
+
                 if not raw_content and asset.get("url"):
                     assets_needing_fetch.append(asset)
                 else:
