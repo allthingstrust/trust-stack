@@ -153,12 +153,23 @@ class ScoringAggregator:
         # Build lookup of best value per signal ID (for knockout checking)
         by_id_best: Dict[str, float] = {}
         for s in dimension_signals:
-            by_id_best[s.id] = max(by_id_best.get(s.id, 0.0), float(s.value))
+            status = getattr(s, 'status', 'known')
+            if status == 'unknown':
+                # Treat unknown signals as passing (value=1.0) for knockout/presence checks
+                # This prevents "unknown" from triggering penalties like core deficit
+                by_id_best[s.id] = 1.0
+            else:
+                by_id_best[s.id] = max(by_id_best.get(s.id, 0.0), float(s.value))
         
         present_signal_ids = set(by_id_best.keys())
         
         # Calculate weighted score with visibility multipliers
         for signal in dimension_signals:
+            status = getattr(signal, 'status', 'known')
+            if status == 'unknown':
+                logger.debug(f"Signal '{signal.id}' status is unknown, excluding from weighted score calculation")
+                continue
+                
             signal_def = defs.get(signal.id, {})
             effective_weight = self._calculate_effective_weight(signal, signal_def)
             

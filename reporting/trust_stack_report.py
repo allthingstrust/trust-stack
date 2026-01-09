@@ -428,7 +428,7 @@ SIGNAL_ID_TO_KEY_SIGNAL = {
     "ver_social_proof": "External Social Proof",
     # Visual Analysis Signals
     "vis_design_quality": "Visual/Design Coherence", # Overlap with existing? Let's treat as Visual/Design Coherence
-    "vis_dark_patterns": "Visual Dark Patterns",
+    "vis_dark_patterns": "Dark Pattern Prevention",
     "vis_brand_coherence": "Visual Brand Coherence",
     "vis_accessibility": "Visual Accessibility",
     "vis_trust_indicators": "Visual Trust Indicators",
@@ -892,8 +892,36 @@ def _generate_visual_snapshot(items: List[Dict[str, Any]], run_id: str) -> str:
                  path = meta.get('screenshot_path')
         
         if path:
-            visual_items.append(item)
+            # Check for access denied or failed analysis explicitly
+            # (We only want valid, successful analyses for the main visual section)
+            # Access Denied items are handled in blocked_section
             
+            # Check analysis success
+            analysis = item.get('visual_analysis')
+            if not analysis:
+                 # Check meta
+                 if isinstance(item.get('meta'), dict):
+                     analysis = item.get('meta', {}).get('visual_analysis')
+            
+            is_success = True
+            is_access_denied = False
+            
+            if analysis and isinstance(analysis, dict):
+                is_success = analysis.get('success', True)
+                # Check for access denied in analysis (if passed through) or meta
+                if analysis.get('access_denied'):
+                    is_access_denied = True
+            
+            # Check meta for access_denied flag
+            meta = item.get('meta', {})
+            if isinstance(meta, dict):
+                if meta.get('access_denied') or meta.get('blocked'):
+                    is_access_denied = True
+            
+            # Filter condition: Must be successful analysis and NOT access denied
+            if is_success and not is_access_denied:
+                visual_items.append(item)
+
     if not visual_items:
         return ""
         
@@ -990,7 +1018,7 @@ def _generate_visual_snapshot(items: List[Dict[str, Any]], run_id: str) -> str:
                 summary_parts = []
                 if design is not None: summary_parts.append(f"Design Quality: {float(design)*10:.1f}/10")
                 if brand is not None: summary_parts.append(f"Brand Coherence: {float(brand)*10:.1f}/10")
-                if dark is not None: summary_parts.append(f"Dark Patterns Risk: {float(dark)*10:.1f}/10")
+                if dark is not None: summary_parts.append(f"Dark Pattern Prevention: {float(dark)*10:.1f}/10")
                 
                 analysis_summary = " | ".join(summary_parts)
                 design_assessment = analysis.get('design_assessment', '')

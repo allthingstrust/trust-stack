@@ -7,7 +7,7 @@ Prompts are imported from the centralized prompts module.
 
 import logging
 import json
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from ingestion.serper_search import search_serper
@@ -37,13 +37,43 @@ class VerificationManager:
         
     def verify_content(self, content: NormalizedContent) -> Dict[str, Any]:
         """Perform fact-checked verification of content."""
+        # Check for visual verification (social media)
+        visual_verification = self._check_visual_verification(content)
+        
         claims = self._extract_claims(content)
-        if not claims:
+        if not claims and not visual_verification:
             logger.info(f"No verifiable claims found for {content.content_id}")
             return {'score': 0.5, 'issues': []}
             
         verified_claims = self._verify_claims_parallel(claims)
+        
+        # Merge visual verification results
+        if visual_verification:
+            verified_claims.insert(0, visual_verification)
+            
         return self._aggregate_results(verified_claims)
+
+    def _check_visual_verification(self, content: NormalizedContent) -> Optional[Dict[str, Any]]:
+        """Check if visual analysis found a verification badge."""
+        if not content.visual_analysis:
+            return None
+            
+        social_verif = content.visual_analysis.get('social_verification')
+        if not social_verif or not social_verif.get('is_verified'):
+            return None
+            
+        platform = social_verif.get('platform', 'social media')
+        evidence = social_verif.get('evidence', 'Visual analysis detected verification badge')
+        
+        logger.info(f"Visual verification found for {content.content_id} on {platform}")
+        
+        return {
+            "claim": f"Account is verified on {platform}",
+            "status": "SUPPORTED",
+            "confidence": 0.95,
+            "reasoning": f"Visual Analysis confirmed verification badge: {evidence}",
+            "source": "visual_analysis"
+        }
 
     def _extract_claims(self, content: NormalizedContent) -> List[str]:
         """Extract 3-5 key factual claims from content.

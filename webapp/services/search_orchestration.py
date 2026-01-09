@@ -195,10 +195,11 @@ def perform_initial_search(brand_id: str, keywords: List[str], sources: List[str
                     os.environ.pop('BRAVE_API_TIMEOUT', None)
 
                 if not search_results:
-                    st.warning(f"⚠️ No search results found. Try different keywords or check your {search_provider.upper()} API configuration.")
-                    progress_bar.empty()
-                    progress_animator.clear()
-                    return
+                    logger.warning(f"Search returned 0 results. Query: '{query}', Provider: {search_provider}")
+                    st.warning(f"⚠️ Search returned 0 results for query: '{query}'. Checking for manually configured domains...")
+                    # Do not return here; continue to process manual domains
+                else:
+                    progress_bar.progress(60)
 
                 # Classify URLs
                 total_results = len(search_results)
@@ -263,6 +264,78 @@ def perform_initial_search(brand_id: str, keywords: List[str], sources: List[str
                 third_party_count = sum(1 for u in found_urls if not u['is_brand_owned'])
                 
                 progress_bar.progress(100)
+
+                # --- START FIX: Add manually provided subdomains/domains ---
+                # Ensure all manually configured domains/subdomains are in the results
+                manual_candidates = []
+                if brand_domains:
+                    for d in brand_domains:
+                        manual_candidates.append(f"https://{d}")
+                if brand_subdomains:
+                    for d in brand_subdomains:
+                        d = d.strip()
+                        if d.startswith(('http://', 'https://')):
+                            manual_candidates.append(d)
+                        else:
+                            manual_candidates.append(f"https://{d}")
+                
+                # Deduplicate candidates
+                manual_candidates = list(set(manual_candidates))
+                
+                # Verify and add manual candidates if not already found
+                existing_urls = set(u['url'] for u in found_urls)
+                
+                if manual_candidates:
+                    progress_animator.show(f"Verifying {len(manual_candidates)} manual domains...", "🔧")
+                    
+                    # Simple verification for manual entries
+                    for url in manual_candidates:
+                        # Skip if already found (fuzzy match on domain might be better, but exact URL match is safe)
+                        if url in existing_urls:
+                           continue
+                           
+                        # Check slightly deeper if the domain is already covered by a found URL?
+                        # No, let's trust exact URL match for now.
+                        
+                        # Verify the URL is reachable
+                        from webapp.utils.url_verification import verify_url, fetch_page_title # Import locally to avoid circular import issues if any
+                        
+                        try:
+                            verification = verify_url(url, brand_id)
+                            if verification.get('ok'):
+                                final_url = verification.get('final_url') or url
+                                
+                                # Check duplicate against final_url too
+                                if final_url in existing_urls:
+                                    continue
+                                    
+                                title = fetch_page_title(final_url, brand_id)
+                                
+                                # Classify it
+                                classification = detect_brand_owned_url(final_url, brand_id, brand_domains, brand_subdomains, brand_social_handles)
+                                is_core = is_core_domain(final_url, brand_domains)
+                                
+                                found_urls.insert(0, { # Add to top
+                                    'url': final_url,
+                                    'title': title or final_url,
+                                    'description': 'Manually configured domain',
+                                    'is_brand_owned': True, # Manual override usually implies brand ownership intent
+                                    'is_core_domain': is_core,
+                                    'source_type': 'brand_owned', # Assume brand owned for manual domains
+                                    'source_tier': 'primary_website',
+                                    'classification_reason': 'Manually added via configuration',
+                                    'selected': True,
+                                    'source': 'Manual Config',
+                                    'fetched': False,
+                                    'soft_verified': verification.get('soft_verified', False),
+                                    'verification_method': verification.get('method')
+                                })
+                                existing_urls.add(final_url)
+                                logger.info(f"Added manual candidate: {final_url}")
+                        except Exception as e:
+                            logger.warning(f"Failed to verify manual candidate {url}: {e}")
+                # --- END FIX ---
+
                 progress_animator.show(f"Search complete! Found {len(found_urls)} URLs. Please select URLs to analyze.", "✅")
                 
                 time.sleep(1) # Let user see the success message
@@ -355,6 +428,7 @@ def fetch_and_process_selected_urls(selected_urls: List[Dict[str, Any]]):
                 # Update with fetched content
                 original['title'] = result.get('title') or original.get('title', 'No title')
                 original['body'] = result.get('body', '')
+                original['html'] = result.get('html', '') # Preserve raw HTML for metadata extraction
                 original['status'] = 200 if result.get('body') else 0 # Simple status proxy
                 original['fetched'] = True
                 

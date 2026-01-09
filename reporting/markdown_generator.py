@@ -763,7 +763,7 @@ class MarkdownReportGenerator:
         )
 
         # Generate LLM-powered executive summary
-        from reporting.executive_summary import generate_executive_summary
+        from reporting.executive_summary import generate_executive_summary, _normalize_score
 
         # Get model from report data (configurable via --llm-model flag)
         summary_model = report_data.get('llm_model', 'gpt-4o-mini')
@@ -775,7 +775,14 @@ class MarkdownReportGenerator:
 
         # Calculate average rating for the summary
         if items:
-            avg_rating = sum(item.get('final_score', 0) for item in items) / len(items) * 100
+            # First calculate raw average from items
+            raw_scores = [item.get('final_score', 0) for item in items]
+            if raw_scores:
+                avg_raw = sum(raw_scores) / len(raw_scores)
+                # Use the shared normalization logic
+                avg_rating = _normalize_score(avg_raw)
+            else:
+                avg_rating = 0.0
         else:
             avg_rating = 0.0
 

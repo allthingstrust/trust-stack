@@ -338,6 +338,9 @@ class DetectedAttribute:
     confidence: float = 1.0  # 0.0-1.0 confidence in detection
     suggestion: Optional[str] = None  # LLM-generated improvement suggestion (e.g., "Change 'X' → 'Y'")
     source_url: str = ""  # URL of the content where this attribute was detected
+    # v5.1 Trust Signal Context
+    status: str = "present"  # present, absent, partial, unknown
+    reason: Optional[str] = None  # not_in_dom, unreadable, blocked, client_rendered
 
 
 @dataclass

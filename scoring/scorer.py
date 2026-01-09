@@ -242,7 +242,8 @@ class ContentScorer:
             # Detect attributes if enabled and map to signals
             if self.attribute_detector:
                 try:
-                    detected_attrs = self.attribute_detector.detect_attributes(content)
+                    site_signals = brand_context.get('site_level_signals', {})
+                    detected_attrs = self.attribute_detector.detect_attributes(content, site_level_signals=site_signals)
                     mapped_signals = self.signal_mapper.map_attributes_to_signals(detected_attrs)
                     
                     # Override heuristic voice consistency if guidelines were used
@@ -1290,6 +1291,23 @@ class ContentScorer:
                 url=getattr(content, 'url', '')
             )
             
+            # Special case: If content is insufficient but we have a screenshot and visual analysis is enabled,
+            # we should ALLOW it to proceed so visual signals can be extracted.
+            if skip_reason == "insufficient_content":
+                # Check effectively enabled visual analysis (global setting OR content-specific override)
+                visual_enabled = (
+                    SETTINGS.get('visual_analysis_enabled', False) or 
+                    brand_context.get('visual_analysis_enabled', False) or
+                    getattr(content, 'meta', {}).get('force_visual_analysis', False)
+                )
+                
+                # Check if we have a screenshot
+                has_screenshot = bool(getattr(content, 'screenshot_path', None))
+                
+                if visual_enabled and has_screenshot:
+                    logger.info(f"Bypassing insufficient_content filter for '{content.title}' because Visual Analysis is enabled and screenshot exists")
+                    skip_reason = None
+            
             if skip_reason:
                 logger.warning(f"Skipping content '{content.title}' ({content.content_id}): {skip_reason}")
                 # Don't add to scores_list - effectively filters it out
@@ -1308,7 +1326,8 @@ class ContentScorer:
             detected_attrs = []
             if self.use_attribute_detection and self.attribute_detector:
                 try:
-                    detected_attrs = self.attribute_detector.detect_attributes(content)
+                    site_signals = brand_context.get('site_level_signals', {})
+                    detected_attrs = self.attribute_detector.detect_attributes(content, site_level_signals=site_signals)
                     logger.debug(f"Detected {len(detected_attrs)} attributes for {content.content_id}")
 
                     # Step 2.5: Merge LLM issues with detector attributes

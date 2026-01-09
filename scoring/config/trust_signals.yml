@@ -275,7 +275,7 @@ signals:
 
   vis_dark_patterns:
     dimension: Transparency
-    label: "Dark Pattern Absence"
+    label: "Dark Pattern Prevention"
     weight: 0.20
     detection: "visual"
     description: "Absence of deceptive UI patterns that manipulate users (urgency, misdirection, etc.)."

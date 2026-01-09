@@ -14,6 +14,9 @@ from data import export_s3
 from data.models import ContentAsset, DimensionScores, Run
 from sqlalchemy.orm import joinedload
 
+from ingestion.metadata_extractor import MetadataExtractor
+from data.models import NormalizedContent
+
 logger = logging.getLogger(__name__)
 
 
@@ -135,8 +138,51 @@ class RunManager:
             fetched_assets = []
             assets_needing_fetch = []
             
+            # Initialize extractor for pre-provided content
+            extractor = MetadataExtractor()
+
             for asset in assets:
                 raw_content = asset.get("raw_content") or asset.get("normalized_content") or ""
+                html = asset.get("html") or ""
+
+                # If we have HTML, enrich metadata immediately
+                # This ensures assets fetched by the UI (search_orchestration) get processed for keys/C2PA
+                if html:
+                    try:
+                        # Create temporary NormalizedContent wrapper for extraction
+                        temp_meta = asset.get("meta_info") or {}
+                        
+                        # Use dict-safe access for creating the wrapper
+                        temp_content = NormalizedContent(
+                            content_id="temp",
+                            url=asset.get("url") or "",
+                            body=raw_content,
+                            src=asset.get("source_type", "web"),
+                            platform_id=asset.get("external_id") or "unknown",
+                            author="unknown",
+                            title=asset.get("title") or "",
+                            meta=temp_meta
+                        )
+                        
+                        # Run extraction
+                        extractor.enrich_content_metadata(temp_content, html=html)
+                        
+                        # Update asset with extracted signals
+                        if not asset.get("meta_info"):
+                            asset["meta_info"] = {}
+                        asset["meta_info"].update(temp_content.meta)
+                        
+                        # Copy derived fields
+                        if temp_content.channel and temp_content.channel != "unknown":
+                            asset["channel"] = temp_content.channel
+                        if hasattr(temp_content, 'platform_type') and temp_content.platform_type:
+                            asset["meta_info"]["platform_type"] = temp_content.platform_type
+                        if getattr(temp_content, 'modality', None):
+                            asset["modality"] = temp_content.modality
+                            
+                    except Exception as e:
+                        logger.warning(f"Metadata extraction failed for pre-provided asset {asset.get('url')}: {e}")
+
                 if not raw_content and asset.get("url"):
                     assets_needing_fetch.append(asset)
                 else:
@@ -151,6 +197,9 @@ class RunManager:
                     
                     browser_manager = get_browser_manager()
                     browser_manager.start()
+                    
+                    # Initialize extractor
+                    extractor = MetadataExtractor()
                     
                     urls = [a.get("url") for a in assets_needing_fetch if a.get("url")]
                     fetch_results = fetch_pages_parallel(urls, browser_manager=browser_manager)
@@ -167,6 +216,43 @@ class RunManager:
                         asset["normalized_content"] = body
                         asset["title"] = asset.get("title") or result.get("title") or ""
                         asset["screenshot_path"] = asset.get("screenshot_path") or result.get("screenshot_path")
+                        html = result.get("html") or ""
+
+                        # Extract metadata if HTML is available
+                        if html:
+                            try:
+                                # Create temp content for extraction
+                                temp_meta = asset.get("meta_info") or {}
+                                temp_content = NormalizedContent(
+                                    content_id="temp",
+                                    url=url,
+                                    body=body,
+                                    src=asset.get("source_type", "web"),
+                                    platform_id=asset.get("external_id") or "unknown",
+                                    author="unknown",
+                                    title=asset.get("title") or "",
+                                    meta=temp_meta
+                                )
+                                
+                                # Run extraction
+                                extractor.enrich_content_metadata(temp_content, html=html)
+                                
+                                # Update asset with enriched fields
+                                if not asset.get("meta_info"):
+                                    asset["meta_info"] = {}
+                                asset["meta_info"].update(temp_content.meta)
+                                
+                                if temp_content.channel and temp_content.channel != "unknown":
+                                    asset["channel"] = temp_content.channel
+                                    
+                                if hasattr(temp_content, 'platform_type') and temp_content.platform_type:
+                                    asset["meta_info"]["platform_type"] = temp_content.platform_type
+                                    
+                                if getattr(temp_content, 'modality', None):
+                                    asset["modality"] = temp_content.modality
+                                    
+                            except Exception as e:
+                                logger.warning(f"Metadata extraction failed for {url}: {e}")
                         
                         # Preserve structured body if available
                         if result.get("structured_body"):
@@ -174,11 +260,17 @@ class RunManager:
                                 asset["meta_info"] = {}
                             asset["meta_info"]["structured_body"] = result.get("structured_body")
 
-                        # Propagate access_denied flag
+                        # Propagate access_denied and SSL flags
+                        if not asset.get("meta_info"):
+                            asset["meta_info"] = {}
+                        
                         if result.get("access_denied"):
-                            if not asset.get("meta_info"):
-                                asset["meta_info"] = {}
                             asset["meta_info"]["access_denied"] = True
+                            
+                        # Copy SSL metadata and legal links
+                        for key in ["ssl_valid", "ssl_issuer", "ssl_expiry_days", "ssl_error", "privacy", "terms"]:
+                            if key in result:
+                                asset["meta_info"][key] = result[key]
                         
                         fetched_assets.append(asset)
                         logger.debug(f"Fetched {len(body)} chars for {url}")
@@ -341,7 +433,15 @@ class RunManager:
                             "source_url": page.get("url"),
                             "title": page.get("title"),
                             "description": (page.get("body") or "")[:500],
-                            "access_denied": page.get("access_denied", False)
+                            "access_denied": page.get("access_denied", False),
+                            # Propagate SSL metadata
+                            "ssl_valid": page.get("ssl_valid"),
+                            "ssl_issuer": page.get("ssl_issuer"),
+                            "ssl_expiry_days": page.get("ssl_expiry_days"),
+                            "ssl_error": page.get("ssl_error"),
+                            # Propagate legal links
+                            "privacy": page.get("privacy"),
+                            "terms": page.get("terms")
                         },
                     }
                 )
@@ -371,7 +471,15 @@ class RunManager:
                             "query": kw,
                             "source_url": page.get("url"),
                             "title": page.get("title"),
-                            "description": (page.get("body") or "")[:500]
+                            "description": (page.get("body") or "")[:500],
+                            # Propagate SSL metadata
+                            "ssl_valid": page.get("ssl_valid"),
+                            "ssl_issuer": page.get("ssl_issuer"),
+                            "ssl_expiry_days": page.get("ssl_expiry_days"),
+                            "ssl_error": page.get("ssl_error"),
+                            # Propagate legal links
+                            "privacy": page.get("privacy"),
+                            "terms": page.get("terms")
                         },
                     }
                 )
@@ -485,6 +593,72 @@ class RunManager:
         return rationale
 
 
+    def _extract_site_level_signals(self, assets: List[ContentAsset]) -> Dict[str, Any]:
+        """
+        Identify global pages (About, Contact, etc.) and extract site-wide signals.
+        Returns a dictionary of potential global signals to be inherited by other pages.
+        """
+        signals = {
+            "has_global_ai_disclosure": False,
+            "global_author_info": [],
+            "global_contact_info": {},
+            "global_pages_found": []
+        }
+        
+        # 1. Identify global pages based on URL patterns
+        global_map = {
+            "about": ["/about", "/our-story", "/team", "/founders"],
+            "contact": ["/contact", "/support", "/help"],
+            "policies": ["/privacy", "/terms", "/legal", "/standards", "/editorial"]
+        }
+        
+        global_assets = {}
+        
+        for asset in assets:
+            url = (asset.url or "").lower()
+            if not url:
+                continue
+                
+            # Check for matches
+            for key, patterns in global_map.items():
+                if any(p in url for p in patterns):
+                    if key not in global_assets:
+                        global_assets[key] = []
+                    global_assets[key].append(asset)
+                    signals["global_pages_found"].append(url)
+        
+        logger.info(f"Site-Level Analysis: Found {len(signals['global_pages_found'])} global pages")
+        
+        # 2. Extract signals from identified pages
+        
+        # Check for AI disclosure in ALL assets (footer text often appears everywhere)
+        # But to be safe, we check if it appears in >50% of a sample, OR if it appears on key pages.
+        # Actually, if it's in the footer, it should be in the body text of every page.
+        # If we find a strong AI disclosure on the About or Editorial logic, we assume it covers the site.
+        
+        patterns_ai = ["ai-generated", "artificial intelligence", "generated by ai", "assisted by ai"]
+        
+        # Check specific policy/about pages first (high confidence)
+        target_assets = global_assets.get("about", []) + global_assets.get("policies", [])
+        
+        for asset in target_assets:
+            content = (asset.normalized_content or asset.raw_content or "").lower()
+            if any(p in content for p in patterns_ai):
+                signals["has_global_ai_disclosure"] = True
+                logger.info(f"Found global AI disclosure on {asset.url}")
+                break
+        
+        # Check for Author/Team info on About page
+        for asset in global_assets.get("about", []):
+            content = (asset.normalized_content or asset.raw_content or "")
+            # Simple heuristic: Look for "Team", "Founders", "Who We Are"
+            if "Team" in content or "Founders" in content or "Our Story" in content:
+                # We can't easily extract list of names without LLM, but we can flag that 
+                # "Corporate Authorship" is present.
+                signals["global_author_info"].append("Corporate/Team page present")
+                
+        return signals
+
     def _score_assets(self, assets: List[ContentAsset], run_config: dict) -> List[dict]:
         """Score a list of persisted assets.
 
@@ -492,6 +666,12 @@ class RunManager:
         or lightweight runs. If no pipeline is provided, a simple heuristic is
         used to generate placeholder scores.
         """
+        # Perform site-level analysis first
+        try:
+            site_level_signals = self._extract_site_level_signals(assets)
+        except Exception as e:
+            logger.warning(f"Site-level analysis failed: {e}")
+            site_level_signals = {}
 
         # Check for ContentScorer with batch_score_content (the actual scoring method)
         if self.scoring_pipeline and hasattr(self.scoring_pipeline, "batch_score_content"):
@@ -546,6 +726,8 @@ class RunManager:
                     # Pass user-selected model for scoring (e.g. "claude-3-5-sonnet")
                     "llm_model": run_config.get("scenario_config", {}).get("summary_model"),
                     "visual_analysis_enabled": run_config.get("visual_analysis_enabled", False),
+                    # Inject site-level signals into brand context
+                    "site_level_signals": site_level_signals,
                 }
                 
                 # Call the actual Trust Stack scorer

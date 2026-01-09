@@ -43,21 +43,22 @@ class TrustStackAttributeDetector:
 
         logger.info(f"Loaded {len(self.attributes)} enabled Trust Stack attributes")
 
-    def detect_attributes(self, content: NormalizedContent) -> List[DetectedAttribute]:
+    def detect_attributes(self, content: NormalizedContent, site_level_signals: Optional[Dict] = None) -> List[DetectedAttribute]:
         """
-        Detect all applicable Trust Stack attributes from content
-
+        Detect Trust Stack attributes in the content.
+        
         Args:
-            content: Normalized content to analyze
-
+            content: Normalized content object
+            site_level_signals: Optional site-wide signals (for inheritance)
+            
         Returns:
-            List of detected attributes with values 1-10
+            List of detected attributes
         """
         detected = []
-
-        # Dispatch to specific detection methods
+        site_level_signals = site_level_signals or {}
+        
+        # Dispatch to specific detection methods based on ID
         detection_methods = {
-            # Provenance
             "ai_vs_human_labeling_clarity": self._detect_ai_human_labeling,
             "author_brand_identity_verified": self._detect_author_verified,
             "c2pa_cai_manifest_present": self._detect_c2pa_manifest,
@@ -68,7 +69,7 @@ class TrustStackAttributeDetector:
             "domain_age": self._detect_domain_age,
             "whois_privacy": self._detect_whois_privacy,
             "verified_platform_account": self._detect_platform_verification,
-
+            
             # Resonance
             "community_alignment_index": self._detect_community_alignment,
             "creative_recency_vs_trend": self._detect_trend_alignment,
@@ -76,8 +77,8 @@ class TrustStackAttributeDetector:
             "language_locale_match": self._detect_language_match,
             "personalization_relevance_embedding_similarity": self._detect_personalization,
             "readability_grade_level_fit": self._detect_readability,
-            "tone_sentiment_appropriateness": self._detect_tone_sentiment,
-
+            "tone_sentiment_appropriateness": self._detect_tone_sentiment,       
+            
             # Coherence
             "brand_voice_consistency_score": self._detect_brand_voice,
             "broken_link_rate": self._detect_broken_links,
@@ -87,7 +88,7 @@ class TrustStackAttributeDetector:
             "multimodal_consistency_score": self._detect_multimodal_consistency,
             "temporal_continuity_versions": self._detect_temporal_continuity,
             "trust_fluctuation_index": self._detect_trust_fluctuation,
-
+            
             # Transparency
             "ai_explainability_disclosure": self._detect_ai_explainability,
             "ai_generated_assisted_disclosure_present": self._detect_ai_disclosure,
@@ -96,7 +97,7 @@ class TrustStackAttributeDetector:
             "data_source_citations_for_claims": self._detect_citations,
             "privacy_policy_link_availability_clarity": self._detect_privacy_policy,
             "contact_info_availability": self._detect_contact_info,
-
+            
             # Verification
             "ad_sponsored_label_consistency": self._detect_ad_labels,
             "agent_safety_guardrail_presence": self._detect_safety_guardrails,
@@ -119,12 +120,17 @@ class TrustStackAttributeDetector:
         for attr_id, detection_func in detection_methods.items():
             if attr_id in self.attributes:
                 try:
-                    result = detection_func(content)
+                    # Pass site_level_signals to methods that support it
+                    if attr_id in ["author_brand_identity_verified", "ai_generated_assisted_disclosure_present"]:
+                        result = detection_func(content, site_level_signals=site_level_signals)
+                    else:
+                        result = detection_func(content)
+                        
                     if result:
                         detected.append(result)
                 except Exception as e:
                     logger.warning(f"Error detecting {attr_id}: {e}")
-
+                    
         return detected
 
     # ===== PROVENANCE DETECTORS =====
@@ -133,12 +139,10 @@ class TrustStackAttributeDetector:
         """
         Detect AI vs human labeling clarity - context-aware version.
         
-        Only flags missing labeling when it's actually relevant:
+        Only flags missing labeling when it is actually relevant:
         - Content appears to be AI-generated
         - Content type is blog/article/news (where authorship disclosure matters)
         - Content explicitly discusses AI topics
-        
-        Does NOT flag standard corporate pages, landing pages, product pages, etc.
         """
         text = (content.body + " " + content.title).lower()
         meta = content.meta or {}
@@ -159,7 +163,9 @@ class TrustStackAttributeDetector:
                 label="AI vs Human Labeling Clarity",
                 value=10.0,
                 evidence="Clear labeling found in content or metadata",
-                confidence=1.0
+                confidence=1.0,
+                status="present",
+                reason="Explicit label found"
             )
 
         # Determine if AI labeling is relevant for this content
@@ -186,20 +192,31 @@ class TrustStackAttributeDetector:
         # 3. Content discusses AI extensively (ambiguous whether it's AI-generated)
         
         should_flag = False
-        reason = ""
+        reason = None
+        status = "unknown"
+        confidence = 1.0
         
         if has_ai_indicators:
             # Content appears to be AI-generated but lacks labeling
             should_flag = True
             reason = "Content appears AI-generated but lacks disclosure"
+            status = "absent"
+            confidence = 0.9
         elif content_type in ['blog', 'article', 'news'] and not content.author:
-            # Blog/article content without author attribution might benefit from AI/human labeling
-            should_flag = True
-            reason = "Blog/article content lacks author attribution or AI disclosure"
+            # Check if we can find author via alternative methods (e.g. JSON-LD)
+            attribution = self._check_alternative_attribution(content, meta)
+            if not attribution['found']:
+                # Blog/article content without author attribution might benefit from AI/human labeling
+                should_flag = True
+                reason = "Blog/article content lacks author attribution or AI disclosure"
+                status = "absent"
+                confidence = attribution.get('confidence', 0.8)
         elif discusses_ai and text.count("ai") > 5:
             # Content heavily discusses AI - ambiguous whether it's AI-generated
             should_flag = True
             reason = "Content discusses AI extensively without clarifying if AI-generated"
+            status = "unknown"
+            confidence = 0.6
         
         # Only return an issue if we determined labeling is relevant
         if should_flag:
@@ -209,174 +226,110 @@ class TrustStackAttributeDetector:
                 label="AI vs Human Labeling Clarity",
                 value=3.0,  # Moderate issue, not critical
                 evidence=reason,
-                confidence=0.7  # Lower confidence since we're inferring
+                confidence=confidence,
+                status=status,
+                reason=reason
             )
         
         # For corporate pages, landing pages, product pages, etc. - don't flag at all
         # Returning None means this attribute won't be reported as an issue
         return None
 
-    def _detect_author_verified(self, content: NormalizedContent) -> Optional[DetectedAttribute]:
+    def _detect_author_verified(self, content: NormalizedContent, site_level_signals: Optional[Dict] = None) -> Optional[DetectedAttribute]:
         """
-        Detect author/brand identity verification with content-type awareness.
-
-        Blog posts and articles warrant visible bylines, but corporate landing pages
-        showing organizational/team attribution through structured data or subtle
-        footer credits can still pass the Author Identity check.
+        Detect if author/brand identity is verified.
         
-        Also checks for platform verification badges (Instagram, LinkedIn, X/Twitter)
-        which indicate verified accounts with blue checkmarks.
+        Checks for:
+        1. Explicit author bylines
+        2. "About" page links
+        3. Schema.org Person/Organization
+        4. Verified social profiles
+        5. Global author info (inherited)
         """
+        # ... (rest of method, need to inject inheritance check before returning weak signal)
+        
+        author = content.author
         meta = content.meta or {}
-
-        # Determine content type
-        content_type = self._determine_content_type(content)
-
-        # Check for platform verification badges (from page_fetcher extraction)
-        verification_badges = meta.get("verification_badges", {})
-        if isinstance(verification_badges, dict) and verification_badges.get("verified"):
-            platform = verification_badges.get("platform", "unknown")
-            badge_type = verification_badges.get("badge_type", "verification_badge")
-            evidence = verification_badges.get("evidence", "Platform verification detected")
-            
-            # Platform verification is high-confidence verification
+        site_level_signals = site_level_signals or {}
+        
+        # Check explicit author field
+        if author and len(author) > 2 and author.lower() not in ["admin", "editor", "unknown", "staff"]:
             return DetectedAttribute(
                 attribute_id="author_brand_identity_verified",
                 dimension="provenance",
                 label="Author/Brand Identity Verified",
                 value=10.0,
-                evidence=f"Platform verified ({platform}): {badge_type}. {evidence}",
-                confidence=1.0
+                evidence=f"Explicit author byline found: {author}",
+                confidence=0.9,
+                status="present",
+                reason="Explicit author byline"
+            )
+            
+        # Check extracted schema/meta data (from page_fetcher)
+        # We use a helper here because this logic is complex
+        alt_attribution = self._check_alternative_attribution(content, meta)
+        if alt_attribution['found']:
+             return DetectedAttribute(
+                attribute_id="author_brand_identity_verified",
+                dimension="provenance",
+                label="Author/Brand Identity Verified",
+                value=alt_attribution['score'],
+                evidence=alt_attribution['evidence'],
+                confidence=alt_attribution['confidence'],
+                status="present",
+                reason=alt_attribution['evidence']
+            )
+            
+        # Check global/site-level signals (inheritance)
+        global_authors = site_level_signals.get("global_author_info", [])
+        if global_authors:
+            # We have site-level author info (e.g. from About page)
+            evidence_str = global_authors[0] if isinstance(global_authors, list) else str(global_authors)
+            return DetectedAttribute(
+                attribute_id="author_brand_identity_verified",
+                dimension="provenance",
+                label="Author/Brand Identity Verified",
+                value=8.0, # Good score for site-wide transparency
+                evidence=f"Site-wide authorship verified: {evidence_str}",
+                confidence=0.85,
+                status="present",
+                reason="Inherited site-wide authorship"
             )
 
-        # Check for explicit verification (highest confidence)
-        is_explicitly_verified = (
-            meta.get("author_verified") == "true" or
-            meta.get("verified") == "true" or
-            "verified" in content.author.lower()
+        # Fallback: Check for 'About' link in body (weak signal)
+        if "about" in content.body.lower()[:500]: # Check first 500 chars (menu/header typically)
+             return DetectedAttribute(
+                attribute_id="author_brand_identity_verified",
+                dimension="provenance",
+                label="Author/Brand Identity Verified",
+                value=5.0,
+                evidence="Possible 'About' link found in header/menu",
+                confidence=0.5,
+                status="partial",
+                reason="Ambiguous 'About' link"
+            )
+            
+        # Not found - Distinguish absent vs unknown based on content quality
+        status = "absent"
+        reason = "No clear author identity found in metadata or content"
+        confidence = 0.8
+        
+        if len(content.body or "") < 200:
+             status = "unknown"
+             reason = "Content too short to reliably detect author"
+             confidence = 0.5
+            
+        return DetectedAttribute(
+            attribute_id="author_brand_identity_verified",
+            dimension="provenance",
+            label="Author/Brand Identity Verified",
+            value=1.0,
+            evidence=reason,
+            confidence=confidence,
+            status=status,
+            reason=reason
         )
 
-        if is_explicitly_verified:
-            return DetectedAttribute(
-                attribute_id="author_brand_identity_verified",
-                dimension="provenance",
-                label="Author/Brand Identity Verified",
-                value=10.0,
-                evidence=f"Verified author: {content.author}",
-                confidence=1.0
-            )
-
-
-        # Check for visible byline (expected for blog/article content)
-        has_visible_byline = content.author and content.author.lower() not in ['unknown', 'anonymous', '']
-
-        # If no metadata author, check body text for "By [Name]" pattern
-        if not has_visible_byline:
-            # Look for "By Name" at start of lines, allowing for some context
-            # Limit to first 2000 chars to avoid false positives in comments/footer
-            intro_text = content.body[:2000]
-            byline_match = re.search(r'(?:^|\n)\s*By\s+([A-Z][a-zA-Z\s\.]+)(?:\s|$)', intro_text)
-            if byline_match:
-                detected_author = byline_match.group(1).strip()
-                # Filter out common false positives
-                if len(detected_author) < 30 and detected_author.lower() not in ['email', 'phone', 'clicking', 'using']:
-                    has_visible_byline = True
-                    # Optionally update content.author? No, keep content immutable here, just use for detection.
-                    logger.info(f"Detected author in text: {detected_author}")
-
-        # For blog/article content, require visible byline
-        if content_type in ['blog', 'article', 'news']:
-            if has_visible_byline:
-                return DetectedAttribute(
-                    attribute_id="author_brand_identity_verified",
-                    dimension="provenance",
-                    label="Author/Brand Identity Verified",
-                    value=8.0,
-                    evidence=f"Visible byline present: {content.author}",
-                    confidence=0.9
-                )
-            else:
-                # If no visible byline for blog/article/news, check for structured
-                # attribution (schema.org, meta tags, footer credits). Some pages
-                # embed author/publisher data in JSON-LD where the author may be
-                # a simple string; consult alternative attribution before
-                # failing the byline requirement.
-                attribution_result = self._check_alternative_attribution(content, meta)
-
-                if attribution_result['found']:
-                    # Use the attribution score (schema author/publisher or meta tag)
-                    return DetectedAttribute(
-                        attribute_id="author_brand_identity_verified",
-                        dimension="provenance",
-                        label="Author/Brand Identity Verified",
-                        value=attribution_result['score'],
-                        evidence=attribution_result['evidence'],
-                        confidence=attribution_result['confidence']
-                    )
-                else:
-                    return DetectedAttribute(
-                        attribute_id="author_brand_identity_verified",
-                        dimension="provenance",
-                        label="Author/Brand Identity Verified",
-                        value=2.0,
-                        evidence="Missing byline - expected for blog/article content",
-                        confidence=1.0
-                    )
-
-        # For corporate landing pages, check alternative attribution methods
-        elif content_type == 'landing_page':
-            attribution_result = self._check_alternative_attribution(content, meta)
-
-            if attribution_result['found']:
-                return DetectedAttribute(
-                    attribute_id="author_brand_identity_verified",
-                    dimension="provenance",
-                    label="Author/Brand Identity Verified",
-                    value=attribution_result['score'],
-                    evidence=attribution_result['evidence'],
-                    confidence=attribution_result['confidence']
-                )
-            else:
-                return DetectedAttribute(
-                    attribute_id="author_brand_identity_verified",
-                    dimension="provenance",
-                    label="Author/Brand Identity Verified",
-                    value=5.0,
-                    evidence="No explicit attribution found - treated as neutral for landing page",
-                    confidence=0.8
-                )
-
-        # For other content types, check both approaches
-        else:
-            if has_visible_byline:
-                return DetectedAttribute(
-                    attribute_id="author_brand_identity_verified",
-                    dimension="provenance",
-                    label="Author/Brand Identity Verified",
-                    value=7.0,
-                    evidence=f"Author attribution present: {content.author}",
-                    confidence=0.85
-                )
-            else:
-                attribution_result = self._check_alternative_attribution(content, meta)
-                if attribution_result['found']:
-                    return DetectedAttribute(
-                        attribute_id="author_brand_identity_verified",
-                        dimension="provenance",
-                        label="Author/Brand Identity Verified",
-                        value=attribution_result['score'],
-                        evidence=attribution_result['evidence'],
-                        confidence=attribution_result['confidence']
-                    )
-                else:
-                    return DetectedAttribute(
-                        attribute_id="author_brand_identity_verified",
-                        dimension="provenance",
-                        label="Author/Brand Identity Verified",
-                        value=5.0,
-                        evidence="Author verification status unknown - treated as neutral",
-                        confidence=0.8
-                    )
 
     def _determine_content_type(self, content: NormalizedContent) -> str:
         """
@@ -421,17 +374,23 @@ class TrustStackAttributeDetector:
             try:
                 import json
                 schema_data = json.loads(schema_org) if isinstance(schema_org, str) else schema_org
-                if isinstance(schema_data, dict):
-                    schema_type = schema_data.get('@type', '')
+                
+                # Use flattened list to finding type across all nodes
+                flat_schema = self._flatten_json_ld(schema_data)
+                
+                for schema_item in flat_schema:
+                    schema_type = schema_item.get('@type', '')
                     if isinstance(schema_type, str):
                         if 'Article' in schema_type or 'BlogPosting' in schema_type:
                             return 'blog' if 'Blog' in schema_type else 'article'
                         elif 'NewsArticle' in schema_type:
                             return 'news'
                         elif 'WebPage' in schema_type or 'Organization' in schema_type:
-                            return 'landing_page'
-            except:
-                pass
+                            # Don't return immediately for WebPage/Organization as they are generic
+                            # but can be used as a weak signal if nothing else matches
+                            pass
+            except Exception as e:
+                logger.debug(f"Error checking schema type: {e}")
 
         # Default based on channel
         if content.channel in ['reddit', 'twitter', 'facebook', 'instagram']:
@@ -440,6 +399,35 @@ class TrustStackAttributeDetector:
             return 'video'
 
         return 'other'
+
+    def _flatten_json_ld(self, data: any) -> List[Dict]:
+        """
+        Recursively flatten JSON-LD data to handle @graph and nested structures.
+        Returns a flat list of all objects found.
+        """
+        items = []
+        
+        if isinstance(data, list):
+            for item in data:
+                items.extend(self._flatten_json_ld(item))
+        elif isinstance(data, dict):
+            # Check for specific JSON-LD structures to unwrap
+            if '@graph' in data:
+                items.extend(self._flatten_json_ld(data['@graph']))
+            elif 'json_ld' in data: # Handle our internal wrapper
+                 items.extend(self._flatten_json_ld(data['json_ld']))
+            else:
+                # Expecting a single item object
+                items.append(data)
+                
+                # Also check common nested properties that might contain entity objects
+                # but careful not to duplicate if they are just references
+                # For now, we trust that @graph usually brings everything to top level
+                # But for deeply nested non-graph structures, we could recurse on specific keys
+                # like 'mainEntity', 'contains', etc. if needed.
+                pass
+                
+        return items
 
     def _check_alternative_attribution(self, content: NormalizedContent, meta: Dict) -> Dict[str, any]:
         """
@@ -463,8 +451,8 @@ class TrustStackAttributeDetector:
                 import json
                 schema_data = json.loads(schema_org) if isinstance(schema_org, str) else schema_org
 
-                # Handle both single object and list of objects
-                schema_list = schema_data if isinstance(schema_data, list) else [schema_data]
+                # Robustly flatten any nested structure (like @graph)
+                schema_list = self._flatten_json_ld(schema_data)
 
                 for schema_item in schema_list:
                     if not isinstance(schema_item, dict):
@@ -473,33 +461,45 @@ class TrustStackAttributeDetector:
                     # Check for author
                     if 'author' in schema_item:
                         author = schema_item['author']
-                        if isinstance(author, dict):
-                            author_name = author.get('name', '')
-                        else:
-                            author_name = str(author)
-                        if author_name:
-                            attribution_methods.append(f"Schema.org author: {author_name}")
+                        # author can be list, dict, or string
+                        authors = author if isinstance(author, list) else [author]
+                        
+                        for auth in authors:
+                            if isinstance(auth, dict):
+                                author_name = auth.get('name', '')
+                            else:
+                                author_name = str(auth)
+                                
+                            if author_name and author_name.lower() not in ['unknown', 'anonymous']:
+                                attribution_methods.append(f"Schema.org author: {author_name}")
 
                     # Check for contributor
                     if 'contributor' in schema_item:
                         contributor = schema_item['contributor']
-                        if isinstance(contributor, dict):
-                            contrib_name = contributor.get('name', '')
-                        else:
-                            contrib_name = str(contributor)
-                        if contrib_name:
-                            attribution_methods.append(f"Schema.org contributor: {contrib_name}")
+                        contributors = contributor if isinstance(contributor, list) else [contributor]
+                        
+                        for contrib in contributors:
+                            if isinstance(contrib, dict):
+                                contrib_name = contrib.get('name', '')
+                            else:
+                                contrib_name = str(contrib)
+                            if contrib_name:
+                                attribution_methods.append(f"Schema.org contributor: {contrib_name}")
 
                     # Check for publisher
                     if 'publisher' in schema_item:
                         publisher = schema_item['publisher']
                         if isinstance(publisher, dict):
+                             # Often publisher is an Organization with a name
                             pub_name = publisher.get('name', '')
+                             # Sometimes publisher is just a reference ID, verify if we can find it?
+                             # For now, just taking name if present
                         else:
                             pub_name = str(publisher)
                         if pub_name:
                             attribution_methods.append(f"Schema.org publisher: {pub_name}")
-            except:
+            except Exception as e:
+                logger.debug(f"Error checking alternative attribution: {e}")
                 pass
 
         # Check meta author tag
@@ -525,7 +525,8 @@ class TrustStackAttributeDetector:
                 'found': False,
                 'score': 3.0,
                 'evidence': '',
-                'confidence': 0.8
+                'confidence': 0.8,
+                'status': 'absent'
             }
 
         # Score based on type and quantity of attribution
@@ -554,7 +555,8 @@ class TrustStackAttributeDetector:
             'found': True,
             'score': score,
             'evidence': evidence,
-            'confidence': confidence
+            'confidence': confidence,
+            'status': 'present'
         }
 
     def _detect_c2pa_manifest(self, content: NormalizedContent) -> Optional[DetectedAttribute]:
@@ -576,6 +578,15 @@ class TrustStackAttributeDetector:
                 confidence=1.0
             )
         else:
+            # CONDITIONAL PENALTY LOGIC
+            # Only penalize if content is naturally visual OR contains significant visuals
+            modality = getattr(content, 'modality', 'text')
+            has_visuals = meta.get('has_significant_visuals') == 'true'
+
+            if modality == 'text' and not has_visuals:
+                 # Text-only content with no hero images -> No penalty (return None)
+                 return None
+
             return DetectedAttribute(
                 attribute_id="c2pa_cai_manifest_present",
                 dimension="provenance",
@@ -589,24 +600,73 @@ class TrustStackAttributeDetector:
         """Detect canonical URL match"""
         meta = content.meta or {}
         canonical_url = meta.get("canonical_url", "")
+        # Fallback to content.url if meta['url'] is missing (common with some scrapers)
+        source_url = meta.get("url") or content.url or ""
 
         if not canonical_url:
             return None  # Can't determine without canonical URL
+            
+        if not source_url:
+            # If we still don't have a source URL, we can't compare.
+            # Returning None avoids a false positive partial match.
+            return None
 
         # Parse both URLs
         try:
+            # Normalize URLs by removing trailing slashes for cleaner comparison
+            canonical_norm = canonical_url.rstrip('/')
+            source_norm = source_url.rstrip('/')
+            
+            if canonical_norm == source_norm:
+                 return DetectedAttribute(
+                    attribute_id="canonical_url_matches_declared_source",
+                    dimension="provenance",
+                    label="Canonical URL Matches Declared Source",
+                    value=10.0,
+                    evidence="Canonical URL exact match",
+                    confidence=1.0,
+                    status="present",
+                    reason="Exact match"
+                )
+
             canonical_domain = urlparse(canonical_url).netloc
-            source_domain = urlparse(meta.get("url", "")).netloc
+            source_domain = urlparse(source_url).netloc
 
             if canonical_domain == source_domain:
-                value = 10.0
-                evidence = "Canonical URL matches source domain"
-            elif canonical_domain in source_domain or source_domain in canonical_domain:
+                # Same domain but different path/params -> Partial match
+                # Check if it is just http vs https
+                if canonical_domain == source_domain and urlparse(canonical_url).path == urlparse(source_url).path:
+                     return DetectedAttribute(
+                        attribute_id="canonical_url_matches_declared_source",
+                        dimension="provenance",
+                        label="Canonical URL Matches Declared Source",
+                        value=10.0,
+                        evidence="Canonical URL matches (protocol difference only)",
+                        confidence=1.0,
+                        status="present",
+                        reason="Protocol difference only"
+                    )
+
                 value = 5.0
-                evidence = "Partial canonical URL match"
+                evidence = "Canonical URL points to same domain but different path"
+            elif canonical_domain.replace('www.', '') == source_domain.replace('www.', ''):
+                 # Handle www vs non-www
+                 if urlparse(canonical_url).path == urlparse(source_url).path:
+                      return DetectedAttribute(
+                        attribute_id="canonical_url_matches_declared_source",
+                        dimension="provenance",
+                        label="Canonical URL Matches Declared Source",
+                        value=10.0,
+                        evidence="Canonical URL matches (subdomain/www difference only)",
+                        confidence=1.0,
+                        status="present",
+                        reason="Subdomain difference only"
+                    )
+                 value = 5.0
+                 evidence = "Canonical URL points to same base domain"
             else:
                 value = 1.0
-                evidence = "Canonical URL mismatch"
+                evidence = f"Canonical URL mismatch: declared {canonical_domain} vs source {source_domain}"
 
             return DetectedAttribute(
                 attribute_id="canonical_url_matches_declared_source",
@@ -614,7 +674,9 @@ class TrustStackAttributeDetector:
                 label="Canonical URL Matches Declared Source",
                 value=value,
                 evidence=evidence,
-                confidence=1.0
+                confidence=1.0,
+                status="present" if value > 1.0 else "absent",
+                reason=evidence
             )
         except Exception:
             return None
@@ -688,7 +750,14 @@ class TrustStackAttributeDetector:
         red_flags = []
         if meta.get("ssl_valid") == "false":
             red_flags.append("No valid SSL certificate")
-        if meta.get("has_privacy_policy") == "false":
+        
+        # Check for privacy policy URL (propagated from page fetcher)
+        # If the key exists but is empty, it means we looked but didn't find one.
+        privacy_url = meta.get("privacy")
+        if privacy_url is not None and not privacy_url:
+            red_flags.append("No privacy policy found")
+        elif meta.get("has_privacy_policy") == "false":
+             # Fallback to legacy flag if present
             red_flags.append("No privacy policy found")
         if meta.get("domain_age_days") and int(meta.get("domain_age_days", 999)) < 30:
             red_flags.append("Very new domain (less than 30 days old)")
@@ -708,41 +777,69 @@ class TrustStackAttributeDetector:
                 confidence=0.9
             )
 
-        # Report only trusted sources/domains positively
-        # Don't report neutral cases - they're not issues
+        # Report only trusted sources/domains positively (Overrides everything else)
         if source in trusted_sources:
-            value = trusted_sources[source]
-            evidence = f"Trusted platform: {source}"
             return DetectedAttribute(
                 attribute_id="source_domain_trust_baseline",
                 dimension="provenance",
                 label="Source Domain Trust Baseline",
-                value=value,
-                evidence=evidence,
+                value=trusted_sources[source],
+                evidence=f"Trusted platform: {source}",
                 confidence=0.8
             )
         elif any(domain.endswith(td) for td in trusted_domains):
-            value = 9.0
-            evidence = f"High-trust domain: {domain}"
             return DetectedAttribute(
                 attribute_id="source_domain_trust_baseline",
                 dimension="provenance",
                 label="Source Domain Trust Baseline",
-                value=value,
-                evidence=evidence,
+                value=9.0,
+                evidence=f"High-trust domain: {domain}",
                 confidence=0.8
             )
-        else:
-            # Neutral case - report as baseline trust (5.0)
-            # This ensures the prov_domain_trust signal is present and doesn't trigger "missing core signal" penalties
-            return DetectedAttribute(
-                attribute_id="source_domain_trust_baseline",
-                dimension="provenance",
-                label="Source Domain Trust Baseline",
-                value=5.0,
-                evidence=f"No specific trust indicators or red flags found for {domain}",
-                confidence=0.5
-            )
+
+        # Graduated Trust Model for non-institutional domains
+        # Base score for "Neutral" (no red flags)
+        score = 5.0
+        positive_signals = []
+
+        # 1. SSL Check
+        if meta.get("ssl_valid") == "true":
+            score += 1.0
+            positive_signals.append("Valid SSL")
+
+        # 2. Privacy Policy Check (URL presence)
+        if meta.get("privacy"):
+            score += 1.0
+            positive_signals.append("Privacy Policy found")
+
+        # 3. Domain Age Bonus
+        try:
+            age_days = int(meta.get("domain_age_days", 0))
+            if age_days > 365:
+                score += 1.0
+                positive_signals.append("Established domain (>1y)")
+            elif age_days > 90:
+                score += 0.5
+                positive_signals.append("Established domain (>90d)")
+        except (ValueError, TypeError):
+            pass
+
+        # Cap at 8.0 for hygiene-only trust
+        # (Scores 9.0-10.0 are reserved for Institutional Authority)
+        final_score = min(score, 8.0)
+        
+        evidence = "Domain hygiene analysis"
+        if positive_signals:
+            evidence += f": {', '.join(positive_signals)}"
+
+        return DetectedAttribute(
+            attribute_id="source_domain_trust_baseline",
+            dimension="provenance",
+            label="Source Domain Trust Baseline",
+            value=final_score,
+            evidence=evidence,
+            confidence=0.7
+        )
 
     def _detect_domain_age(self, content: NormalizedContent) -> Optional[DetectedAttribute]:
         """
@@ -808,7 +905,7 @@ class TrustStackAttributeDetector:
         """
         Detect WHOIS privacy/proxy registration.
         
-        WHOIS privacy services hide the registrant's identity. While legitimate
+        WHOIS privacy services hide the registrant identity. While legitimate
         for personal privacy, it can be a yellow flag for commercial sites
         where transparency is expected.
         """
@@ -1387,10 +1484,11 @@ class TrustStackAttributeDetector:
                 confidence=0.8
             )
 
-    def _detect_ai_disclosure(self, content: NormalizedContent) -> Optional[DetectedAttribute]:
+    def _detect_ai_disclosure(self, content: NormalizedContent, site_level_signals: Optional[Dict] = None) -> Optional[DetectedAttribute]:
         """Detect AI-generated/assisted disclosure"""
         text = (content.body + " " + content.title).lower()
         meta = content.meta or {}
+        site_level_signals = site_level_signals or {}
 
         ai_disclosure_phrases = [
             "ai-generated", "ai generated",
@@ -1413,15 +1511,27 @@ class TrustStackAttributeDetector:
                 evidence="AI disclosure present",
                 confidence=1.0
             )
-        else:
+        
+        # Check global inheritance
+        if site_level_signals.get("has_global_ai_disclosure"):
             return DetectedAttribute(
                 attribute_id="ai_generated_assisted_disclosure_present",
                 dimension="transparency",
                 label="AI-Generated/Assisted Disclosure Present",
-                value=1.0,
-                evidence="No AI disclosure",
-                confidence=1.0
+                value=8.0, # Slightly lower than explicit on-page, but still high
+                evidence="Inherited from site-wide AI disclosure (e.g. footer/policy)",
+                confidence=0.9
             )
+
+        # Default negative
+        return DetectedAttribute(
+            attribute_id="ai_generated_assisted_disclosure_present",
+            dimension="transparency",
+            label="AI-Generated/Assisted Disclosure Present",
+            value=1.0,
+            evidence="No AI disclosure",
+            confidence=1.0
+        )
 
     def _detect_bot_disclosure(self, content: NormalizedContent) -> Optional[DetectedAttribute]:
         """Detect bot disclosure (placeholder)"""

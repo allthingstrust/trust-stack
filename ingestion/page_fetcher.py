@@ -62,6 +62,27 @@ class DomainConfigCache:
             self._requires_playwright[domain] = True
             logger.info(f"Marked domain {domain} as requiring Playwright for future requests")
 
+    # Add footer hash tracking per domain
+    _seen_footer_hashes: Dict[str, set] = {} # domain -> set of hashes for this run
+
+    def mark_footer_seen(self, url: str, footer_hash: str):
+        """Mark a footer hash as seen for a domain."""
+        if not footer_hash:
+            return
+        domain = urlparse(url).netloc
+        with self._lock:
+            if domain not in self._seen_footer_hashes:
+                self._seen_footer_hashes[domain] = set()
+            self._seen_footer_hashes[domain].add(footer_hash)
+
+    def is_footer_seen(self, url: str, footer_hash: str) -> bool:
+        """Check if a footer hash has been seen for this domain."""
+        if not footer_hash:
+            return False
+        domain = urlparse(url).netloc
+        with self._lock:
+            return footer_hash in self._seen_footer_hashes.get(domain, set())
+
     def requires_playwright(self, url: str) -> bool:
         """Check if a domain is known to require Playwright."""
         domain = urlparse(url).netloc
@@ -250,6 +271,30 @@ def _extract_verification_badges(html: str, url: str) -> Dict[str, any]:
                         result["platform"], url)
     
     return result
+
+
+def _compute_footer_hash(html: str) -> str:
+    """
+    Compute a structure-based hash of the footer to identify duplicates.
+    Uses text content of the footer to be robust against minor changes.
+    """
+    if not html:
+        return ""
+    try:
+        soup = BeautifulSoup(html, "lxml")
+        footer = soup.find('footer')
+        if not footer:
+            # Fallback: look for generic footer classes/IDs
+            footer = soup.find('div', class_=lambda x: x and 'footer' in x.lower())
+            
+        if footer:
+            # Use text content for hashing (ignoring whitespace)
+            text = footer.get_text(separator="", strip=True)
+            if len(text) > 50: # Only hash if there's substantial content
+                return hashlib.md5(text.encode('utf-8')).hexdigest()
+    except Exception:
+        pass
+    return ""
 
 
 def _detect_instagram_badge(soup: BeautifulSoup, result: Dict) -> Dict:
@@ -1196,18 +1241,63 @@ def _fetch_with_playwright(url: str, user_agent: str, browser_manager=None) -> D
         if capture_needed and page:
             try:
                 capture = get_screenshot_capture()
-                # Capture full page to ensure footer trust badges are included
-                # Note: valid capture requires active page object
-                png_bytes, meta = capture.capture_screenshot(page, url, full_page=True)
                 
-                if meta.get('success'):
-                    # Generate a run_id (using date if not available)
-                    run_id = f"fetch_{datetime.now().strftime('%Y%m%d')}"
-                    screenshot_key = capture.store_screenshot(png_bytes, url, run_id)
+                # Check for footer deduplication
+                footer_hash = _compute_footer_hash(page_content)
+                skip_bottom = False
+                
+                # Only dedup if we found a valid footer hash
+                if footer_hash:
+                    if _domain_config.is_footer_seen(url, footer_hash):
+                        skip_bottom = True
+                        logger.info(f"Smart Capture: Skipping bottom screenshot (duplicate footer detected) for {url}")
+                    else:
+                        _domain_config.mark_footer_seen(url, footer_hash)
+                
+                # Use Dual-Zone Capture
+                dual_results = capture.capture_dual_screenshots(page, url, skip_bottom=skip_bottom)
+                
+                run_id = f"fetch_{datetime.now().strftime('%Y%m%d')}"
+                
+                # Process TOP screenshot (Primary)
+                if dual_results.get("top"):
+                    top_data = dual_results["top"]
+                    screenshot_key = capture.store_screenshot(top_data['bytes'], url, run_id)
                     if screenshot_key:
-                        logger.info(f"Screenshot stored: {screenshot_key}")
+                        logger.info(f"Top Screenshot stored: {screenshot_key}")
+                        
+                        # Process BOTTOM screenshot (Secondary)
+                        bottom_key = None
+                        if dual_results.get("bottom"):
+                            bottom_data = dual_results["bottom"]
+                            # Append _footer to url for unique key generation in store_screenshot
+                            # or just let store_screenshot handle it (it mostly uses timestamp)
+                            # We'll rely on the logic in store_screenshot but maybe add a suffix if needed?
+                            # store_screenshot uses timestamp, so consecutive calls are fine.
+                            bottom_key = capture.store_screenshot(bottom_data['bytes'], url + "#footer", run_id)
+                            logger.info(f"Bottom Screenshot stored: {bottom_key}")
+                            
+                        # Store in result for visual analysis
+                        # We attach this as a special meta field in 'visual_analysis'
+                        # which will be lifted by NormalizedContent
+                        # Since return is a fixed dict, we'll put it in 'screenshot_path' 
+                        # or 'visual_analysis_meta'. Let's put in 'screenshot_path' primarily
+                        # but we need to pass the full struct.
+                        # We'll use a side-channel or just stash it in the return dict 
+                        # and update fetch_page to handle it.
+                        
+                        # For now, simplistic approach: only pass Main path in screenshot_path
+                        # In the future, we want to pass the whole struct.
+                        # Let's add it to the 'visual_data' key in returned dict
+                        visual_data = {
+                            "screenshots": {
+                                "top": screenshot_key,
+                                "bottom": bottom_key
+                            }
+                        }
             except Exception as e:
                 logger.warning(f"Screenshot capture failed for {url}: {e}")
+                visual_data = {}
 
         return {
             "title": page_title.strip(),
@@ -1216,8 +1306,10 @@ def _fetch_with_playwright(url: str, user_agent: str, browser_manager=None) -> D
             "terms": links.get("terms", ""),
             "privacy": links.get("privacy", ""),
             "verification_badges": verification_badges,
-            "verification_badges": verification_badges,
+            "verification_badges": verification_badges, # keep distinct for now
             "screenshot_path": screenshot_key,
+            "visual_analysis": visual_data if 'visual_data' in locals() else {}, # Pass rich data
+            "html": page_content, # Include raw HTML for metadata extraction
             "access_denied": access_denied
         }
 
@@ -1424,6 +1516,19 @@ def fetch_page(url: str, timeout: int = 10, browser_manager=None) -> Dict[str, s
         except Exception:
             verification_badges = {"verified": False, "platform": "unknown", "badge_type": "", "evidence": ""}
         
+
+        # NEW: Check SSL Certificate
+        # We do this after main content fetch to avoid blocking if the fetch failed anyway,
+        # but before constructing the result.
+        # Only check for https URLs.
+        ssl_data = {"ssl_valid": "false"}
+        if url.startswith('https'):
+            try:
+                from ingestion.ssl_utils import get_ssl_data
+                ssl_data = get_ssl_data(url)
+            except Exception as e:
+                logger.debug(f"Failed to load ssl_utils: {e}")
+
         result = {
             "title": title, 
             "body": body, 
@@ -1433,7 +1538,10 @@ def fetch_page(url: str, timeout: int = 10, browser_manager=None) -> Dict[str, s
             "privacy": links.get("privacy", ""),
             "verification_badges": verification_badges,
             "screenshot_path": None,
-            "access_denied": access_denied
+            "html": resp.text, # Include raw HTML for metadata extraction
+            "access_denied": access_denied,
+            "visual_analysis": result.get("visual_analysis_data"), # Propagate rich visual data
+            **ssl_data # Merge SSL data (ssl_valid, ssl_issuer, etc.)
         }
 
         # NEW: Secondary Visual Analysis Step

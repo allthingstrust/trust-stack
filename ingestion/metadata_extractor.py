@@ -125,7 +125,7 @@ class MetadataExtractor:
         # Check HTML for OpenGraph tags
         if html:
             try:
-                soup = BeautifulSoup(html, 'lxml')
+                soup = BeautifulSoup(html, 'html.parser')
                 og_type = soup.find('meta', property='og:type')
                 if og_type and og_type.get('content'):
                     og_content = og_type['content'].lower()
@@ -201,7 +201,7 @@ class MetadataExtractor:
         structured_data = {}
 
         try:
-            soup = BeautifulSoup(html, 'lxml')
+            soup = BeautifulSoup(html, 'html.parser')
 
             # Extract JSON-LD
             json_ld_scripts = soup.find_all('script', type='application/ld+json')
@@ -247,7 +247,7 @@ class MetadataExtractor:
             return None
 
         try:
-            soup = BeautifulSoup(html, 'lxml')
+            soup = BeautifulSoup(html, 'html.parser')
             canonical = soup.find('link', rel='canonical')
             if canonical and canonical.get('href'):
                 return canonical['href']
@@ -272,7 +272,7 @@ class MetadataExtractor:
             return og_data
 
         try:
-            soup = BeautifulSoup(html, 'lxml')
+            soup = BeautifulSoup(html, 'html.parser')
 
             # Extract all OG tags
             og_tags = soup.find_all('meta', property=re.compile(r'^og:'))
@@ -303,7 +303,182 @@ class MetadataExtractor:
             return meta_data
 
         try:
-            soup = BeautifulSoup(html, 'lxml')
+            soup = BeautifulSoup(html, 'html.parser')
+
+            # Standard meta tags to extract
+            target_tags = [
+                'description', 'keywords', 'author', 'viewport', 'robots',
+                'generator', 'application-name', 'theme-color',
+                # Date related
+                'date', 'pubdate', 'publish-date', 'published-date',
+                'article:published_time', 'article:modified_time',
+                'og:updated_time', 'last-modified'
+            ]
+
+            for name in target_tags:
+                tag = soup.find('meta', attrs={'name': name})
+                if tag and tag.get('content'):
+                    meta_data[name] = tag['content']
+
+                # Also try property (common for OG/article tags)
+                if name.startswith('article:') or name.startswith('og:'):
+                    tag = soup.find('meta', property=name)
+                    if tag and tag.get('content'):
+                        meta_data[name] = tag['content']
+
+        except Exception as e:
+            logger.debug(f"Error extracting meta tags: {e}")
+
+        return meta_data
+
+    def _extract_publication_date(self, html: str, schema_json: str = None) -> Optional[str]:
+        """
+        Extract publication date from various sources in priority order.
+        
+        Priority:
+        1. OpenGraph article:published_time
+        2. Schema.org datePublished
+        3. Standard meta tags (pubdate, date, etc.)
+        
+        Returns:
+            ISO format date string or None
+        """
+        if not html:
+            return None
+            
+        try:
+            soup = BeautifulSoup(html, 'html.parser')
+            
+            # 1. OpenGraph article:published_time
+            og_pub = soup.find('meta', property='article:published_time')
+            if og_pub and og_pub.get('content'):
+                return og_pub['content']
+                
+            # 2. Schema.org datePublished (if already extracted)
+            if schema_json:
+                try:
+                    data = json.loads(schema_json)
+                    candidates = []
+                    
+                    # Handle MetadataExtractor structure which wraps json_ld
+                    if isinstance(data, dict):
+                        if 'json_ld' in data and isinstance(data['json_ld'], list):
+                            candidates.extend(data['json_ld'])
+                        else:
+                            candidates.append(data)
+                    elif isinstance(data, list):
+                        candidates.extend(data)
+
+                    for item in candidates:
+                        # Look for common types that have dates
+                        if any(t in item.get('@type', '') for t in ['Article', 'NewsArticle', 'BlogPosting', 'WebPage']):
+                            if item.get('datePublished'):
+                                return item['datePublished']
+                            if item.get('dateCreated'):
+                                return item['dateCreated']
+                except:
+                    pass
+            
+            # 2b. Schema.org via itemprop (microdata)
+            date_pub = soup.find(attrs={"itemprop": "datePublished"})
+            if date_pub:
+                return date_pub.get('content') or date_pub.get_text()
+                
+            # 3. Meta tags
+            meta_dates = [
+                ('name', 'pubdate'),
+                ('name', 'publish-date'),
+                ('name', 'date'),
+                ('name', 'original-publish-date'),
+                ('property', 'og:updated_time') # Fallback to updated time
+            ]
+            
+            for attr, val in meta_dates:
+                tag = soup.find('meta', attrs={attr: val})
+                if tag and tag.get('content'):
+                    return tag['content']
+                    
+        except Exception as e:
+            logger.debug(f"Error extracting publication date: {e}")
+            
+        return None
+
+    def extract_provenance_data(self, html: str) -> Dict[str, str]:
+        """
+        Extract C2PA/CAI provenance data from HTML
+        
+        Args:
+            html: HTML content
+            
+        Returns:
+            Dictionary of provenance metadata
+        """
+        provenance = {}
+        
+        if not html:
+            return provenance
+            
+        try:
+            soup = BeautifulSoup(html, 'html.parser')
+            
+            # Check for standard C2PA manifest link
+            # <link rel="c2pa-manifest" href="...">
+            c2pa_link = soup.find('link', rel='c2pa-manifest')
+            if c2pa_link and c2pa_link.get('href'):
+                provenance['c2pa_manifest'] = c2pa_link['href']
+                provenance['has_c2pa_manifest'] = "true"
+                
+            # Check for legacy CAI manifest link
+            # <link rel="cai-manifest" href="...">
+            if 'c2pa_manifest' not in provenance:
+                cai_link = soup.find('link', rel='cai-manifest')
+                if cai_link and cai_link.get('href'):
+                    provenance['c2pa_manifest'] = cai_link['href'] # Map to same key for scorer
+                    provenance['cai_manifest'] = cai_link['href']
+                    provenance['has_c2pa_manifest'] = "true"
+
+            # Check for meta tags
+            # <meta name="c2pa-manifest" content="...">
+            if 'c2pa_manifest' not in provenance:
+                meta_manifest = soup.find('meta', attrs={'name': 'c2pa-manifest'})
+                if meta_manifest and meta_manifest.get('content'):
+                    provenance['c2pa_manifest'] = meta_manifest['content']
+                    provenance['has_c2pa_manifest'] = "true"
+
+            # Check for script tag
+            # <script type="application/c2pa-manifest+json">
+            if 'c2pa_manifest' not in provenance:
+                script_manifest = soup.find('script', type='application/c2pa-manifest+json')
+                if script_manifest and script_manifest.get('src'):
+                    provenance['c2pa_manifest'] = script_manifest['src']
+                    provenance['has_c2pa_manifest'] = "true"
+                elif script_manifest and script_manifest.string:
+                    # Inline manifest content - store indication it exists
+                    provenance['c2pa_manifest'] = "inline_blob"
+                    provenance['has_c2pa_manifest'] = "true"
+
+        except Exception as e:
+            logger.debug(f"Error extracting provenance data: {e}")
+            
+        return provenance
+
+    def extract_meta_tags(self, html: str) -> Dict[str, str]:
+        """
+        Extract standard meta tags from HTML
+
+        Args:
+            html: HTML content
+
+        Returns:
+            Dictionary of meta tags
+        """
+        meta_data = {}
+
+        if not html:
+            return meta_data
+
+        try:
+            soup = BeautifulSoup(html, 'html.parser')
 
             # Extract description
             description = soup.find('meta', attrs={'name': 'description'})
@@ -362,11 +537,24 @@ class MetadataExtractor:
             if schema_data:
                 content.meta['schema_org'] = json.dumps(schema_data)
 
-        # Extract canonical URL
-        if html and 'canonical_url' not in content.meta:
-            canonical = self.extract_canonical_url(html)
-            if canonical:
-                content.meta['canonical_url'] = canonical
+        # Enrich URL and canonical URL
+        # If content.url is not set, try to use src or canonical
+        if not content.url:
+            content.url = content.src or ""
+        
+        canonical = self.extract_canonical_url(html)
+        if canonical:
+            if not content.url: # If content.url is still empty, use canonical
+                content.url = canonical
+            # Also store as meta for scoring
+            content.meta['canonical'] = canonical
+
+        # Extract publication date
+        if html:
+            published_at = self._extract_publication_date(html, content.meta.get('schema_org'))
+            if published_at:
+                content.published_at = published_at
+                content.meta['published_at'] = published_at
 
         # Extract OG metadata
         if html:
@@ -377,5 +565,92 @@ class MetadataExtractor:
         if html:
             meta_tags = self.extract_meta_tags(html)
             content.meta.update(meta_tags)
+            
+        # Extract provenance/C2PA data
+        if html:
+            provenance_data = self.extract_provenance_data(html)
+            content.meta.update(provenance_data)
+
+        # Extract significant visuals flag
+        if html:
+            has_significant_visuals = self.extract_significant_visuals(html)
+            content.meta['has_significant_visuals'] = str(has_significant_visuals).lower()
 
         return content
+
+    def extract_significant_visuals(self, html: str) -> bool:
+        """
+        Detect if the page contains significant visuals (hero images, large media)
+        that would typically require C2PA credentials.
+        
+        Criteria for "significant":
+        - Image dimensions > 250px (if width/height attributes present)
+        - Class/ID containing 'hero', 'banner', 'featured', 'main-image'
+        - Explicitly excludes known decorative elements (logo, icon, footer, nav)
+        
+        Args:
+            html: HTML content
+            
+        Returns:
+            True if significant visuals detected, False otherwise
+        """
+        if not html:
+            return False
+            
+        try:
+            soup = BeautifulSoup(html, 'html.parser')
+            
+            # 1. Check for Hero/Banner naming conventions in images or their containers
+            # Look for images with specific classes or parents with specific classes
+            hero_keywords = re.compile(r'(hero|banner|featured|cover|main-image|post-image)', re.I)
+            decorative_keywords = re.compile(r'(logo|icon|avatar|user|brand|footer|nav|social)', re.I)
+            
+            images = soup.find_all('img')
+            for img in images:
+                # Get image attributes
+                src = img.get('src', '')
+                classes = ' '.join(img.get('class', []))
+                img_id = img.get('id', '')
+                alt = img.get('alt', '')
+                
+                # specific check: skip tracking pixels or tiny icons
+                if 'tracking' in classes.lower() or 'pixel' in classes.lower():
+                    continue
+
+                # Check dimensions if available (attributes often missing, but good signal if present)
+                width = img.get('width')
+                height = img.get('height')
+                
+                try:
+                    # Convert to int, handling 'px' suffix or distinct types
+                    w = int(str(width).replace('px', '')) if width and str(width).replace('px', '').isdigit() else 0
+                    h = int(str(height).replace('px', '')) if height and str(height).replace('px', '').isdigit() else 0
+                    
+                    # SIGNIFICANT SIZE SIGNAL
+                    # If image is explicitly large (>250px in either dim), it's likely content
+                    if w > 250 or h > 250:
+                        # Double check it's not a logo (some logos are hi-res)
+                        if not decorative_keywords.search(classes + img_id + src + alt):
+                            return True
+                except Exception:
+                    pass
+
+                # SEMANTIC NAMING SIGNAL
+                # Check for hero/banner keywords
+                if hero_keywords.search(classes + img_id):
+                    # Ensure it's not also marked as logo/icon which overrides 'hero' (e.g. "hero-logo")
+                    if not decorative_keywords.search(classes + img_id):
+                        return True
+            
+            # 2. Check for Video elements (always considered significant)
+            if soup.find('video') or soup.find('iframe', src=re.compile(r'(youtube|vimeo)', re.I)):
+                return True
+
+            # 3. Check for specific meta tags indicating a lead image (og:image is common but weak, explicit "hero" is better)
+            # We already use modality detection which checks og:image, but here we want IN-BODY content.
+            # So we stick to DOM elements.
+                
+        except Exception as e:
+            logger.debug(f"Error detecting significant visuals: {e}")
+            
+        return False

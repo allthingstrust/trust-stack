@@ -1,0 +1,26 @@
+INFO:core.run_manager:Fetching content for 1 pre-provided assets with empty body
+DEBUG: _collect_assets called with 1 assets
+DEBUG: fetch_results type: <class 'list'>, length: 1
+DEBUG: First result keys: dict_keys(['url', 'html', 'body', 'title', 'screenshot_path'])
+DEBUG: Processing asset https://example.com/test, html length: 610
+WARNING:core.run_manager:Metadata extraction failed for https://example.com/test: NormalizedContent.__init__() missing 3 required positional arguments: 'platform_id', 'author', and 'title'
+DEBUG:core.run_manager:Fetched 38 chars for https://example.com/test
+F
+======================================================================
+FAIL: test_collect_assets_extracts_metadata (__main__.TestRunManagerIngestion.test_collect_assets_extracts_metadata)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/unittest/mock.py", line 1369, in patched
+    return func(*newargs, **newkeywargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/andrewdeutsch/Documents/AR/authenticity-ratio/tests/test_run_manager_ingestion_mock.py", line 81, in test_collect_assets_extracts_metadata
+    self.assertIn("schema_org", meta_info)
+AssertionError: 'schema_org' not found in {}
+
+----------------------------------------------------------------------
+Ran 1 test in 0.274s
+
+FAILED (failures=1)
+
+Collected Asset Meta Info:
+{}

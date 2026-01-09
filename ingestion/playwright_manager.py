@@ -1,4 +1,5 @@
 import logging
+import os
 import threading
 import queue
 import time
@@ -87,19 +88,29 @@ class PlaywrightBrowserManager:
                 # Stealth additions
                 '--disable-blink-features=AutomationControlled',
                 '--disable-infobars',
-                '--no-sandbox',
-                '--disable-setuid-sandbox',
                 '--ignore-certificate-errors',
             ]
             
+            # Default to Headed mode (false) to bypass bot detection on sites like Costco
+            # Use SETTINGS for the source of truth, creating a toggle-able experience
+            headless_mode = SETTINGS.get('headless_mode', True)
+            
+            # Use 'new' headless mode if headless is requested
+            # This is more stealthy than the old headless mode
+            if headless_mode:
+                launch_args.append('--headless=new')
+            
             browser = playwright.chromium.launch(
-                headless=True,
+                # We must set headless=False here because we are passing --headless=new in args
+                # If we set headless=True, Playwright adds the old --headless flag which overrides ours
+                headless=False,
                 args=launch_args,
+                ignore_default_args=['--enable-automation'],
                 handle_sigint=False,
                 handle_sigterm=False,
                 handle_sighup=False
             )
-            logger.info('Playwright browser initialized successfully')
+            logger.info(f'Playwright browser initialized successfully (Headless: {headless_mode})')
             
             while True:
                 task = self._request_queue.get()
@@ -110,6 +121,11 @@ class PlaywrightBrowserManager:
                 if task_type == "fetch":
                     url = task.get("url")
                     user_agent = task.get("user_agent")
+                    
+                    # Update to modern Chrome 131 User Agent if generic/older one provided
+                    if "HeadlessChrome" in user_agent or "Playwright" in user_agent:
+                        user_agent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+                        
                     capture_screenshot = task.get("capture_screenshot", False)
                     result_queue = task.get("result_queue")
                     logger.debug(f'Browser thread processing fetch request for: {url}')
@@ -122,8 +138,8 @@ class PlaywrightBrowserManager:
                                 browser.close()
                             except: pass
                             browser = playwright.chromium.launch(
-                                headless=True,
-                                args=launch_args,
+                                headless=False,
+                                args=launch_args, # launch_args now includes --headless=new if needed
                                 handle_sigint=False,
                                 handle_sigterm=False,
                                 handle_sighup=False
@@ -141,8 +157,8 @@ class PlaywrightBrowserManager:
                                     browser.close()
                                 except: pass
                                 browser = playwright.chromium.launch(
-                                    headless=True,
-                                    args=launch_args,
+                                    headless=False,
+                                    args=launch_args, # launch_args now includes --headless=new if needed
                                     handle_sigint=False,
                                     handle_sigterm=False,
                                     handle_sighup=False
@@ -202,7 +218,20 @@ class PlaywrightBrowserManager:
         screenshot_key = None
         try:
             logger.debug(f'[PLAYWRIGHT] Creating new page for: {url}')
-            page = browser.new_page(user_agent=user_agent)
+            
+            # Add extra HTTP headers for realism
+            extra_headers = {
+                "Accept-Language": "en-US,en;q=0.9",
+                "Upgrade-Insecure-Requests": "1",
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8"
+            }
+            
+            context = browser.new_context(
+                user_agent=user_agent,
+                extra_http_headers=extra_headers
+            )
+            page = context.new_page()
+            
             logger.debug(f'[PLAYWRIGHT] Page created, navigating to: {url}')
             # Stealth: Inject scripts to mask automation
             page.add_init_script("""
@@ -236,12 +265,27 @@ class PlaywrightBrowserManager:
 
             # Use domcontentloaded instead of 'load' - faster and more reliable for SPAs
             # 'load' waits for all resources which can timeout on heavy sites
-            page.goto(url, timeout=20000, wait_until='domcontentloaded')
-            logger.debug(f'[PLAYWRIGHT] Navigation complete for: {url}')
+            # Log failed requests for debugging
+            page.on("requestfailed", lambda request: logger.debug(f"[PLAYWRIGHT] Request failed: {request.url} - {request.failure}"))
+
+            # Use 'commit' to avoid hanging on heavy sites (like Winn-Dixie)
+            # Then rely on wait_for_selector to ensure body is present
+            # Use 'commit' to avoid hanging on heavy sites (like Winn-Dixie)
+            # Then rely on wait_for_selector to ensure body is present
+            response = page.goto(url, timeout=60000, wait_until='commit')
+            logger.debug(f'[PLAYWRIGHT] Navigation "commit" complete for: {url}')
+            
+            # Check for HTTP errors status
+            http_status = response.status if response else 0
+            if http_status in [403, 401, 429]:
+                 logger.warning(f"[PLAYWRIGHT] HTTP Error {http_status} for {url}")
+
             
             try:
-                page.wait_for_selector('body', timeout=8000)
-            except Exception:
+                # Increased timeout for body selector to allow content to load after commit
+                page.wait_for_selector('body', timeout=15000)
+            except Exception as wait_e:
+                logger.warning(f"[PLAYWRIGHT] Timeout waiting for body selector: {wait_e}")
                 pass
             
             logger.debug(f'[PLAYWRIGHT] Extracting content from: {url}')
@@ -290,6 +334,9 @@ class PlaywrightBrowserManager:
             except Exception:
                 page_body = page_content
 
+            # Try to dismiss modals/popups before scraping/screenshot
+            self._dismiss_modals(page)
+
             # Capture screenshot if requested
             if capture_screenshot:
                 try:
@@ -319,6 +366,9 @@ class PlaywrightBrowserManager:
             elif "cloudflare" in lower_title and "security" in lower_title:
                 access_denied = True
             
+            if access_denied or http_status in [403, 401]:
+                access_denied = True
+            
             if access_denied:
                 logger.warning(f"[PLAYWRIGHT] Detected Access Denied content for {url}")
 
@@ -327,6 +377,7 @@ class PlaywrightBrowserManager:
                 "body": page_body.strip(),
                 "url": url,
                 "raw_content": page_content, # Return raw content for footer link extraction
+                "html": page_content, # Standardized key for metadata extraction
                 "screenshot_path": screenshot_key,
                 "access_denied": access_denied
             }
@@ -336,6 +387,34 @@ class PlaywrightBrowserManager:
                     page.close()
                 except Exception:
                     pass
+
+    def _dismiss_modals(self, page: Page):
+        """Attempt to dismiss common modals and popups."""
+        try:
+            # Common selectors for close buttons
+            close_selectors = [
+                'button[aria-label="Close"]',
+                'button[class*="close"]',
+                '.close-button',
+                '[data-testid="close-button"]',
+                'button.close',
+                'div[class*="modal"] button',
+                'svg[data-icon="close"]'
+            ]
+            
+            for selector in close_selectors:
+                try:
+                    # Quick check and click without waiting
+                    if page.is_visible(selector, timeout=500):
+                        page.click(selector, timeout=500)
+                        logger.debug(f"[PLAYWRIGHT] Dismissed modal using selector: {selector}")
+                except Exception:
+                    pass
+                    
+            # Handle specific known interstitials if needed here
+        except Exception as e:
+            logger.warning(f"[PLAYWRIGHT] Error dismissing modals: {e}")
+
 
     def fetch_page(self, url: str, user_agent: str, capture_screenshot: bool = False) -> Dict[str, Any]:
         """

@@ -114,12 +114,10 @@ class SignalMapper:
                 
             # Create SignalScore
             # Attribute value is 1-10, SignalScore expects 0.0-1.0
-            # Defensive normalization: handle edge cases
+            # Attribute value is 1-10, SignalScore expects 0.0-1.0
+            # DetectedAttribute is consistently 1-10 scale
             raw_value = float(attr.value)
-            if raw_value > 1.0:
-                signal_value = raw_value / 10.0
-            else:
-                signal_value = raw_value
+            signal_value = raw_value / 10.0
             signal_value = max(0.0, min(1.0, signal_value))  # Clamp to 0-1
             
             # We use the weight from the signal definition
@@ -131,7 +129,9 @@ class SignalMapper:
                 weight=float(signal_def.get('weight', 1.0)),
                 evidence=[attr.evidence] if attr.evidence else [],
                 rationale=f"Detected via {attr.attribute_id}",
-                confidence=float(attr.confidence)
+                confidence=float(attr.confidence),
+                status=getattr(attr, 'status', 'unknown'),
+                reason=getattr(attr, 'reason', None)
             )
             
             mapped_signals.append(signal)
