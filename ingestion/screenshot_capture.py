@@ -274,6 +274,91 @@ class ScreenshotCapture:
             viewport=viewport or VIEWPORT_DESKTOP,
         )
 
+    def capture_dual_screenshots(
+        self,
+        page: "Page",
+        url: str,
+        skip_bottom: bool = False,
+        viewport: Optional[Dict[str, int]] = None,
+    ) -> Dict[str, Any]:
+        """
+        Capture both top (Hero) and bottom (Footer) screenshots.
+        
+        Best practice for Trust Analysis:
+        - Top: Branding, Navigation, First Impression.
+        - Bottom: Trust Badges, Contact Info, Disclosures.
+        
+        Args:
+            page: Playwright Page object
+            url: URL of the page
+            skip_bottom: If True, skip the bottom capture (footer deduplication)
+            viewport: Optional viewport override
+            
+        Returns:
+            Dictionary with keys 'top' and 'bottom' (optional) containing:
+            {
+                'bytes': bytes,
+                'metadata': dict
+            }
+        """
+        if not _PLAYWRIGHT_AVAILABLE or page is None:
+            return {}
+
+        results = {}
+        viewport = viewport or VIEWPORT_DESKTOP
+        
+        try:
+            # 1. Prepare Page
+            if viewport:
+                page.set_viewport_size(viewport)
+            
+            # Dismiss popups once
+            self._dismiss_popups(page)
+            
+            # 2. Capture TOP (Hero)
+            # Ensure we are at 0,0
+            page.evaluate("window.scrollTo(0, 0)")
+            page.wait_for_timeout(500) # Settle
+            
+            top_bytes, top_meta = self.capture_screenshot(
+                page=page,
+                url=url,
+                full_page=False, # Viewport only
+                viewport=viewport
+            )
+            
+            if top_meta.get("success"):
+                results["top"] = {
+                    "bytes": top_bytes,
+                    "metadata": top_meta
+                }
+            
+            # 3. Capture BOTTOM (Footer)
+            if not skip_bottom:
+                # Scroll to bottom
+                page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+                page.wait_for_timeout(500) # Settle
+                
+                bottom_bytes, bottom_meta = self.capture_screenshot(
+                    page=page,
+                    url=url,
+                    full_page=False, # Viewport only
+                    viewport=viewport
+                )
+                
+                if bottom_meta.get("success"):
+                    results["bottom"] = {
+                        "bytes": bottom_bytes,
+                        "metadata": bottom_meta
+                    }
+            else:
+                logger.debug(f"Skipping bottom screenshot for {url} (deduplication)")
+                
+        except Exception as e:
+            logger.error(f"Error in dual screenshot capture for {url}: {e}")
+            
+        return results
+
     def upload_to_s3(
         self,
         screenshot_bytes: bytes,

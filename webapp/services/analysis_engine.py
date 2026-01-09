@@ -210,7 +210,8 @@ def run_analysis(brand_id: str, keywords: List[str], sources: List[str], max_ite
                     source_type=c.get('source_type', 'unknown'),
                     source_tier=c.get('source_tier', 'unknown'),
                     structured_body=c.get('structured_body'),  # Include HTML structure metadata
-                    screenshot_path=c.get('screenshot_path')   # Include screenshot path for visual analysis
+                    screenshot_path=c.get('screenshot_path'),
+        visual_analysis=c.get('visual_analysis')
                 )
                 all_content.append(nc)
 
