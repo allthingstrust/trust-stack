@@ -575,6 +575,16 @@ class MetadataExtractor:
         if html:
             has_significant_visuals = self.extract_significant_visuals(html)
             content.meta['has_significant_visuals'] = str(has_significant_visuals).lower()
+            
+            # Extract semantic text segments
+            text_segments = self.extract_semantic_text_segments(html)
+            content.main_text = text_segments.get('main_text', '')
+            content.footer_text = text_segments.get('footer_text', '')
+            content.header_text = text_segments.get('header_text', '')
+            
+            # Fallback if text extraction failed in previous steps
+            if not content.body and content.main_text:
+                content.body = content.main_text
 
         return content
 
@@ -654,3 +664,80 @@ class MetadataExtractor:
             logger.debug(f"Error detecting significant visuals: {e}")
             
         return False
+
+    def extract_semantic_text_segments(self, html: str) -> Dict[str, str]:
+        """
+        Extract text content separated by semantic role (Header, Footer, Main).
+        This allows scorers to distinguish between site-wide boilerplates (Footer)
+        and actual unique page content.
+        
+        Args:
+            html: HTML content
+            
+        Returns:
+            Dict with 'main_text', 'footer_text', 'header_text', 'rest_text'
+        """
+        segments = {
+            'main_text': '',
+            'footer_text': '',
+            'header_text': '',
+            'rest_text': ''
+        }
+        
+        if not html:
+            return segments
+            
+        try:
+            soup = BeautifulSoup(html, 'html.parser')
+            
+            # --- Footer Extraction ---
+            # Try semantic <footer >, role="contentinfo", or common class names
+            footers = soup.find_all('footer') + \
+                     soup.find_all(attrs={"role": "contentinfo"}) + \
+                     soup.find_all(class_=re.compile(r'footer|site-info|copyright', re.I))
+            
+            footer_text_list = []
+            for f in footers:
+                # Avoid duplicates if elements are nested (naive check)
+                t = f.get_text(" ", strip=True)
+                if t and t not in " ".join(footer_text_list):
+                    footer_text_list.append(t)
+            segments['footer_text'] = " ".join(footer_text_list)
+
+            # --- Header Extraction ---
+            # Try semantic <header>, role="banner", or common class names
+            headers = soup.find_all('header') + \
+                      soup.find_all(attrs={"role": "banner"}) + \
+                      soup.find_all(class_=re.compile(r'header|top-bar|nav', re.I))
+            
+            header_text_list = []
+            for h in headers:
+                t = h.get_text(" ", strip=True)
+                if t and t not in " ".join(header_text_list):
+                    header_text_list.append(t)
+            segments['header_text'] = " ".join(header_text_list)
+            
+            # --- Main Content Extraction ---
+            # Try semantic <main>, role="main", article, or largest text block logic
+            mains = soup.find_all('main') + \
+                   soup.find_all(attrs={"role": "main"}) + \
+                   soup.find_all('article')
+            
+            main_text_list = []
+            if mains:
+                for m in mains:
+                    t = m.get_text(" ", strip=True)
+                    if t:
+                        main_text_list.append(t)
+                segments['main_text'] = " ".join(main_text_list)
+            else:
+                # Fallback: Body text minus header/footer text (approximate)
+                body = soup.body.get_text(" ", strip=True) if soup.body else ""
+                # Simple removal of known header/footer strings
+                cleaned_body = body.replace(segments['header_text'], "").replace(segments['footer_text'], "")
+                segments['main_text'] = cleaned_body
+
+        except Exception as e:
+            logger.warning(f"Error segementing HTML text: {e}")
+            
+        return segments
