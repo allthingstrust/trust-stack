@@ -418,7 +418,32 @@ class RunManager:
                 # Fallback API check if excluded_urls not supported yet
                 pages = collect_brave_pages(query=kw, target_count=adjusted_limit)
 
+            # Initialize extractor for this batch
+            extractor = MetadataExtractor()
+
             for page in pages:
+                # Extract metadata if HTML is available
+                extracted_meta = {}
+                html = page.get("html") or ""
+                if html:
+                    try:
+                        # Create minimal temp content for extraction
+                        temp_content = NormalizedContent(
+                            content_id="temp",
+                            url=page.get("url") or "",
+                            body=page.get("body") or "",
+                            src="brave",
+                            platform_id=page.get("url") or "unknown",
+                            author="unknown",
+                            title=page.get("title") or "",
+                            meta={}
+                        )
+                        # Run extraction
+                        extractor.enrich_content_metadata(temp_content, html=html)
+                        extracted_meta = temp_content.meta
+                    except Exception as e:
+                        logger.warning(f"Metadata extraction failed for {page.get('url')}: {e}")
+
                 assets.append(
                     {
                         "source_type": "brave",
@@ -434,6 +459,8 @@ class RunManager:
                             "title": page.get("title"),
                             "description": (page.get("body") or "")[:500],
                             "access_denied": page.get("access_denied", False),
+                            # Propagate extracted metadata (including published_at)
+                            **extracted_meta,
                             # Propagate SSL metadata
                             "ssl_valid": page.get("ssl_valid"),
                             "ssl_issuer": page.get("ssl_issuer"),
@@ -707,6 +734,7 @@ class RunManager:
                         event_ts=datetime.now().isoformat(),
                         meta=meta,
                         url=asset.url or "",
+                        published_at=meta.get("published_at"),  # Explicitly map published_at
                         modality=asset.modality or "text",
                         channel=asset.channel or "web",
                         platform_type=meta.get("platform_type", "web"),
