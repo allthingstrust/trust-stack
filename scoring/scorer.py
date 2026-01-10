@@ -383,14 +383,19 @@ class ContentScorer:
     def _score_freshness(self, content: NormalizedContent) -> float:
         """Score content freshness based on publication date"""
         try:
-            if not getattr(content, 'published_at', None):
+            pub_date = getattr(content, 'published_at', None)
+            
+            # Fallback to meta if not directly set
+            if not pub_date and content.meta:
+                pub_date = content.meta.get('published_at')
+                
+            if not pub_date:
                 return 0.5
             
             from datetime import datetime, timezone
             now = datetime.now(timezone.utc)
             
             # Parse date if string
-            pub_date = content.published_at
             if isinstance(pub_date, str):
                 from dateutil import parser
                 try:
