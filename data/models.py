@@ -211,6 +211,11 @@ class NormalizedContent:
     screenshot_path: Optional[str] = None
     visual_analysis: Optional[Dict[str, Any]] = None
 
+    # Text Segmentation for Context-Aware Analysis
+    main_text: str = ""      # Primary content body (article text, review content)
+    footer_text: str = ""    # Text detected in footer/disclaimer regions
+    header_text: str = ""    # Text detected in header/nav regions
+
     def __post_init__(self):
         if self.meta is None:
             self.meta = {}
